@@ -1,12 +1,4 @@
-# Sluse
-
-A contained environment for an AI agent working on company data. The agent
-runs in a box with no access of its own; Sluse hands it files one at a time,
-as the person using it, and records each one.
-
-[![How Sluse works: the sources IT put in scope, a broker that checks scope and reads as you, the box with the agent and its workspace, results published to Sluse Artifacts with their sources, and the Sluse log recording each file admitted, refused or published. The agent talks to its AI provider, and what it was given can go into that conversation.](docs/images/how-it-works.png)](docs/images/how-it-works.gif)
-
-*Select the picture for the animated version.*
+![Sluse. Approved sources in. Traceable results out. Your organisation lists the folders AI agents may work on. Sluse lets files from them through one at a time, as the user. Every file is recorded, and everything the agent publishes carries the sources it declared.](docs/images/header.png)
 
 ## Why
 
@@ -31,6 +23,10 @@ files the agent says it used.
 > [SECURITY.md](SECURITY.md).
 
 ## How it works
+
+[![How Sluse works: the sources IT put in scope, a broker that checks scope and reads as you, the box with the agent and its workspace, results published to Sluse Artifacts with their sources, and the Sluse log recording each file admitted, refused or published. The agent talks to its AI provider, and what it was given can go into that conversation.](docs/images/how-it-works.png)](docs/images/how-it-works.gif)
+
+*Select the picture for the animated version.*
 
 ```mermaid
 flowchart LR
