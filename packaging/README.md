@@ -34,5 +34,5 @@ for a box's system that could not be installed) and
 Settings > Apps > Sluse > Uninstall, or through Intune. This deletes every box
 on this computer. Each person's Sluse Artifacts folder stays.
 
-This is a prototype build, 0.0.x. It stays at 0.0.x until someone other than
-its author has run it against a real source.
+Version 0.1 is the pilot release. It is not signed yet: check `Sluse.msi`
+against the release's `SHA256SUMS`.

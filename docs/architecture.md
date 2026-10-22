@@ -110,14 +110,7 @@ the same person (built, not yet run on a device).
 
 ## Admission
 
-```mermaid
-flowchart LR
-    A1["Agent calls<br/>read or fetch"] --> A2["Endpoint relays<br/>over mTLS, no token"]
-    A2 --> A3["Broker checks<br/>the path"]
-    A3 --> A4["Broker reads<br/>as the person"]
-    A4 --> A5["The source's<br/>permissions decide"]
-    A5 --> A6["Both sides hash<br/>and record"]
-```
+[![Every admission leaves a record: the agent reads finance/budget.xlsx, the broker finds it in scope, reads it as the person, the source's permissions decide, and the file comes back hashed and recorded. A read of hr/salaries.xlsx is not in scope and answers not found, as if it did not exist. A publish of report.docx names budget.xlsx as its source and lands in Sluse Artifacts. The Sluse log records the admission, the refusal and the publish.](images/admission.png)](images/admission.gif)
 
 1. The **agent** calls `sluse_read` or `sluse_fetch` with a path. It cannot
    reach a source any other way.

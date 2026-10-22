@@ -176,9 +176,6 @@ target    $target
 built     $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')
 builder   $env:COMPUTERNAME
 rustc     $((rustc --version).Trim())
-
-This is a prototype build. 0.0.x, and it stays there until something has been
-run against a real source by someone other than its author.
 "@ | Set-Content (Join-Path $stage 'VERSION.txt') -Encoding utf8
 
     # ---- zip ---------------------------------------------------------------

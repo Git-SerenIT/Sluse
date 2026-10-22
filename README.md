@@ -4,6 +4,10 @@ A contained environment for an AI agent working on company data. The agent
 runs in a box with no access of its own; Sluse hands it files one at a time,
 as the person using it, and records each one.
 
+[![How Sluse works: the sources IT put in scope, a broker that checks scope and reads as you, the box with the agent and its workspace, results published to Sluse Artifacts with their sources, and the Sluse log recording each file admitted, refused or published. The agent talks to its AI provider, and what it was given can go into that conversation.](docs/images/how-it-works.png)](docs/images/how-it-works.gif)
+
+*Select the picture for the animated version.*
+
 ## Why
 
 An AI agent with a person's access can reach everything that person can, and
