@@ -45,6 +45,19 @@ try {
         throw 'no version in the workspace Cargo.toml'
     }
     $version = $Matches[1]
+    # The other three places that state it must agree (D-068): the shell's
+    # own workspace and the two UIs' package files. A release takes its tag
+    # from this version, so a disagreement is a package lying about itself.
+    $others = @{
+        'ui\shell\src-tauri\Cargo.toml' = '(?m)^version\s*=\s*"([^"]+)"'
+        'ui\shell\package.json'          = '"version":\s*"([^"]+)"'
+        'ui\console\package.json'        = '"version":\s*"([^"]+)"'
+    }
+    foreach ($f in $others.Keys) {
+        if ((Get-Content $f -Raw) -notmatch $others[$f] -or $Matches[1] -ne $version) {
+            throw "$f does not say version $version; every version field says the workspace's"
+        }
+    }
 
     # The commit is what makes a package traceable back to a tree. A build from
     # a dirty tree says so, because "it works" about an unrecorded state is not

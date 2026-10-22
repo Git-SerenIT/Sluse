@@ -32,6 +32,19 @@ permissions, and uninstall it. Some behaviour exists only on Windows
 (junctions, UNC paths, ACLs, case-folding): its tests are `#[cfg(windows)]`
 and run only there. **A green Linux run proves nothing about it.**
 
+## Releases
+
+CI builds, installs and tests the MSI on every push to `main`, and keeps
+the result as the run's deliverable: `Sluse.msi`, `SHA256SUMS` and
+`VERSION.txt`. A release is that deliverable, published as it is: the
+**Release** workflow, run by hand, takes a green run, tags its commit with
+the version read from the artifact, and publishes the MSI with the run's
+`CHANGELOG.md` section as its notes. Nothing is rebuilt for a release.
+
+The version lives in the root `Cargo.toml`; the shell's `Cargo.toml` and
+the two `package.json` files must say the same, or the package build
+fails. Releases are not signed yet; check the MSI against `SHA256SUMS`.
+
 ## Layout
 
 | Path | What | Runs |

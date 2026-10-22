@@ -265,8 +265,6 @@ jobs:
           if (@($pkg).Count -ne 1) { Get-ChildItem dist -Recurse -Depth 1; throw "expected one staged package in dist, found $(@($pkg).Count)" }
           New-Item -ItemType Directory -Force (Join-Path $pkg.FullName 'box') | Out-Null
           Copy-Item dist\sluse-box-linux.tar.gz (Join-Path $pkg.FullName 'box')
-          Compress-Archive -Path $pkg.FullName -DestinationPath "$($pkg.FullName).zip" -CompressionLevel Optimal
-          Get-ChildItem dist\*.zip | ForEach-Object { Write-Host "$($_.Name)  $([math]::Round($_.Length / 1MB, 1)) MB" }
 
       # The MSI (slice 5): WiX v5, the .NET tool; the toolset is a build
       # tool, never shipped. Built from the assembled package, bundle included.
@@ -594,12 +592,26 @@ jobs:
           if (Test-Path (Join-Path $env:ProgramFiles 'Sluse')) { throw 'the uninstall left Program Files\Sluse' }
           if (Test-Path $key) { throw 'the uninstall left the detection value' }
 
+      # **The deliverable (D-068):** what a release ships, and nothing else.
+      # `release.yml` takes this artifact from a green run and publishes it as
+      # it is, so the MSI released is the MSI installed and tested above.
+      - name: The deliverable
+        id: deliverable
+        shell: pwsh
+        run: |
+          $pkg = (Get-ChildItem dist -Directory | Where-Object Name -like 'sluse-*-x86_64-pc-windows-msvc')[0].FullName
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item dist\Sluse.msi, "$pkg\VERSION.txt" out
+          $hash = (Get-FileHash out\Sluse.msi -Algorithm SHA256).Hash.ToLower()
+          [IO.File]::WriteAllText("$PWD\out\SHA256SUMS", "$hash  Sluse.msi`n")
+          $version = (Get-Content out\VERSION.txt | Select-String '^version').Line -replace '^version\s+', ''
+          $commit = (Get-Content out\VERSION.txt | Select-String '^commit').Line -replace '^commit\s+', ''
+          "name=sluse-$version+$commit" >> $env:GITHUB_OUTPUT
+
       - uses: actions/upload-artifact@v6
         with:
-          name: sluse-windows-package
-          path: |
-            dist/*.zip
-            dist/Sluse.msi
+          name: ${{ steps.deliverable.outputs.name }}
+          path: out/
           # Artifact storage is metered in GB-hours over the billing month,
           # not as a size: one of these (43 MB) kept 7 days is about 7 GB-hours
           # a push. The free plan's 0.5 GB was 372 GB-hours for October, used

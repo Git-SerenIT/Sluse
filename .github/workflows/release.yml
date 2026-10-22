@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# Release (D-068). Run by hand from the Actions tab, after a green CI run on
+# `main`. It builds nothing: it takes that run's deliverable (`Sluse.msi`,
+# `SHA256SUMS`, `VERSION.txt`), so what is released is the MSI CI installed and
+# tested. The version is read from the artifact, never typed, and the tag is
+# made at the run's own commit: tag, build and version cannot disagree.
+#
+# Refused, before anything is created: a run that is not a green push to
+# `main`; a version already tagged; no `## <version>` section in that commit's
+# CHANGELOG.md; a checksum or commit that does not match. Dry run is the
+# default and creates nothing. The artifact is kept 7 days (`ci.yml`), so a
+# release comes from a run less than a week old.
+#
+# Public repository only: in the private one the job skips (D-067).
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: CI run id to release (empty for the newest green CI run on main)
+        required: false
+        default: ''
+      dry_run:
+        description: Dry run, check everything and create nothing
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    if: github.repository == 'Git-SerenIT/Sluse'
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN: ${{ inputs.run }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Check the run, its deliverable and its notes
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [[ "$RUN" =~ ^[0-9]*$ ]] || fail "run must be a run id, not '$RUN'"
+          if [ -z "$RUN" ]; then
+            RUN=$(gh run list --workflow ci.yml --branch main --event push --status success -L 1 --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$RUN" ] || fail "no green CI run on main"
+          fi
+          IFS=$'\t' read -r wf branch event conclusion sha < <(gh run view "$RUN" --json workflowName,headBranch,event,conclusion,headSha --jq '[.workflowName,.headBranch,.event,.conclusion,.headSha]|@tsv')
+          [ "$wf" = CI ] && [ "$branch" = main ] && [ "$event" = push ] || fail "run $RUN is $wf on $branch ($event), not CI on a push to main"
+          [ "$conclusion" = success ] || fail "run $RUN concluded '$conclusion', not success"
+
+          gh run download "$RUN" --pattern 'sluse-[0-9]*' --dir art || fail "run $RUN has no deliverable (kept 7 days)"
+          dirs=(art/*/)
+          [ ${#dirs[@]} -eq 1 ] || fail "expected one deliverable in run $RUN, found ${#dirs[@]}"
+          d=${dirs[0]}
+          (cd "$d" && sha256sum -c SHA256SUMS) || fail "Sluse.msi does not match its SHA256SUMS"
+          version=$(sed -n 's/^version *//p' "$d/VERSION.txt" | tr -d '\r')
+          commit=$(sed -n 's/^commit *//p' "$d/VERSION.txt" | tr -d '\r')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "VERSION.txt says version '$version'"
+          [[ "$commit" != *-dirty && "$sha" == "$commit"* ]] || fail "the MSI was built from '$commit', not the run's $sha"
+          tag="v$version"
+          if gh api "repos/$GH_REPO/git/refs/tags/$tag" >/dev/null 2>&1; then
+            fail "$tag exists; a new release needs a new version in Cargo.toml"
+          fi
+
+          gh api "repos/$GH_REPO/contents/CHANGELOG.md?ref=$sha" --jq .content | base64 -d > CHANGELOG.md
+          awk -v v="$version" '
+            $0 ~ "^## " { on = ($2 == v) ; next }
+            on' CHANGELOG.md > notes.md
+          grep -q '[^[:space:]]' notes.md || fail "CHANGELOG.md at $sha has no '## $version' section, or it is empty"
+
+          {
+            echo "### $tag from CI run $RUN, commit ${sha:0:7}"
+            echo; echo '```'; cat "$d/SHA256SUMS"; echo '```'; echo
+            cat notes.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "SHA=$sha" >> "$GITHUB_ENV"
+          echo "DIR=$d" >> "$GITHUB_ENV"
+
+      - name: Tag and release
+        if: env.DRY_RUN != 'true'
+        run: |
+          gh release create "$TAG" "$DIR/Sluse.msi" "$DIR/SHA256SUMS" \
+            --target "$SHA" --title "Sluse ${TAG#v}" --notes-file notes.md
+          echo "Released $TAG: $(gh release view "$TAG" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dry run
+        if: env.DRY_RUN == 'true'
+        run: echo "Dry run, nothing created. Untick it to release $TAG." >> "$GITHUB_STEP_SUMMARY"

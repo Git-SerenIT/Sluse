@@ -81,6 +81,8 @@ and nothing records it.
 
 All of it in **Sluse Admin**, on the administrator's own PC (install
 `Sluse.msi` and tick "Sluse Admin"). It never needs to run on a user's PC.
+`Sluse.msi` is on the repository's Releases page, with a `SHA256SUMS` to
+check it against (`Get-FileHash Sluse.msi`); it is not signed yet.
 
 1. **Sign in** as the tenant administrator. Microsoft's consent page asks
    for what setup does as you. **Leave "Consent on behalf of your
