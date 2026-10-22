@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: Apache-2.0
+  Copyright 2026 SerenIT ApS and Prompted EV
+
+  Sluse: nothing runs from Sluse Artifacts (D-031, D-039 slice 8). An App
+  Control for Business base policy in the multiple-policy format: allow
+  everything, deny every user's Sluse Artifacts folder. Base policies
+  intersect, so beside a customer's own policy it takes nothing away and
+  adds the one deny.
+
+  - Enabled:UMCI, so user-mode files are checked; enforced, not audit.
+  - Disabled:Script Enforcement (jok, 2026-10-02): an enforced policy with
+    script enforcement would put interactive PowerShell into Constrained
+    Language Mode for every user and block mshta and MSXML. So .exe, .com,
+    .dll and .msi are blocked there; .ps1, .vbs and .js are not, nor are
+    .bat and .cmd, which App Control never controls.
+  - Disabled:Runtime FilePath Rule Protection: the folder is the user's own,
+    writable by them, and the runtime admin-writable check is meant for
+    allow rules. Whether it would drop this deny is the test run's question.
+  - The path has a wildcard in its middle, so it is enforced on Windows 11
+    only (docs/deployment.md).
+
+  The admin deploys it with Intune: the App Control for Business profile,
+  or a custom OMA-URI ./Vendor/MSFT/ApplicationControl/Policies/<id>/Policy
+  with the .cip the package carries. Sluse never installs it by itself.
+-->
+<SiPolicy xmlns="urn:schemas-microsoft-com:sipolicy" PolicyType="Base Policy">
+  <VersionEx>10.0.0.1</VersionEx>
+  <PlatformID>{2E07F7E4-194C-4D20-B7C9-6F44A6C5A234}</PlatformID>
+  <PolicyID>{3CA83446-6F47-4A65-9891-2685B75CD7E3}</PolicyID>
+  <BasePolicyID>{3CA83446-6F47-4A65-9891-2685B75CD7E3}</BasePolicyID>
+  <Rules>
+    <Rule><Option>Enabled:Unsigned System Integrity Policy</Option></Rule>
+    <Rule><Option>Enabled:UMCI</Option></Rule>
+    <Rule><Option>Disabled:Script Enforcement</Option></Rule>
+    <Rule><Option>Enabled:Update Policy No Reboot</Option></Rule>
+    <Rule><Option>Disabled:Runtime FilePath Rule Protection</Option></Rule>
+  </Rules>
+  <EKUs />
+  <FileRules>
+    <Allow ID="ID_ALLOW_A_1" FriendlyName="Allow kernel drivers" FileName="*" />
+    <Allow ID="ID_ALLOW_A_2" FriendlyName="Allow user mode components" FileName="*" />
+    <Deny ID="ID_DENY_D_1" FriendlyName="Sluse Artifacts" FilePath="%OSDRIVE%\Users\*\Sluse Artifacts\*" />
+  </FileRules>
+  <Signers />
+  <SigningScenarios>
+    <SigningScenario Value="131" ID="ID_SIGNINGSCENARIO_DRIVERS_1" FriendlyName="Kernel mode">
+      <ProductSigners>
+        <FileRulesRef>
+          <FileRuleRef RuleID="ID_ALLOW_A_1" />
+        </FileRulesRef>
+      </ProductSigners>
+    </SigningScenario>
+    <SigningScenario Value="12" ID="ID_SIGNINGSCENARIO_WINDOWS" FriendlyName="User mode">
+      <ProductSigners>
+        <FileRulesRef>
+          <FileRuleRef RuleID="ID_ALLOW_A_2" />
+          <FileRuleRef RuleID="ID_DENY_D_1" />
+        </FileRulesRef>
+      </ProductSigners>
+    </SigningScenario>
+  </SigningScenarios>
+  <UpdatePolicySigners />
+  <CiSigners />
+  <HvciOptions>0</HvciOptions>
+  <Settings>
+    <Setting Provider="PolicyInfo" Key="Information" ValueName="Name">
+      <Value><String>Sluse: nothing runs from Sluse Artifacts</String></Value>
+    </Setting>
+    <Setting Provider="PolicyInfo" Key="Information" ValueName="Id">
+      <Value><String>sluse-artifacts-deny</String></Value>
+    </Setting>
+  </Settings>
+</SiPolicy>

@@ -1,0 +1,137 @@
+#cloud-config
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# The base's one and only cloud-init run (slice 3, D-027 design point 7). The
+# service writes this onto the build VM's seed disk with the bundle beside it;
+# the box installs everything, disables cloud-init, and powers off. Every box
+# is then a system disk on that base. Nothing here is a secret: no data or
+# credential exists yet.
+#
+# What S-8 found, carried here: the Hyper-V tools that follow the kernel's
+# flavour; udev reloaded before the KVP daemon starts; chrony on Hyper-V's
+# clock; the keyboard comes from the host at every open (sluse-bootstrap).
+
+hostname: sluse-box
+# The desktop user the agent runs as. No password and no sudo: nobody signs
+# in at a console, and the box has no sshd (D-027 design point 6).
+users:
+  - name: sluse
+    shell: /bin/bash
+    lock_passwd: true
+ssh_pwauth: false
+# The box's only way out is the egress proxy on the host (M9, D-035): no
+# route and no DNS (the service's network-config). Every program is told the
+# proxy here, before anything installs: apt, the kiosk's session and what it
+# starts (/etc/environment), login shells (profile.d), systemd's services,
+# and snapd below. A program that ignores all of them reaches nothing.
+# NODE_USE_ENV_PROXY: Node's own fetch reads the variables only with it.
+write_files:
+  - path: /etc/apt/apt.conf.d/90sluse-proxy
+    content: |
+      Acquire::http::Proxy "http://192.168.77.1:7584";
+      Acquire::https::Proxy "http://192.168.77.1:7584";
+  - path: /etc/environment
+    append: true
+    content: |
+      http_proxy=http://192.168.77.1:7584
+      https_proxy=http://192.168.77.1:7584
+      HTTP_PROXY=http://192.168.77.1:7584
+      HTTPS_PROXY=http://192.168.77.1:7584
+      no_proxy=localhost,127.0.0.1,::1,192.168.77.1
+      NO_PROXY=localhost,127.0.0.1,::1,192.168.77.1
+      NODE_USE_ENV_PROXY=1
+  - path: /etc/profile.d/sluse-proxy.sh
+    content: |
+      export http_proxy=http://192.168.77.1:7584
+      export https_proxy=http://192.168.77.1:7584
+      export HTTP_PROXY=http://192.168.77.1:7584
+      export HTTPS_PROXY=http://192.168.77.1:7584
+      export no_proxy=localhost,127.0.0.1,::1,192.168.77.1
+      export NO_PROXY=localhost,127.0.0.1,::1,192.168.77.1
+      export NODE_USE_ENV_PROXY=1
+  - path: /etc/systemd/system.conf.d/sluse-proxy.conf
+    content: |
+      [Manager]
+      DefaultEnvironment="http_proxy=http://192.168.77.1:7584" "https_proxy=http://192.168.77.1:7584" "HTTP_PROXY=http://192.168.77.1:7584" "HTTPS_PROXY=http://192.168.77.1:7584" "no_proxy=localhost,127.0.0.1,::1,192.168.77.1" "NO_PROXY=localhost,127.0.0.1,::1,192.168.77.1"
+snap:
+  commands:
+    - [snap, set, system, "proxy.http=http://192.168.77.1:7584", "proxy.https=http://192.168.77.1:7584"]
+package_update: true
+package_upgrade: true
+packages:
+  - chrony
+  - curl
+  - gnupg
+  - python3
+  - nftables
+  - sway
+  # Claude Desktop is Electron, which wants an X server: sway starts this one
+  # for it (L1, 2026-10-05: "Missing X server or $DISPLAY").
+  - xwayland
+  - wayvnc
+  - foot
+  # The box's own pixels in Liberation Sans and Mono (Q4).
+  - fonts-liberation
+  - firefox
+runcmd:
+  # Hyper-V's daemons, for the flavour as well as today's kernel: without the
+  # flavour package the first kernel update leaves KVP, and so enrolment,
+  # broken (S-8 step 2).
+  - [sh, -c, 'f=$(uname -r | sed "s/.*-//"); apt-get install -y linux-cloud-tools-common "linux-cloud-tools-$f" "linux-tools-$f" "linux-cloud-tools-$(uname -r)" "linux-tools-$(uname -r)"']
+  # The tools' udev rule is new: udev re-reads its rules, or the KVP service
+  # waits for a reboot (S-8 step 3).
+  - [sh, -c, 'udevadm control --reload; udevadm trigger; udevadm settle; systemctl enable --now hv-kvp-daemon']
+  # Time from Hyper-V's clock, not NTP, which M9 denies (S-8 step 3: PHC0).
+  - [sh, -c, 'sed -i "/^pool /d;/^server /d" /etc/chrony/chrony.conf; mkdir -p /etc/chrony/conf.d; echo "refclock PHC /dev/ptp_hyperv poll 3 dpoll -2 offset 0 stratum 2" > /etc/chrony/conf.d/hyperv.conf; systemctl restart chrony']
+  # Claude Desktop, the Linux beta, from Anthropic's apt repository, with the
+  # key checked against the fingerprint Anthropic publishes. No recommended
+  # packages: Cowork's QEMU needs KVM, which a Hyper-V box does not have.
+  - [sh, -c, '. /etc/profile.d/sluse-proxy.sh && curl -fsSLo /usr/share/keyrings/claude-desktop-archive-keyring.asc https://downloads.claude.ai/claude-desktop/key.asc && gpg --show-keys --with-colons /usr/share/keyrings/claude-desktop-archive-keyring.asc | grep -q "^fpr:::::::::31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE:" && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" > /etc/apt/sources.list.d/claude-desktop.list && apt-get update && apt-get install -y --no-install-recommends claude-desktop']
+  # Pandoc renders the agent's markdown to .docx and .pptx for a publish
+  # (D-049), with no-images.lua from the bundle. No recommended packages: LaTeX is hundreds of MB, and PDF is the
+  # user's own print to PDF.
+  # pdftotext gives sluse_read a PDF's text (D-051).
+  - [sh, -c, 'apt-get install -y --no-install-recommends pandoc poppler-utils']
+  # Claude Code and Codex, each by its vendor's own installer, into home
+  # (D-026 point 4), so they update themselves and survive a reset.
+  - [su, -, sluse, -c, 'curl -fsSL https://claude.ai/install.sh | bash']
+  - [su, -, sluse, -c, 'curl -fsSL https://chatgpt.com/codex/install.sh | sh']
+  # Sluse itself: the bundle on the seed disk (slices 1 and 2).
+  - [sh, -c, 'mkdir -p /mnt/seed && mount -L CIDATA /mnt/seed && tar xzf /mnt/seed/sluse-box-linux.tar.gz -C /opt && umount /mnt/seed']
+  - [bash, /opt/sluse/kiosk/install.sh, sluse]
+  # Ubuntu's news in the login banner and apt: refused hosts in the Event Log
+  # otherwise (motd.ubuntu.com, contracts.canonical.com; L1, 2026-10-05/06).
+  - [sh, -c, 'systemctl mask motd-news.timer; pro config set apt_news=false || true']
+  # A VM has no firmware fwupd can update, and its metadata refresh was
+  # refused at cdn.fwupd.org (L1, 2026-10-08).
+  - [sh, -c, 'systemctl mask fwupd-refresh.timer fwupd.service || true']
+  # No sshd in the product box.
+  - [sh, -c, 'apt-get purge -y openssh-server; apt-get autoremove -y; apt-get clean']
+  # Firefox, which is the console, again if the package's own fetch gave up:
+  # snapd drops a download it finds too slow, the firefox package's preinst
+  # then fails, and the base had no console (L1, 2026-10-21: core24 at
+  # 80 kB/s, then nothing).
+  - [sh, -c, 'for i in 1 2 3; do snap list firefox >/dev/null 2>&1 && break; snap install firefox; done; apt-get install -y firefox']
+  # The build's verdict, its last line on the console the service records
+  # (D-063): Sluse, the AI apps, Firefox's snap and every package in the
+  # list above, or the base is not kept. runcmd carries on past a failed
+  # step, so this is where a failure is caught; what is missing and the end
+  # of cloud-init's output go with it, for the console log.
+  - |
+    m=""
+    test -f /var/lib/sluse/installed || m="$m Sluse"
+    test -x /usr/bin/claude-desktop || m="$m Claude-Desktop"
+    su - sluse -c "command -v claude" >/dev/null 2>&1 || m="$m Claude-Code"
+    su - sluse -c "command -v codex" >/dev/null 2>&1 || m="$m Codex"
+    snap list firefox >/dev/null 2>&1 || m="$m Firefox"
+    for p in chrony curl gnupg python3 nftables sway xwayland wayvnc foot fonts-liberation firefox; do
+      dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "ok installed" || m="$m $p"
+    done
+    { if [ -z "$m" ]; then echo SLUSE-BUILD-OK; else echo "SLUSE-BUILD-FAILED:$m"; tail -n 60 /var/log/cloud-init-output.log; fi; } > /dev/ttyS0 2>&1
+  # Done: cloud-init never runs again, so opens and resets need no seed.
+  - [touch, /etc/cloud/cloud-init.disabled]
+  - [sh, -c, 'date -u +%FT%TZ > /var/lib/sluse-base-built']
+power_state:
+  mode: poweroff
+  condition: true

@@ -1,0 +1,16 @@
+{
+  "name": "sluse-console",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The Sluse console: what crossed the boundary, and whether it is still true.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "check": "tsc && node contrast.mjs",
+    "contrast": "node contrast.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

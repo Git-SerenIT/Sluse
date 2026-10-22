@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+[Unit]
+Description=Sluse: watch KVP for a new bootstrap at every open
+
+[Path]
+PathChanged=/var/lib/hyperv/.kvp_pool_0
+
+[Install]
+WantedBy=multi-user.target

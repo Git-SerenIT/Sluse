@@ -1,0 +1,18 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# Claude Desktop with the keyring named (D-045 point 6). Chromium picks its
+# secret store from the desktop's name and takes an unknown one, sway, as
+# "basic", where Claude Desktop keeps no sign-in. Ahead of /usr/bin on the
+# path, so the console's launch and the claude:// handler both get it.
+#
+# Started with nothing to open (the console's button), it opens a Code
+# session in the Sluse workspace, as the CLIs start there (D-065). A link is
+# Desktop's one documented way to set the folder; Desktop asks the person to
+# confirm it each time. A running Desktop takes the link as a new session.
+ws="$HOME/Sluse/workspace"
+if [ $# -eq 0 ] && [ -d "$ws" ]; then
+    set -- "claude://code/new?folder=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$ws")"
+fi
+exec /usr/bin/claude-desktop --password-store=gnome-libsecret "$@"

@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Device",
+  "description": "The device's half: what the service writes for this device (D-038 point\n2). Not part of the version.",
+  "type": "object",
+  "properties": {
+    "artifacts": {
+      "description": "Where published artifacts land. The single write path. On a device the\nbroker writes to the signed-in user's `%USERPROFILE%\\Sluse Artifacts`\ninstead, as that user (D-031); this path is used where there is no user\ntoken, as in LOCAL.",
+      "type": "string"
+    },
+    "audit": {
+      "description": "Where the broker writes audit records.",
+      "$ref": "#/$defs/AuditConfig"
+    },
+    "boxId": {
+      "description": "Which box this is. Carried on every audit record.",
+      "$ref": "#/$defs/BoxId"
+    },
+    "broker": {
+      "description": "Where the broker listens and what certificate it presents.",
+      "$ref": "#/$defs/BrokerConfig"
+    },
+    "endpoint": {
+      "description": "What the endpoint presents, and where the console listens.",
+      "$ref": "#/$defs/EndpointConfig"
+    },
+    "environment": {
+      "description": "Which environment this box runs in. Drives `not_applicable` rows in\nthe preflight report and is stamped on every result file, so a LOCAL\nresult cannot be read as saying something about identity or the guest\nboundary (D-010). A fact about how the box was made, so the device's.",
+      "$ref": "#/$defs/Environment"
+    },
+    "journalDir": {
+      "description": "Where the endpoint writes its per-session journal files.",
+      "type": "string"
+    },
+    "maxReadBytes": {
+      "description": "Inline-read cap in bytes. Fixed by the product; tests lower it.",
+      "type": "integer",
+      "format": "uint64",
+      "default": 262144,
+      "minimum": 0
+    },
+    "workspace": {
+      "description": "The agent's working directory inside the box.",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "boxId",
+    "environment",
+    "broker",
+    "endpoint",
+    "artifacts",
+    "workspace",
+    "journalDir",
+    "audit"
+  ],
+  "$defs": {
+    "AuditConfig": {
+      "description": "Where audit records go.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The JSONL file, when `sink` is `jsonl`. Ignored by the Event Log sink.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sink": {
+          "description": "Which sink.",
+          "$ref": "#/$defs/AuditSinkKind"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sink"
+      ]
+    },
+    "AuditSinkKind": {
+      "description": "The audit sinks.",
+      "oneOf": [
+        {
+          "description": "One JSON object per line. The prototype's sink, and readable without a\nSIEM.",
+          "type": "string",
+          "const": "jsonl"
+        },
+        {
+          "description": "The Windows Event Log. **v1's sink** (`docs/audit.md`): every customer's\nSIEM agent already collects it, so integration work is zero. Windows\nonly; elsewhere the broker refuses to start with it.",
+          "type": "string",
+          "const": "eventlog"
+        }
+      ]
+    },
+    "BoxId": {
+      "description": "Which box. From the config, carried on every audit record\n(`docs/audit.md`, Fields). Not minted: a human or the platform names it.",
+      "type": "string"
+    },
+    "BrokerConfig": {
+      "description": "Where the broker listens and what it presents.",
+      "type": "object",
+      "properties": {
+        "certPath": {
+          "description": "Broker leaf certificate (PEM).",
+          "type": "string"
+        },
+        "certPin": {
+          "description": "SHA-256 of the broker's leaf certificate in DER form.\n\nThe endpoint trusts this one certificate and no CA bundle at all. A\npublic root store here would be a way for something in the guest to be\ntalked into trusting a broker that is not the broker.",
+          "$ref": "#/$defs/ContentHash"
+        },
+        "clientCaPath": {
+          "description": "The CA whose certificates the broker accepts from clients. mTLS is\nmandatory: a client without one does not complete a handshake.",
+          "type": "string"
+        },
+        "keyPath": {
+          "description": "Its private key (PEM).",
+          "type": "string"
+        },
+        "listen": {
+          "description": "Socket address to bind, e.g. `127.0.0.1:7580`.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The base URL the endpoint dials, e.g. `https://127.0.0.1:7580`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "listen",
+        "url",
+        "certPath",
+        "keyPath",
+        "clientCaPath",
+        "certPin"
+      ]
+    },
+    "ContentHash": {
+      "description": "A SHA-256 digest in lowercase hex. On the wire it is a bare string.",
+      "type": "string"
+    },
+    "EndpointConfig": {
+      "description": "What the endpoint presents, and where the console listens.",
+      "type": "object",
+      "properties": {
+        "clientCertPath": {
+          "description": "Endpoint client certificate (PEM), signed by the broker's client CA.",
+          "type": "string"
+        },
+        "clientKeyPath": {
+          "description": "Its private key (PEM).",
+          "type": "string"
+        },
+        "consoleListen": {
+          "description": "Where the console's loopback API listens, e.g. `127.0.0.1:7582`.\n\nLoopback and unauthenticated in LOCAL, which is a limitation and is\nwritten down as one in `prototype/README.md` rather than glossed.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "clientCertPath",
+        "clientKeyPath",
+        "consoleListen"
+      ]
+    },
+    "Environment": {
+      "description": "Which environment a config describes.",
+      "oneOf": [
+        {
+          "description": "One laptop, an OS identity, a fixture folder and a mapped share. Proves\nfunctionality, UI, usability and NTFS semantics; proves nothing about\nidentity or the guest boundary (D-010).",
+          "type": "string",
+          "const": "local"
+        },
+        {
+          "description": "A demo-tenant workstation with a real signed-in user.",
+          "type": "string",
+          "const": "demo"
+        }
+      ]
+    }
+  }
+}

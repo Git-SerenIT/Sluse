@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+[Unit]
+Description=Sluse kiosk: headless sway with the console
+After=systemd-user-sessions.service
+
+[Service]
+User=@KIOSK_USER@
+# A logind session, so the user has /run/user/<uid>, which the Firefox snap
+# needs, without anyone signing in at a console.
+PAMName=login
+ExecStart=/usr/local/libexec/sluse/kiosk
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

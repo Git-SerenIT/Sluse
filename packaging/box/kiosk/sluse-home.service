@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+[Unit]
+Description=Sluse: the user's home disk, kept across a reset
+After=local-fs.target
+Before=systemd-user-sessions.service sluse-kiosk.service sluse-enrol.service sluse-console.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/sluse/home-init
+
+[Install]
+WantedBy=multi-user.target

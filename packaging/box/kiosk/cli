@@ -1,0 +1,52 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# A command-line runtime in the console's terminal (D-027 point 3), through a
+# login shell so ~/.local/bin, where the vendors install, is on the path.
+# A header first, as docs/design/mockups/desktop/box.html draws it: on the
+# first run the sign-in route that works in the box, after that one line.
+# Microsoft's sign-in cannot open in the box (D-044), so the route is the
+# address copied out, or typed when copying out is off (Q64, from the
+# config's clipboard setting, which sluse-bootstrap keeps). When the runtime
+# stops with an error the window stays until Enter, so its message can be
+# read: Claude Code's "Unable to connect" closed with its terminal before
+# anyone saw it (L1, 2026-10-05).
+case "$1" in
+    claude) name="Claude Code" ;;
+    codex) name="Codex" ;;
+    *) echo "cli: $1 is not one of the box's runtimes" >&2; exit 2 ;;
+esac
+# In the workspace, so the work and what is fetched sit where the inventory
+# looks; a default, not a fence: the runtime can write the rest of home
+# (L1, 2026-10-07). Home before the first open has made the workspace.
+if cd "$HOME/Sluse/workspace" 2>/dev/null; then folder="~/Sluse/workspace"; else cd "$HOME"; folder="~"; fi
+seen="${XDG_CONFIG_HOME:-$HOME/.config}/sluse/$1-seen"
+dim=$(printf '\033[2m') bold=$(printf '\033[1m') off=$(printf '\033[0m')
+rule="${dim}────────────────────────────────────────────────────────────${off}"
+if [ -e "$seen" ]; then
+    printf '%s%s, in %s%s\n%s\n\n' "$dim" "$name" "$folder" "$off" "$rule"
+else
+    if [ "$1" = codex ]; then
+        how="Microsoft's sign-in page cannot open in your box. When Codex asks you to
+sign in, choose the device code, and enter the code in your browser on Windows."
+    elif [ "$(cat /run/sluse/copy-out 2>/dev/null)" = off ]; then
+        how="Microsoft's sign-in page cannot open in your box, and copying text out of it
+is turned off. If Claude Code shows an address to sign in with, type it into
+your browser on Windows, and paste the code you get back here. If that is not
+practical, send the details to your IT department."
+    else
+        how="Microsoft's sign-in page cannot open in your box. If Claude Code shows an
+address to sign in with, copy it, open it in your browser on Windows, and
+paste the code you get back here."
+    fi
+    printf '%s%s, in your box.%s\n%sWorking folder  %s\n\nSign in once; your box keeps it.\n%s%s\n%s\n\n' \
+        "$bold" "$name" "$off" "$dim" "$folder" "$how" "$off" "$rule"
+    mkdir -p "$(dirname "$seen")" && : > "$seen"
+fi
+bash -lc "$1"
+s=$?
+[ "$s" -eq 0 ] && exit 0
+printf '\n%s stopped (exit %s). Press Enter to close this window. Open it again from the Sluse console. ' "$name" "$s"
+read -r _
+exit "$s"

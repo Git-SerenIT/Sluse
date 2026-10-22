@@ -1,0 +1,225 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+
+# Sluse — Cargo workspace root.
+#
+# Contained environment for AI agents working on company data: a host-side
+# broker acting as the signed-in user releases individual files to an agent that
+# has no authority of its own. See CLAUDE.md for the claim and the invariants,
+# docs/sluse_prototype.md for what is being built and in what order.
+#
+# Created 2026-09-14 under D-010, which supersedes D-004. **The crate names are
+# provisional.** Q-7 (tool namespace and repository layout) is still open and the
+# ownership meeting may rename all of this; renaming a working prototype is
+# cheaper than not having one.
+#
+# Build order, per docs/sluse_prototype.md: sluse-proto -> sluse-broker (with
+# `sluse devcert` out of sluse-lifecycle) -> sluse-endpoint -> the rest of
+# sluse-lifecycle -> the console. Only sluse-proto is built today (M1); the other
+# three are members from the start so the workspace is whole and so a shared type
+# cannot quietly acquire a dependency that one of them cannot take.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/sluse-proto",      # M1 — the shared contract
+    "crates/sluse-broker",     # M2 — mTLS listener, sources, scope, audit, volume
+    "crates/sluse-endpoint",   # M3 — MCP over stdio; M5 — the console's API
+    "crates/sluse-lifecycle",  # M2 devcert, M4 check/start/stop/status
+    "crates/sluse-admin",      # D-039 slice 4 — setup's engine
+]
+
+[workspace.package]
+# 0.0.x, and it stays there until something has been run against a real source by
+# someone other than its author. Chaperone's rule, worth carrying: the version
+# number is a claim about proven-ness, not a record of effort.
+#
+# Human owns version bumps (CLAUDE.md, Human-owned). Nothing automated edits this.
+version = "0.0.1"
+edition = "2021"
+# Measured from the locked graph, never estimated from direct dependencies and
+# never copied from Chaperone (D-010 point 6). Chaperone's own MSRV line was
+# wrong twice for exactly that reason. Re-derive after any dependency change:
+#
+#   cargo metadata --format-version 1 --locked \
+#     | jq -r '[.packages[].rust_version | select(.)] | max'
+#
+# 1.88.0 is the highest rust-version among the crates actually built for
+# x86_64-pc-windows-msvc. Three declare it and all three are compiled here:
+# rcgen (1.88, `sluse devcert`), time (1.88.0, rcgen's validity fields) and
+# encoding_rs (1.88, under multer, under axum's multipart for publish). The
+# literal maximum over the whole lock file is the same, since wasip2's 1.87.0 is
+# below it — getrandom pulls that in only for wasm32-wasip2 and it is never
+# compiled here.
+#
+# **Re-measured 2026-09-16**, at M2's serving half, because that milestone added
+# the whole TLS and HTTP half of the graph. It was 1.85.0 on 2026-09-14 and
+# carrying that line forward would have been wrong by three minor versions —
+# which is exactly the mistake Chaperone's own floor line made twice (D-010
+# point 6). Derived, not proven: 1.88.0 is not installed on this machine, so
+# nothing has been built with it. The CI msrv job that reads this field lands at
+# M4 or later.
+#
+# **Re-measured 2026-10-05**, after `sluse-admin` joined: still 1.88.0, for
+# both targets, from time, jsonwebtoken, darling and rcgen. The shell is its
+# own workspace and declares its own floor (`ui/shell/src-tauri/Cargo.toml`).
+rust-version = "1.88.0"
+# Apache-2.0 for the box (D-005). Which entity grants it, and the NOTICE text,
+# are Q-8 and not settled; there is no LICENSE or NOTICE file at the root yet
+# because writing one would decide Q-8 by accident.
+license = "Apache-2.0"
+# Two deployables and their shared contract, not libraries. Open source and
+# published-to-a-registry are separate decisions.
+publish = false
+
+# Single source of truth for dependency versions. Members take these with
+# `dep.workspace = true` so the broker and the endpoint cannot resolve different
+# serde, rustls or chrono than the contract they both speak.
+#
+# Versions are current as of 2026-09-14 and were measured, not inherited from
+# Chaperone (D-010 point 6). The one deliberate pin is rmcp: the 2.2 line is what
+# the S-2 stub's tool handlers are written against, and porting them is M3's job
+# while the 3.x upgrade is its own.
+[workspace.dependencies]
+# --- contract -------------------------------------------------------------
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+# SHA-256 for content hashes and for the config version. Not BLAKE3 as in
+# Chaperone: the audit trail is shown to a customer's security function, and
+# SHA-256 is the hash their tooling and their policies already name.
+sha2 = "0.10"
+# `chrono04` teaches schemars about `DateTime<Utc>`, which the wire types use for
+# every timestamp. Without it the config schema cannot be generated at all.
+schemars = { version = "1", features = ["chrono04"] }
+getrandom = "0.3"
+base64 = "0.22"
+calamine = { version = "0.36", default-features = false }
+zip = { version = "8", default-features = false, features = ["deflate"] }
+quick-xml = "0.41"
+encoding_rs = "0.8"
+
+# --- runtime, both binaries ----------------------------------------------
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "fs", "net", "signal", "time"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+
+# --- broker ---------------------------------------------------------------
+# `multipart` for the publish route: a manifest part and one part per file, in
+# one call. A call per file is what left the second and third artifact of a
+# delivery with no lineage (S-2 finding 8).
+axum = { version = "0.8", features = ["multipart"] }
+axum-server = { version = "0.8", features = ["tls-rustls"] }
+# Named directly so the crypto provider is chosen explicitly. A workspace build
+# otherwise unifies aws-lc-rs (via axum-server) with ring (via reqwest) and
+# rustls refuses to guess at runtime — Chaperone met this and it panics on the
+# first handshake. `install_default()` runs first thing in both binaries and in
+# the integration test.
+rustls = { version = "0.23", features = ["aws-lc-rs"] }
+
+# --- broker, M7: Entra --------------------------------------------------
+# Validating the user's ID token (no client assertion since D-036). The
+# `aws_lc_rs` backend and not `rust_crypto`, for the reason `rustls` above names
+# its provider: one C crypto library in the graph, never two. With exactly one
+# backend feature on, jsonwebtoken selects it itself and nothing needs
+# installing at start. Declares rust-version 1.88.0, which is the floor already,
+# so the MSRV line below does not move.
+jsonwebtoken = { version = "11", default-features = false, features = ["use_pem", "aws_lc_rs"] }
+
+# --- endpoint -------------------------------------------------------------
+# **Two things changed here between the plan and the code, and the second one
+# matters.** The plan named the feature `rustls-tls-manual-roots`, which 0.13
+# does not have. And 0.13's plain `rustls` feature does not mean manual roots:
+# with no explicit root certificates it installs `rustls-platform-verifier`,
+# which is the **operating system root store** — precisely the public CA
+# bundle that must not exist inside the guest, since it is a way for something
+# in the box to be talked into trusting a broker that is not the broker.
+#
+# What keeps it out is `ClientBuilder::use_preconfigured_tls`, which hands
+# reqwest a `rustls::ClientConfig` built here and skips its whole TLS-selection
+# path. That call is load-bearing, not a convenience, and
+# `sluse_endpoint::broker_client` says so where it is made.
+reqwest = { version = "0.13", default-features = false, features = [
+    "json",
+    # 0.13 split `query` out into its own feature, and `form` (the device-code
+    # sign-in of `sluse admin setup`, slice 5).
+    "query",
+    "form",
+    "rustls",
+    "stream",
+    "multipart",
+] }
+rmcp = { version = "2.2", features = ["server", "macros", "transport-io", "schemars"] }
+include_dir = "0.7"
+# The read route's body is a hand-written `Stream` so it can hash as it streams
+# and write its record once, at the end, whichever way the stream ends. Already
+# in the graph under axum and hyper.
+futures-core = "0.3"
+
+# --- lifecycle ------------------------------------------------------------
+# `default-features = false` drops rcgen's default `ring` backend. Two C crypto
+# libraries in one graph is the condition this workspace exists to avoid — rustls
+# refuses to guess between providers at runtime — and rcgen's keygen is no
+# exception just because it is not the rustls provider itself.
+rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
+# Named directly for one reason: rcgen's `aws_lc_rs` feature does not turn on
+# `prebuilt-nasm`, and rustls' does. Without it `aws-lc-sys` wants NASM on the
+# build machine to assemble x86_64 and panics when it is absent — which is what
+# happens on this laptop. Naming the crate here makes feature unification supply
+# what rcgen alone does not ask for.
+#
+# `prebuilt-nasm` is inert off MSVC: aws-lc-sys assembles with the system
+# compiler on the Ubuntu guest, which is why D-011 needs cmake, clang and perl
+# there rather than NASM. The feature stays because the host still needs it.
+aws-lc-rs = { version = "1.18", default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
+# rcgen's `CertificateParams` validity fields are `time::OffsetDateTime`, and the
+# crate does not re-export `time`. Already in the locked graph via rcgen, so this
+# names what is there rather than adding anything.
+time = { version = "0.3", default-features = false }
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_EventLog",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_NetworkManagement_NetManagement",
+    # The lifecycle service (slice 1, D-027): its pipe, the pipe client's
+    # token, the broker's kill-on-close job, and the data directory's ACL.
+    "Win32_System_Pipes",
+    "Win32_Storage_FileSystem",
+    "Win32_System_JobObjects",
+    # The service's stderr to logs\service.log under the SCM, which gives it none.
+    "Win32_System_Console",
+    "Win32_System_IO",
+    # D-031: the broker writes Sluse Artifacts as the user, in their profile
+    # (`GetUserProfileDirectoryW`), from the session token the service takes
+    # (`WTSQueryUserToken`).
+    "Win32_UI_Shell",
+    "Win32_System_RemoteDesktop",
+] }
+# The SCM glue for `sluse service`. Microsoft's own, from windows-rs, whose
+# only dependency is `windows-link`, already in the graph under `windows`.
+windows-services = "0.26"
+# The unix half of the same question (D-011): `kill(2)` for `state::terminate`.
+# Already in the locked graph under tokio on unix, so this names what is there
+# rather than adding anything, and it is target-gated at every use.
+libc = "0.2"
+
+# --- the box image (slice 3) ---------------------------------------------
+# Canonical's cloud image is qcow2 with deflate-compressed clusters, and the
+# service reads it itself (D-027 point 1). The pure-Rust backend: no C, and
+# nothing for the Windows build to find a compiler for.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+# --- dev ------------------------------------------------------------------
+tempfile = "3"
+tower = "0.5"
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+strip = true

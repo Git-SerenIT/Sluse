@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+[Unit]
+Description=Sluse: read the host's bootstrap from KVP
+# Once at boot as well, after the watch is up: the path unit fires on a
+# change it sees, and the host's bootstrap is often in the pool before it
+# watches, which left the box with no VNC secret (L1, 2026-09-30).
+After=hv-kvp-daemon.service sluse-bootstrap.path
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/sluse/sluse-bootstrap @KIOSK_USER@
+
+[Install]
+WantedBy=multi-user.target

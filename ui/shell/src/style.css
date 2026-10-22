@@ -1,0 +1,60 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 SerenIT ApS and Prompted EV */
+/* The look is look/tokens.css and look/components.css (D-062); this file is
+   only what each state shows and the shell's own layout, as the mock-ups'
+   shell.css has it (docs/design/mockups/shell/). */
+
+html, body { height: 100%; }
+body { display: flex; flex-direction: column; overflow: hidden; }
+
+/* ---- What each state shows (main.js, show()) ---------------------------- */
+/*   waiting       a wait: opening, resetting, connecting, the console
+     closing       Close sent: the wait, with the service's limit
+     error         an open, reset or wipe that failed
+     close-failed  a Close that failed: Close again, never Try again
+     running       the box on screen, with its controls
+     closed        the last words, then the window goes */
+body:not([data-state="running"]) :is(#screen, #notices, #trust, #close, #more) { display: none !important; }
+body[data-state="running"] #status { display: none; }
+body:not([data-state="closed"]) #closedline, body[data-state="closed"] .passage-wrap { display: none; }
+body:is([data-state="error"], [data-state="close-failed"]) .wait-only { display: none !important; }
+body:not([data-state="error"]):not([data-state="close-failed"]) :is(.error-only, #err-pill, #extra) { display: none !important; }
+#meta:not(:has(> :not([hidden]))) { display: none; }
+
+/* ---- The bar ------------------------------------------------------------ */
+.shellbar { flex: none; position: relative; z-index: 6; }
+.shellbar .who__value .pill { vertical-align: middle; }
+.shellbar .who__value .mono + .pill, .shellbar .who__value .pill + .pill { margin-left: var(--space-2); }
+.shellbar .bar-short { display: none; }
+/* Under 1280 wide (down to the 960 minimum, Q25) the words the icons and
+   popovers already carry go visually and stay in the accessible names. */
+@media (max-width: 1279px) {
+  .shellbar .bar-short { display: inline; }
+  .shellbar :is(.bar-long, .who__label, .bar-name, .who__acct, .themeswitch [data-theme-now]) {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .shellbar .btn:has(> .bar-name) { padding: 0 var(--space-2); }
+  .shellbar .who__value .who__acct + .pill { margin-left: 0; }
+}
+
+/* ---- Notices: under the bar, never over the box ------------------------- */
+.notices { flex: none; display: grid; }
+.notices .banner--strip { min-height: 40px; }
+.notices .banner__text { max-width: none; }
+
+/* ---- The box: at the size of the space under the bar (Q34) --------------- */
+.screen { flex: 1 1 auto; min-height: 0; position: relative; background: var(--surface); overflow: hidden; }
+/* The last frame, kept and greyed while the box reconnects. */
+.screen__still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; filter: grayscale(1) brightness(.55); z-index: 3; }
+.overlay__card .bigclock__num { font-size: var(--h3-size); line-height: var(--h3-line); }
+#drag:not([data-dropped]) .drop-done { display: none; }
+
+/* ---- Waits, errors, closed ---------------------------------------------- */
+.view { flex: 1 1 auto; min-height: 0; position: relative; overflow: auto; }
+.passage__lead .disclosure .techdetails { max-width: 36rem; }
+
+/* ---- Dialogs ------------------------------------------------------------- */
+dialog.dialog { max-width: 36rem; }
+dialog.dialog--wide { max-width: 40rem; }
+dialog.dialog form { margin: 0; }
+.dialog__body .techdetails pre { max-height: 10rem; }

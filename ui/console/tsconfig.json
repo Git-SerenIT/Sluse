@@ -1,0 +1,21 @@
+{
+  // No bundler. The browser loads ES modules natively, `tsc` is the only tool,
+  // and `typescript` is the only dependency — which matters more here than in
+  // most projects: this runs inside the guest, and the guest's dependency list
+  // is something a customer's security function reads.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "sourceMap": true
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+
+[package]
+name = "sluse-admin"
+description = "Sluse setup's engine: Sluse's Entra registration, the tenant's config and package, Graph for the setup UI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+sluse-proto = { path = "../sluse-proto" }
+reqwest.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+getrandom.workspace = true
+# aws-lc-sys with prebuilt-nasm, as in the other crates: reqwest's rustls
+# pulls it in, and this machine has no NASM.
+aws-lc-rs.workspace = true
+# The `.intunewin`'s zip (D-039: our own writer): deflate and CRC-32.
+flate2.workspace = true
+
+# The package folder's ACL (`acl.rs`), and an MSI's Property table (`msi.rs`).
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Win32_System_ApplicationInstallationAndServicing"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+# A stand-in for Entra and Microsoft Graph.
+axum.workspace = true

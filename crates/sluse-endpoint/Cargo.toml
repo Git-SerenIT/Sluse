@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+
+[package]
+name = "sluse-endpoint"
+description = "Sluse endpoint: MCP server over stdio and the console API. Runs in the guest."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# A library as well as a binary: the integration test starts a broker in-process
+# and drives it through `BrokerClient`, which is the client the guest actually
+# ships. A test that spawned the binary would prove less and flake more.
+[lib]
+name = "sluse_endpoint"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sluse-endpoint"
+path = "src/main.rs"
+
+[dependencies]
+sluse-proto = { path = "../sluse-proto" }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio = { workspace = true, features = ["process"] }
+tokio-util.workspace = true
+clap.workspace = true
+getrandom.workspace = true
+base64.workspace = true
+
+# No native roots and no webpki roots: the guest trusts exactly one certificate,
+# by hash, and nothing else. A public CA bundle here would be a way for something
+# inside the box to be talked into trusting a broker that is not the broker.
+reqwest.workspace = true
+# Named directly so the pinned verifier can be written against the same rustls
+# the client uses. Two rustls in one graph would be two trust decisions.
+rustls.workspace = true
+rmcp.workspace = true
+# The console's loopback API. Same axum the broker serves with, so one HTTP
+# stack is in the graph rather than two.
+axum.workspace = true
+schemars.workspace = true
+
+# Enrolment (slice 2): the box makes its own key pair. P-256, the same rcgen
+# the broker signs with, already in the graph.
+rcgen.workspace = true
+# Spreadsheets and slides as text for sluse_read (D-051): calamine for .xlsx,
+# .xls and .ods; its own zip and quick-xml for .pptx, so one of each.
+calamine.workspace = true
+zip.workspace = true
+quick-xml.workspace = true
+# Windows-1252 text for sluse_read (D-052), calamine's own.
+encoding_rs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tower.workspace = true
+# The integration test runs a real broker behind a real handshake.
+sluse-broker = { path = "../sluse-broker" }
+aws-lc-rs.workspace = true
+# The Entra and Graph stand-in the broker's M7 tests use, included by path.
+jsonwebtoken.workspace = true

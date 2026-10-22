@@ -1,0 +1,105 @@
+{
+  "version": 3,
+  "about": "The egress bundles Sluse Admin offers (D-038 point 5). A config holds the bundles chosen and every host written out; only the hosts are enforced, and a newer catalog never widens a box by itself. 'measured' says what of a bundle was measured, when and how, or is null where its hosts are still the M9 draft.",
+  "bundles": [
+    {
+      "id": "box-system",
+      "name": "The box's own system",
+      "description": "Ubuntu's updates, patched in place, and the Snap store for Firefox.",
+      "locked": true,
+      "default": true,
+      "uploads": false,
+      "hosts": [
+        "archive.ubuntu.com",
+        "security.ubuntu.com",
+        "api.snapcraft.io",
+        "*.snapcraftcontent.com"
+      ],
+      "measured": null
+    },
+    {
+      "id": "claude",
+      "name": "Claude Code and Claude Desktop",
+      "description": "Anthropic's inference and sign-in, Claude Desktop's application hosts and package repository, Claude Code's installer and updates, claude.ai's connectors and artifacts.",
+      "default": true,
+      "uploads": true,
+      "hosts": [
+        "anthropic.com",
+        "api.anthropic.com",
+        "a-api.anthropic.com",
+        "a-cdn.anthropic.com",
+        "s-cdn.anthropic.com",
+        "assets-proxy.anthropic.com",
+        "console.anthropic.com",
+        "mcp-proxy.anthropic.com",
+        "claude.ai",
+        "a.claude.ai",
+        "a-cdn.claude.ai",
+        "assets.claude.ai",
+        "downloads.claude.ai",
+        "claude.com",
+        "platform.claude.com",
+        "code.claude.com",
+        "*.claudeusercontent.com",
+        "*.claudemcpcontent.com",
+        "hcaptcha.com",
+        "*.hcaptcha.com"
+      ],
+      "measured": "2026-10-06, version 3: hcaptcha.com and *.hcaptcha.com, claude.ai's sign-in page's bot check (L1: js.hcaptcha.com refused, and the email code then failed with \"could not verify your browser\"); a wildcard does not take its apex, so both. Not added: accounts.google.com, the page's Google sign-in, refused beside it; the email sign-in does not need it. 2026-10-05, version 2: the hosts from Anthropic's own lists, Claude Code's network requirements (code.claude.com/docs/en/network-config) and Claude Desktop's narrowed list (code.claude.com/docs/en/desktop), after the box on fjeder's device refused platform.claude.com and Claude Code would not start (ERR_PROXY_TUNNEL). Left out: storage.googleapis.com (any Cloud Storage bucket, an upload channel; only /plugin's counts and installers before 2.1.116), the Datadog telemetry hosts, *.livepreview.claude.ai and *.livepreview.claude.app (app preview, which serves the box's local apps out), bridge.claudeusercontent.com is inside *.claudeusercontent.com. Before: 2026-10-02, the Claude Code installer on the dev guest: claude.ai, downloads.claude.ai, api.anthropic.com"
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "description": "OpenAI's inference and sign-in, and Codex's installer.",
+      "default": true,
+      "uploads": true,
+      "hosts": [
+        "api.openai.com",
+        "releases.openai.com",
+        "auth.openai.com",
+        "chatgpt.com"
+      ],
+      "measured": "2026-10-02: the Codex installer on the dev guest, behind the proxy; chatgpt.com redirects to releases.openai.com, which serves the script and the binary. First use not measured"
+    },
+    {
+      "id": "python",
+      "name": "Python packages",
+      "description": "PyPI's index and downloads. Not its upload host.",
+      "default": true,
+      "uploads": false,
+      "hosts": [
+        "pypi.org",
+        "files.pythonhosted.org"
+      ],
+      "measured": null
+    },
+    {
+      "id": "node",
+      "name": "Node.js and npm",
+      "description": "npm's registry and Node.js's downloads. The registry also takes publishes.",
+      "default": false,
+      "uploads": true,
+      "hosts": [
+        "registry.npmjs.org",
+        "nodejs.org"
+      ],
+      "measured": null
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "Cloning, releases and raw files. GitHub also takes pushes, issues and gists.",
+      "default": false,
+      "uploads": true,
+      "hosts": [
+        "github.com",
+        "api.github.com",
+        "codeload.github.com",
+        "objects.githubusercontent.com",
+        "raw.githubusercontent.com",
+        "release-assets.githubusercontent.com"
+      ],
+      "measured": null
+    }
+  ]
+}

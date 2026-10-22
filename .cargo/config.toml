@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+
+# Workspace-wide build settings.
+#
+# Static CRT on Windows. Derived from Chaperone's D-032, which was written after
+# a customer's service would not start on a clean Windows Server 2022: the MSVC
+# target links the C runtime dynamically by default, so the binary depends on
+# `vcruntime140.dll` from the Visual C++ redistributable. That dependency is
+# invisible on any developer machine, because every developer machine has it.
+#
+# Sluse has the same exposure and less room for it: the broker and the lifecycle
+# service run as SYSTEM on a host that the installer provisions, and the endpoint
+# runs inside a guest built from a customer-supplied VM (spec §19). "Install the
+# redistributable first" is not a step an installer should need.
+#
+# The trade, stated rather than hidden: CRT security fixes no longer arrive via
+# Windows Update, because the runtime is inside our binaries.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

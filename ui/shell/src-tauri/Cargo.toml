@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# The host shell (D-025, D-027 design point 8). Its own Cargo workspace, so
+# Tauri's dependency graph stays out of the core's lock file and MSRV.
+
+[package]
+name = "sluse-shell"
+description = "The Sluse host shell: one window on the user's box."
+version = "0.0.1"
+edition = "2021"
+# Measured 2026-10-05 across this workspace's own lock, as the root's is:
+# Tauri 2's crates declare 1.90. Derived, not built with 1.90.
+rust-version = "1.90"
+license = "Apache-2.0"
+publish = false
+
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# The tray icon (Q11, the new UI's slice 4); already in the lock.
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The pipe's types, from the core. Pure data: no runtime, no TLS.
+sluse-proto = { path = "../../../crates/sluse-proto" }
+# Sluse Admin's engine (D-039 slice 6), and the native file dialogs it picks
+# the MSI and saves the configuration with.
+sluse-admin = { path = "../../../crates/sluse-admin" }
+tauri-plugin-dialog = "2"
+
+[target.'cfg(windows)'.dependencies]
+# The WebView2 settings Tauri does not expose; already in the graph through wry.
+webview2-com = "0.39"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    # The keyboard layout's language, named when the box has no layout for
+    # it (Q30).
+    "Win32_Globalization",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Pipes",
+    # One window per Windows session: a named mutex, and the open window
+    # brought forward (`already_open`).
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+    # Sluse's notifications (Q11): the process's app id, and Windows' toasts.
+    "Win32_UI_Shell",
+    "UI_Notifications",
+    "Data_Xml_Dom",
+] }
+
+[profile.release]
+strip = true
+lto = "thin"

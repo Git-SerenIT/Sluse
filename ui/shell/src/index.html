@@ -1,0 +1,239 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 SerenIT ApS and Prompted EV -->
+<!-- The screens are the mock-ups' (docs/design/mockups/shell/, D-062):
+     wait.html, running.html, errors.html. main.js sets <body data-state>
+     and style.css shows what each state has. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sluse</title>
+  <link rel="stylesheet" href="look/tokens.css">
+  <link rel="stylesheet" href="look/components.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="theme.js"></script>
+  <script src="look/icons.js"></script>
+  <script type="module" src="main.js"></script>
+</head>
+<body data-state="waiting">
+  <!-- Sluse's own bar, above the box and never over it (D-034 point 7),
+       pinned Dark in both themes (Q5). The folders are in every state
+       (Q17); the box's controls only while it is on screen; the theme
+       switch last, always (Q3). -->
+  <header id="topbar" class="topbar topbar--compact shellbar" data-theme="dark">
+    <span class="topbar__brand"><span class="lockup"><span class="app-icon" data-size="16" data-alt=""></span><span class="wordmark">sluse</span></span></span>
+
+    <!-- Who Sluse reads files as, and what the clipboard carries. The
+         visible words are each summary's accessible name. -->
+    <div class="topbar__status" id="trust">
+      <details class="menu menu--left who" id="who">
+        <summary class="who__summary"><i data-icon="person"></i><span class="who__lines"><span class="who__label">Reading as</span><span class="who__value" id="who-value"></span></span><i data-icon="chevron-down" class="icon--chevron-down"></i></summary>
+        <div class="menu__list popover who__menu" role="group" aria-labelledby="who-title">
+          <p class="popover__title" id="who-title"></p>
+          <div class="stack" style="--stack-gap:12px" id="who-body"></div>
+        </div>
+      </details>
+    </div>
+
+    <nav class="topbar__actions" aria-label="Your box">
+      <button class="btn" type="button" id="inputs" hidden aria-describedby="hint-inputs" title="Files you put here can be read by your box. Sluse Inputs is in your user folder."><i data-icon="inbox"></i><span class="bar-name">Sluse Inputs</span></button>
+      <button class="btn" type="button" id="artifacts" aria-describedby="hint-artifacts" title="What your box published. Sluse Artifacts is in your user folder."><i data-icon="folder"></i><span class="bar-name">Sluse Artifacts</span></button>
+      <button class="btn" type="button" id="close" aria-describedby="hint-close" title="Shuts your box down and closes its apps. Sluse stops reading files as you. Your files stay."><i data-icon="power"></i>Close the box</button>
+      <span class="visually-hidden" id="hint-inputs">Files you put here can be read by your box. Sluse Inputs is in your user folder.</span>
+      <span class="visually-hidden" id="hint-artifacts">What your box published. Sluse Artifacts is in your user folder.</span>
+      <span class="visually-hidden" id="hint-close">Shuts your box down and closes its apps. Sluse stops reading files as you. Your files stay.</span>
+      <details id="more" class="menu">
+        <summary class="btn">More<i data-icon="chevron-down" class="icon--sm"></i></summary>
+        <div class="menu__list">
+          <button class="menu__item" type="button" id="reset"><i data-icon="reset"></i><span>Reset the box's system…<span class="menu__hint">Your files stay. Apps installed outside your home folder go.</span></span></button>
+          <hr class="menu__sep">
+          <button class="menu__item menu__item--destructive" type="button" id="wipe"><i data-icon="wipe"></i><span>Wipe the box…<span class="menu__hint">Everything in the box goes.</span></span></button>
+        </div>
+      </details>
+      <details class="menu themeswitch" data-theme-switch>
+        <summary class="btn themeswitch__summary">
+          <i data-icon="sun" data-theme-icon="light"></i><i data-icon="moon" data-theme-icon="dark" hidden></i>
+          <span class="visually-hidden">Theme: </span><span data-theme-now>Light</span>
+          <span class="visually-hidden" data-theme-follow>, following Windows</span>
+          <i data-icon="chevron-down" class="icon--chevron-down"></i>
+        </summary>
+        <div class="menu__list themeswitch__list" role="group" aria-label="Theme">
+          <button class="menu__item" type="button" data-theme-choice="system" aria-pressed="true"><i data-icon="theme"></i><span>Follow Windows<span class="menu__hint" data-theme-windows></span></span><i data-icon="check" class="themeswitch__tick"></i></button>
+          <hr class="menu__sep">
+          <button class="menu__item" type="button" data-theme-choice="light" aria-pressed="false"><i data-icon="sun"></i><span>Light</span><i data-icon="check" class="themeswitch__tick"></i></button>
+          <button class="menu__item" type="button" data-theme-choice="dark" aria-pressed="false"><i data-icon="moon"></i><span>Dark</span><i data-icon="check" class="themeswitch__tick"></i></button>
+        </div>
+      </details>
+    </nav>
+  </header>
+
+  <!-- Notices under the bar, never over the box; the heaviest first, the
+       rest folded behind a count (main.js, notices()). -->
+  <div class="notices" id="notices" role="region" aria-label="Notices"></div>
+
+  <!-- The box. noVNC draws into #screen at the size of the space it has
+       (Q34). -->
+  <main class="screen" id="screen" aria-label="Your box's screen">
+    <img class="screen__still" id="still" alt="" hidden>
+    <div class="overlay" id="reconnecting" role="status" hidden>
+      <div class="overlay__card">
+        <h2>Reconnecting to your box…</h2>
+        <p class="bigclock" aria-live="off"><span class="bigclock__label" id="rtry">Try 1 of 20</span><span class="bigclock__num" id="rclock">0:00</span></p>
+        <div class="progress" data-indeterminate aria-hidden="true"><div class="progress__fill"></div></div>
+        <p>The picture is from before the connection dropped. If your box does not answer after 20 tries, Sluse says why.</p>
+      </div>
+    </div>
+    <div class="overlay overlay--drag" id="drag" role="status" hidden>
+      <div class="overlay__card">
+        <span class="overlay__ring"><i data-icon="drag"></i></span>
+        <h2>Files cannot be dropped into your box</h2>
+        <p id="drop-text"></p>
+        <p class="drop-done"><strong>Nothing was copied into your box.</strong></p>
+        <div class="btn-row drop-done">
+          <button class="btn btn--primary" type="button" id="drop-inputs"><i data-icon="inbox"></i>Open Sluse Inputs</button>
+          <button class="btn" type="button" id="drop-dismiss">Dismiss</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Every wait and every error, as one passage: the step now on the
+       left, the ledger of steps on the right. -->
+  <div class="view" id="status">
+    <div class="passage-wrap">
+      <div class="passage" id="passage">
+        <section class="passage__lead" id="lead-wait" aria-live="polite" aria-atomic="false">
+          <span class="mark" data-size="64" data-alt="Sluse"></span>
+          <span class="pill" data-status="failed" id="err-pill" hidden>Did not open</span>
+          <h1 class="passage__title" id="title">Opening your box…</h1>
+          <p class="passage__text" id="lead" hidden></p>
+          <p class="note" data-kind="warning" id="extra" hidden></p>
+          <p class="bigclock wait-only" aria-live="off"><span class="bigclock__label">Elapsed</span><span class="bigclock__num" id="clock">0:00</span></p>
+          <div class="progress wait-only" id="bar" role="progressbar" aria-label="Progress of this step" data-indeterminate><div class="progress__fill"></div></div>
+          <div class="passage__meta wait-only" id="meta">
+            <p class="wait__meta" id="m-last" hidden></p>
+            <p class="wait__meta" id="m-limit" hidden></p>
+            <p class="wait__meta" id="m-safe" hidden></p>
+          </div>
+          <div class="btn-row" id="signin-row" hidden>
+            <button class="btn" type="button" id="show-signin"><i data-icon="sign-in"></i>Show the sign-in window</button>
+          </div>
+          <div class="banner wait-only" id="stuck" data-kind="info" role="status" hidden>
+            <div class="banner__body">
+              <p class="banner__title" id="stuck-title"></p>
+              <p class="banner__text" id="stuck-text"></p>
+              <div class="banner__actions"><button class="btn btn--sm" type="button" id="copy-stuck"><i data-icon="copy"></i><span>Copy details</span></button></div>
+            </div>
+          </div>
+          <div class="passage__foot" id="intro" hidden>
+            <p class="note" data-kind="info">Your AI agents work in your box. Sluse lets files into it only if you may open them yourself.</p>
+          </div>
+          <div class="btn-row passage__actions error-only" id="actions"></div>
+          <details class="disclosure error-only" id="details">
+            <summary>Details</summary>
+            <div class="disclosure__body">
+              <div class="techdetails">
+                <div class="techdetails__bar"><span class="t-label">For your IT department</span><button class="btn btn--sm btn--quiet" type="button" id="copy"><i data-icon="copy"></i><span>Copy details</span></button></div>
+                <pre id="raw"></pre>
+              </div>
+            </div>
+          </details>
+        </section>
+        <ol class="steps ledger" id="ledger" aria-label="Steps"></ol>
+      </div>
+    </div>
+    <div class="closedline" id="closedline" role="status">
+      <span class="mark" data-size="64" data-alt="Sluse"></span>
+      <p>Closed. Your files stay; what you published is in Sluse Artifacts.</p>
+    </div>
+  </div>
+
+  <!-- Dialogs: native, so the rest of the window is inert, Tab stays inside,
+       Esc cancels and the focus goes back to what opened it. -->
+  <dialog class="dialog" id="leave" aria-labelledby="leave-title">
+    <form method="dialog">
+      <div class="dialog__head"><h2 class="dialog__title" id="leave-title"></h2></div>
+      <div class="dialog__body"><p id="leave-text"></p><p id="leave-more"></p></div>
+      <div class="dialog__actions">
+        <button class="btn btn--quiet" value="cancel" id="leave-cancel">Cancel</button>
+        <button class="btn" value="leave" id="leave-keep"></button>
+        <button class="btn btn--primary" value="close" id="leave-close" autofocus></button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Close the box always asks first (Q27). -->
+  <dialog class="dialog" id="close-ask" aria-labelledby="close-ask-t" aria-describedby="close-ask-d">
+    <form method="dialog">
+      <div class="dialog__head"><i data-icon="power"></i><h2 class="dialog__title" id="close-ask-t">Close your box?</h2></div>
+      <div class="dialog__body"><p id="close-ask-d">Apps open in your box are closed, with anything not saved in them, and an AI agent's task stops where it is. Your files stay.</p></div>
+      <div class="dialog__actions">
+        <button class="btn" value="cancel" autofocus>Cancel</button>
+        <button class="btn btn--primary" value="ok"><i data-icon="power"></i>Close the box</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Every destructive confirm says what goes and what stays (D-026 point 2);
+       Cancel takes the focus. -->
+  <dialog class="dialog" id="signout-ask" aria-labelledby="signout-ask-t" aria-describedby="signout-ask-d">
+    <form method="dialog">
+      <div class="dialog__head"><i data-icon="sign-out"></i><h2 class="dialog__title" id="signout-ask-t">Sign out?</h2></div>
+      <div class="dialog__body"><p id="signout-ask-d"></p><p>You stay signed out until you close the box and open Sluse again.</p></div>
+      <div class="dialog__actions">
+        <button class="btn" value="cancel" autofocus>Cancel</button>
+        <button class="btn btn--primary" value="ok"><i data-icon="sign-out"></i>Sign out</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog class="dialog dialog--wide" id="reset-ask" aria-labelledby="reset-ask-t">
+    <form method="dialog">
+      <div class="dialog__head"><i data-icon="reset"></i><h2 class="dialog__title" id="reset-ask-t">Reset the box's system, keep my files?</h2></div>
+      <div class="dialog__body">
+        <p id="reset-update">This applies the update for your box.</p>
+        <p>Your box starts again from a fresh system. It closes and opens again. Apps open in the box now are closed.</p>
+        <div class="consequences">
+          <div class="consequences__col consequences__col--goes"><h3><i data-icon="reset" data-size="16"></i>Goes</h3><ul><li>Anything installed outside your home folder</li><li>Changes to the box's own system</li></ul></div>
+          <div class="consequences__col"><h3><i data-icon="check" data-size="16"></i>Stays</h3><ul><li>Your files in your home folder</li><li>Your settings</li><li>Your apps' sign-ins</li><li>What you published, in Sluse Artifacts</li></ul></div>
+        </div>
+      </div>
+      <div class="dialog__actions">
+        <button class="btn" value="cancel" autofocus>Cancel</button>
+        <button class="btn btn--primary" value="ok"><i data-icon="reset"></i>Reset the box's system</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="dialog dialog--wide dialog--destructive" id="wipe-ask" role="alertdialog" aria-labelledby="wipe-ask-t">
+    <form method="dialog">
+      <div class="dialog__head"><i data-icon="wipe"></i><h2 class="dialog__title" id="wipe-ask-t">Wipe the box?</h2></div>
+      <div class="dialog__body">
+        <p id="wipe-config">Your IT department changed what Sluse may read. A wipe starts your box without the files Sluse let in before.</p>
+        <p>Everything in the box goes, and this cannot be undone. The box closes and opens again, empty. Apps open in the box now are closed.</p>
+        <div class="consequences">
+          <div class="consequences__col consequences__col--goes"><h3><i data-icon="wipe" data-size="16"></i>Goes</h3><ul><li>Work an AI agent has not published</li><li>The copies Sluse let into the box</li><li>Your files in the box</li><li>Your settings</li><li>Your apps' sign-ins</li><li>Anything installed in the box</li></ul></div>
+          <div class="consequences__col"><h3><i data-icon="check" data-size="16"></i>Stays, on this computer</h3><ul><li>What you published, in Sluse Artifacts</li><li>The record of what Sluse let into the box, in this computer's Event Log, which your IT department can read</li><li>The files in Sluse Inputs</li></ul></div>
+        </div>
+      </div>
+      <div class="dialog__actions">
+        <button class="btn" value="cancel" autofocus>Cancel</button>
+        <button class="btn btn--destructive" value="ok"><i data-icon="wipe"></i>Wipe the box</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- A message with the raw text under For your IT department: what
+       alert() was (the folder, OneDrive, the browser, the sign-in's details). -->
+  <dialog class="dialog" id="message" role="alertdialog" aria-labelledby="message-t">
+    <form method="dialog">
+      <div class="dialog__head"><i data-icon="problem" id="message-icon"></i><h2 class="dialog__title" id="message-t"></h2></div>
+      <div class="dialog__body">
+        <p id="message-text"></p>
+        <span class="chip-mono" id="message-address" hidden><code>https://www.microsoft365.com/onedrive</code><button class="chip-mono__copy" type="button" id="copy-address" aria-label="Copy the address"><i data-icon="copy"></i></button></span>
+        <div class="techdetails"><div class="techdetails__bar"><span class="t-label">For your IT department</span><button class="btn btn--sm btn--quiet" type="button" id="copy-message"><i data-icon="copy"></i><span>Copy details</span></button></div><pre id="message-raw"></pre></div>
+      </div>
+      <div class="dialog__actions"><button class="btn btn--primary" value="ok" autofocus>OK</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

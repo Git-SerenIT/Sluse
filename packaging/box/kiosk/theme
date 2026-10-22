@@ -1,0 +1,30 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# The box takes the theme in use in the Sluse window (Q3, Q70): Light or
+# Dark, from /run/sluse/theme, which sluse-bootstrap keeps from KVP and then
+# runs this as the kiosk's user; sway runs it too, at its own start. Follows:
+# - the desktop's colour-scheme preference, which Firefox (so the console)
+#   and Claude Desktop read through the desktop portal, at once;
+# - the ground under the windows, sway's output background;
+# - foot's colours, for terminals opened after this: one already open keeps
+#   its colours until it is opened again (Q70). The kiosk puts this file's
+#   folder first in XDG_CONFIG_DIRS, so a foot.ini of the person's own wins.
+# The tab strip is not the theme's: it stays dark in both (Q5). The terminal
+# is in Liberation Mono (Q4).
+# The colours are --surface and --ink, ui/console/look/tokens.css.
+set -u
+theme=$(cat /run/sluse/theme 2>/dev/null) || theme=light
+case "$theme" in
+    dark) scheme=prefer-dark surface=15294a ink=f5f8fb ;;
+    *) scheme=default surface=f5f8fb ink=15294a ;;
+esac
+gsettings set org.gnome.desktop.interface color-scheme "$scheme" 2>/dev/null
+foot="${XDG_RUNTIME_DIR:?}/sluse/xdg/foot"
+mkdir -p "$foot" &&
+    printf '[main]\nfont=Liberation Mono:size=11\n[colors]\nforeground=%s\nbackground=%s\n' "$ink" "$surface" > "$foot/foot.ini.new" &&
+    mv "$foot/foot.ini.new" "$foot/foot.ini"
+sock=${SWAYSOCK:-$(ls "$XDG_RUNTIME_DIR"/sway-ipc.*.sock 2>/dev/null | head -n 1)}
+[ -n "$sock" ] && SWAYSOCK="$sock" swaymsg output '*' bg "#$surface" solid_color >/dev/null 2>&1
+exit 0

@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# The box's half of the bootstrap (D-024 point 7, D-027 point 4). Reads what
+# the host's service wrote into Hyper-V KVP, and writes wayvnc's config: the
+# VNC secret for this open, and the user's keyboard layout; and sets the
+# box's clock to the host's timezone; and keeps the config's clipboard
+# setting where the CLI's header reads it (Q64). The theme in use in the Sluse window
+# comes under a key of its own, at every open and at every change (Q70).
+# Runs as root, at boot and whenever hv_kvp_daemon rewrites the pool
+# (sluse-bootstrap.path).
+#
+# hv_kvp_daemon keeps host-to-guest items in pool 0 as fixed-size records: a
+# 512-byte key and a 2048-byte value, NUL-padded, UTF-8 (S-8 step 2).
+#
+#   sluse-bootstrap <kiosk user>
+
+import json, os, pwd, re, subprocess, sys
+
+POOL = "/var/lib/hyperv/.kvp_pool_0"
+KEY, VALUE = 512, 2048
+OUT = "/run/sluse"
+
+
+def kvp(key):
+    """The value the host wrote under `key`, as text, or None."""
+    try:
+        data = open(POOL, "rb").read()
+    except FileNotFoundError:
+        return None
+    for i in range(0, len(data) - KEY - VALUE + 1, KEY + VALUE):
+        if data[i:i + KEY].split(b"\0", 1)[0] == key.encode():
+            return data[i + KEY:i + KEY + VALUE].split(b"\0", 1)[0].decode("utf-8", "replace")
+    return None
+
+
+def bootstrap():
+    b = kvp("sluse-bootstrap")
+    return json.loads(b) if b is not None else None
+
+
+def write(path, text, mode, gid):
+    """Atomically, and report whether anything changed."""
+    try:
+        if open(path).read() == text:
+            return False
+    except FileNotFoundError:
+        pass
+    tmp = path + ".new"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.chown(tmp, 0, gid)
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+    return True
+
+
+# sluse-proto pipe::valid_timezone, the host's own grammar: up to three parts
+# of letters, digits, _ + and -, none starting with -, 64 bytes at most.
+TZ_PART = r"[A-Za-z0-9_+][A-Za-z0-9_+-]*"
+ZONEINFO = "/usr/share/zoneinfo"
+
+
+def set_timezone(tz):
+    """The host's timezone, when it names a zone this box has (L1,
+    2026-10-05: the box ran on UTC, two hours behind). Programs started
+    before it, such as the kiosk's browser at the very first boot, keep the
+    old zone until they restart; the zone stays on disk for the next boot."""
+    if not tz or len(tz) > 64 or not re.fullmatch(rf"{TZ_PART}(/{TZ_PART}){{0,2}}", tz):
+        return
+    zone = os.path.realpath(os.path.join(ZONEINFO, tz))
+    if not zone.startswith(ZONEINFO + "/") or not os.path.isfile(zone):
+        print(f"no zone {tz} in this box; the clock stays as it is")
+        return
+    try:
+        if os.path.realpath("/etc/localtime") == zone:
+            return
+    except OSError:
+        pass
+    subprocess.run(["timedatectl", "set-timezone", tz], check=False)
+
+
+def set_theme(user, theme):
+    """The theme in use in the Sluse window (Q3, Q70): kept in /run/sluse/theme
+    for the kiosk, which applies it at its start, and applied at once in the
+    kiosk's session when there is one (the theme script, as the user). The
+    host's grammar: the two words and nothing else."""
+    if theme not in ("light", "dark"):
+        return
+    os.makedirs(OUT, 0o755, exist_ok=True)
+    if not write(f"{OUT}/theme", theme + "\n", 0o644, 0):
+        return
+    run = f"/run/user/{user.pw_uid}"
+    if not os.path.isdir(run):
+        return
+    # Best effort: a theme is never a reason to hold up the rest of an open.
+    try:
+        subprocess.run(
+            ["runuser", "-u", user.pw_name, "--", "env", f"XDG_RUNTIME_DIR={run}",
+             f"DBUS_SESSION_BUS_ADDRESS=unix:path={run}/bus", "/usr/local/libexec/sluse/theme"],
+            check=False, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"the theme was kept, not applied: {e}")
+
+
+def main():
+    user = pwd.getpwnam(sys.argv[1])
+    set_theme(user, kvp("sluse-theme"))
+    b = bootstrap()
+    if b is None:
+        print("no bootstrap from the host yet")
+        return
+    # Both values reach a config file and a command line: the grammar is the
+    # host's own (sluse-proto pipe::valid_layout, Bootstrap::new).
+    password, keyboard = b.get("vncPassword", ""), b.get("keyboard", "")
+    if not re.fullmatch(r"[A-Za-z0-9]{8,64}", password) or not re.fullmatch(r"[a-z]{2,8}", keyboard):
+        sys.exit("the bootstrap is malformed; refusing it")
+    os.makedirs(OUT, 0o755, exist_ok=True)
+    conf = (
+        "address=0.0.0.0\n"
+        "port=7583\n"
+        "enable_auth=true\n"
+        # Apple DH is the one auth type noVNC and wayvnc share. The picture is
+        # unencrypted on the host-only segment either way (D-027).
+        "relax_encryption=true\n"
+        "username=sluse\n"
+        f"password={password}\n"
+        "rsa_private_key_file=/var/lib/sluse/vnc-rsa.pem\n"
+    )
+    changed = write(f"{OUT}/wayvnc.conf", conf, 0o640, user.pw_gid)
+    changed |= write(f"{OUT}/keyboard", f"KBD={keyboard}\n", 0o644, 0)
+    if changed:
+        subprocess.run(["systemctl", "restart", "--no-block", "sluse-vnc.service"], check=False)
+    set_timezone(b.get("timezone"))
+    # The clipboard setting, for the CLI's header (Q64). Only said in the box;
+    # the proxy and the shell are what enforce it.
+    write(f"{OUT}/copy-out", ("off" if b.get("copyOut") is False else "on") + "\n", 0o644, 0)
+    # Enrolment decides for itself whether this bootstrap is new: it keeps the
+    # identity it has for a token it has used (slice 2).
+    subprocess.run(["systemctl", "start", "--no-block", "sluse-enrol.service"], check=False)
+
+
+def pool_version():
+    try:
+        return os.stat(POOL).st_mtime_ns
+    except FileNotFoundError:
+        return None
+
+
+# Again while the pool changed under this run: a change that lands while the
+# path unit's run is still going starts nothing new, and a theme switched
+# twice quickly was lost that way (L1, 2026-10-21).
+for _ in range(5):
+    seen = pool_version()
+    main()
+    if pool_version() == seen:
+        break

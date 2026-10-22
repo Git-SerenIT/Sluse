@@ -1,0 +1,252 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 SerenIT ApS and Prompted EV */
+/* Sluse design tokens: the product's copy of the mock-ups' foundation
+   (docs/design/mockups/foundation/tokens.css, D-062), shared by the shell,
+   Sluse Admin and the console. A change to the look starts in the mock-ups.
+   Source: Sluse design system, Draft 1, October 2026 (docs/design/Sluse-design-system_2.pdf).
+
+   Two colours. Everything else is a tint between them, made with color-mix
+   from the five guide tokens, so a page can never reach a third hue.
+
+   Themes: Light and Dark (jok, 2026-10-19, D-061). Never "cream" or
+   "navy" as theme names: navy and #f5f8fb are the two colours, cream is the
+   mark's own colour (#f4ead3, in the logo kit, never a token here).
+   - No data-theme anywhere: follows prefers-color-scheme (Windows' setting).
+   - data-theme="dark" or "light" on <html> overrides for the page. The
+     shell's theme switch (.themeswitch, components.css) writes it, through
+     ui/shell/src/theme.js. The console has no switch (Q69).
+   - data-theme on any element re-scopes its subtree (an "island"), which is
+     how the gallery shows both themes side by side and how a surface can
+     pin a band to navy. */
+
+/* ---- Fixed values (theme independent) -------------------------------- */
+:root {
+  /* The two colours, by name. Use the role tokens below in components.
+     --light is SerenIT's #f5f8fb (D-061 point 1). --cream is kept as an
+     alias of it so older markup still resolves; it is not the mark's cream. */
+  --navy: #15294a;
+  --light: #f5f8fb;
+  --cream: var(--light);
+
+  /* Held in reserve, unused (Q1, D-061 point 3): a status colour, --signal,
+     dark #f2a58f, light #9e3220. Not defined here on purpose: no page may
+     use it until jok adopts it. The gallery's "Decided" section shows it. */
+
+  /* Type */
+  --font-text: Arial, "Liberation Sans", sans-serif;     /* Arial (jok, 2026-10-19); Liberation Sans is its metric twin in the box */
+  --font-display: Arial, "Liberation Sans", sans-serif;  /* bold Arial for display; Industry may come later */
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "DejaVu Sans Mono", monospace;
+  --weight-book: 400;
+  --weight-black: 900;   /* renders as Arial Bold */
+
+  --h1-size: 40px;    --h1-line: 44px;
+  --h2-size: 28px;    --h2-line: 34px;
+  /* H3, Black 20/26: card, dialog, overlay and empty-state titles. Part of
+     the scale (Q12, jok, 2026-10-19); the guide's type page is to add it. */
+  --h3-size: 20px;    --h3-line: 26px;
+  --body-size: 16px;  --body-line: 24px;
+  --small-size: 14px; --small-line: 20px;
+  --label-size: 12px; --label-line: 16px; --label-track: 0.06em;
+  --path-size: 13px;  --path-line: 20px;
+  /* Path large, mono 16/24: a path or name that is its block's title (the
+     provenance card's artifact, a source card's name). Part of the scale
+     (Q13, jok, 2026-10-19); the guide's type page is to add it. */
+  --path-lg-size: 16px; --path-lg-line: 24px;
+  --wordmark-track: -0.02em;
+
+  /* Spacing, 4px base */
+  --space-1: 4px;    /* icon to label */
+  --space-2: 8px;    /* inside compact controls */
+  --space-3: 12px;   /* control padding */
+  --space-4: 16px;   /* panel padding */
+  --space-6: 24px;   /* between groups */
+  --space-8: 32px;   /* between panels */
+  --space-12: 48px;  /* sections */
+  --space-16: 64px;  /* page margins on wide layouts */
+
+  /* Radius */
+  --radius-sm: 4px;      /* inputs, chips */
+  --radius-md: 8px;      /* buttons, panels */
+  --radius-pill: 999px;  /* status pills */
+  --radius-tile: 20.3%;  /* the app icon only */
+
+  /* Sizes */
+  --hit: 32px;          /* minimum hit target */
+  --control-h: 36px;    /* default control height */
+  --control-h-sm: 32px; /* compact controls, the shell's 32px bar */
+  --icon: 20px;
+  --icon-sm: 16px;
+  --measure: 66ch;      /* longest line of running text */
+
+  /* Motion. Only for waits and for answering an action. */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 1600ms;   /* the indeterminate wait bar's sweep */
+
+  /* Layers */
+  --z-menu: 20;
+  --z-toast: 40;
+  --z-dialog: 50;
+  --z-mock: 1000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; --dur-slow: 0ms; }
+}
+
+/* ---- Themes ------------------------------------------------------------ */
+/* Order matters: the Light base, then the system's dark preference, then
+   the explicit overrides. Keep the three Dark blocks identical, and the two
+   Light blocks identical. (--show-on-navy / --show-on-cream name the mark's
+   two drawings, cream on navy and navy on light; they are not theme names.) */
+:root {
+  --surface: #f5f8fb;
+  --surface-2: #e3e7ed;
+  --ink: #15294a;
+  --ink-muted: #4d5d76;
+  --line: #bdc4cf;
+  color-scheme: light;
+  --show-on-navy: none;
+  --show-on-cream: inline-block;
+  --opp-surface: #15294a;
+  --opp-surface-2: #273a58;
+  --opp-ink: #f5f8fb;
+  --opp-ink-muted: #b2bac6;
+  --opp-line: #4d5d76;
+  --opp-scheme: dark;
+  --opp-show-on-navy: inline-block;
+  --opp-show-on-cream: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #15294a;
+    --surface-2: #273a58;
+    --ink: #f5f8fb;
+    --ink-muted: #b2bac6;
+    --line: #4d5d76;
+    color-scheme: dark;
+    --show-on-navy: inline-block;
+    --show-on-cream: none;
+    --opp-surface: #f5f8fb;
+    --opp-surface-2: #e3e7ed;
+    --opp-ink: #15294a;
+    --opp-ink-muted: #4d5d76;
+    --opp-line: #bdc4cf;
+    --opp-scheme: light;
+    --opp-show-on-navy: none;
+    --opp-show-on-cream: inline-block;
+  }
+}
+[data-theme="dark"] {
+  --surface: #15294a;
+  --surface-2: #273a58;
+  --ink: #f5f8fb;
+  --ink-muted: #b2bac6;
+  --line: #4d5d76;
+  color-scheme: dark;
+  --show-on-navy: inline-block;
+  --show-on-cream: none;
+  --opp-surface: #f5f8fb;
+  --opp-surface-2: #e3e7ed;
+  --opp-ink: #15294a;
+  --opp-ink-muted: #4d5d76;
+  --opp-line: #bdc4cf;
+  --opp-scheme: light;
+  --opp-show-on-navy: none;
+  --opp-show-on-cream: inline-block;
+}
+[data-theme="light"] {
+  --surface: #f5f8fb;
+  --surface-2: #e3e7ed;
+  --ink: #15294a;
+  --ink-muted: #4d5d76;
+  --line: #bdc4cf;
+  color-scheme: light;
+  --show-on-navy: none;
+  --show-on-cream: inline-block;
+  --opp-surface: #15294a;
+  --opp-surface-2: #273a58;
+  --opp-ink: #f5f8fb;
+  --opp-ink-muted: #b2bac6;
+  --opp-line: #4d5d76;
+  --opp-scheme: dark;
+  --opp-show-on-navy: inline-block;
+  --opp-show-on-cream: none;
+}
+
+/* ---- Derived tints (recomputed in every theme scope) ------------------- */
+/* Each is a mix of the current ink into the current surface. Ratios were
+   measured against WCAG: ink-muted text stays >= 4.5:1 on every tint below
+   (on --tint-hover: 5.0:1 in Dark, 4.9:1 in Light; re-measured 2026-10-19). Do not darken them further. */
+:root, [data-theme], .inverse, .banner[data-kind="problem"], .toast {
+  --tint-hover: color-mix(in srgb, var(--ink) 5%, var(--surface-2));     /* hover on rows and panels */
+  --tint-wash: color-mix(in srgb, var(--ink) 4%, var(--surface));        /* hover on the page ground */
+  --tint-press: color-mix(in srgb, var(--ink) 10%, var(--surface-2));    /* pressed; ink text only on it */
+  --tint-track: color-mix(in srgb, var(--ink) 16%, var(--surface));      /* empty part of a bar or meter */
+  --scrim: color-mix(in srgb, var(--navy) 72%, transparent);             /* behind a dialog, both themes */
+  --shadow-lift: 0 1px 0 var(--line), 0 8px 24px color-mix(in srgb, var(--navy) 22%, transparent);
+
+  /* Inverse: ink as ground. The heaviest thing a screen can say. */
+  --inverse-bg: var(--ink);
+  --inverse-fg: var(--surface);
+
+  /* Focus: 2px of ink, 2px off the edge, so it shows on ink-filled buttons too. */
+  --focus-ring: 2px solid var(--ink);
+  --focus-offset: 2px;
+}
+
+/* ---- Inverse: the opposite theme on a subtree --------------------------- */
+/* Used for the heaviest statements only: the problem banner, the blocking
+   status pill, a toast. A nested .inverse does not flip back. The problem
+   banner and the toast are inverse scopes too, so their buttons and focus
+   rings invert with them. */
+.inverse, .banner[data-kind="problem"], .toast {
+  --surface: var(--opp-surface);
+  --surface-2: var(--opp-surface-2);
+  --ink: var(--opp-ink);
+  --ink-muted: var(--opp-ink-muted);
+  --line: var(--opp-line);
+  --show-on-navy: var(--opp-show-on-navy);
+  --show-on-cream: var(--opp-show-on-cream);
+  color-scheme: var(--opp-scheme);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* ---- Base ------------------------------------------------------------- */
+html {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: var(--weight-book);
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+body { margin: 0; background: var(--surface); color: var(--ink); }
+[data-theme] { color: var(--ink); }
+
+:focus { outline: none; }
+:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+[hidden] { display: none !important; }
+
+::selection { background: var(--ink); color: var(--surface); }
+
+/* Type roles as utility classes. Elements get them in components.css. */
+.t-h1 { font: var(--weight-black) var(--h1-size)/var(--h1-line) var(--font-display); letter-spacing: -0.01em; margin: 0; }
+.t-h2 { font: var(--weight-black) var(--h2-size)/var(--h2-line) var(--font-display); letter-spacing: -0.005em; margin: 0; }
+.t-h3 { font: var(--weight-black) var(--h3-size)/var(--h3-line) var(--font-display); margin: 0; }
+.t-body { font: var(--weight-book) var(--body-size)/var(--body-line) var(--font-text); }
+.t-small { font: var(--weight-book) var(--small-size)/var(--small-line) var(--font-text); }
+.t-label { font: var(--weight-book) var(--label-size)/var(--label-line) var(--font-text); letter-spacing: var(--label-track); text-transform: uppercase; }
+.t-path { font: var(--weight-book) var(--path-size)/var(--path-line) var(--font-mono); }
+.t-path-lg { font: var(--weight-book) var(--path-lg-size)/var(--path-lg-line) var(--font-mono); } /* Q13 */
+.t-muted { color: var(--ink-muted); }
+.t-num { font-variant-numeric: tabular-nums; }
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

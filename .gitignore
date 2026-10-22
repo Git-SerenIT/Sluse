@@ -1,0 +1,46 @@
+# Rust
+target/
+
+# Node
+node_modules/
+# The console's compiled JavaScript. Built with `npm --prefix ui/console run
+# build`; served from disk, not committed — `include_dir` and a packaged build
+# are M7's problem, not a reason to commit generated files now.
+ui/console/dist/
+
+# The release package and anything unpacked from it. Built by CI on Windows
+# (D-012 point 2) and uploaded as an artifact; a build output has no business
+# in the tree that produced it.
+dist/
+unpacked/
+
+# Local scratch and secrets
+*.local.*
+.env
+*.pfx
+*.pem
+
+# Git bundles. One arrived in the root on 2026-09-18b carrying the host's
+# history (D-012 point 8); it is a backup and belongs outside the repository it
+# backs up.
+*.bundle
+
+# OS and editors
+Thumbs.db
+.DS_Store
+.vscode/
+
+# Prototype runs. A run workspace holds a generated config, development
+# certificates and their private keys; `prototype/results/` is what gets
+# committed, and it holds records and scores only.
+prototype/runs/
+*.key
+
+# The landing place for a run copied off the host, reused per run. Whatever is
+# worth keeping is copied from here into `prototype/results/<date>-<mode>/`;
+# what stays behind is a whole run workspace, private keys included.
+Test output/
+
+# jok's own checklist for the demo-tenant environment, with real tenant values
+# in it. The committed background is spikes/test-environment.md.
+test environment.md

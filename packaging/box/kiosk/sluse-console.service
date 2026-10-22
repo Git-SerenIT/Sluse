@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+[Unit]
+Description=Sluse console, the kiosk's first screen (loopback only)
+After=sluse-enrol.service
+# Nothing to serve until the box has enrolled.
+ConditionPathExists=@HOME@/Sluse/sluse.json
+
+[Service]
+User=@KIOSK_USER@
+WorkingDirectory=@HOME@/Sluse
+ExecStart=/usr/local/bin/sluse-endpoint --config @HOME@/Sluse/sluse.json --console --ui /usr/local/share/sluse/ui/console
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

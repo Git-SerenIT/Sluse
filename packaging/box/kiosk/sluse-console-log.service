@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+[Unit]
+Description=Sluse: the box's log to the host's administrators, over the serial console
+After=systemd-journald.service
+
+[Service]
+ExecStart=/usr/local/libexec/sluse/console-log
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

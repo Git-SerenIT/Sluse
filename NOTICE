@@ -1,0 +1,31 @@
+Sluse
+
+Copyright 2026 SerenIT ApS
+Copyright 2026 Prompted EV
+
+Sluse is jointly owned by the two companies named above and is released
+under the Apache License, Version 2.0. See LICENSE for the full text;
+section 4(d) requires this file to travel with any redistribution of the
+work or of a derivative of it.
+
+The Apache License does not grant permission to use the Sluse name or logo
+(section 6).
+
+This product includes software derived from Chaperone
+(https://github.com/Korsdal/Chaperone), whose NOTICE reads:
+
+  Chaperone
+
+  Copyright 2026 SerenIT ApS
+  Copyright 2026 Prompted EV
+
+  Contributors:
+
+    Johannes Korsdal
+    Kristian Schou
+
+  Chaperone is jointly owned by the two companies named above and is
+  released under the Apache License, Version 2.0.
+
+Sluse is built with AI assistance under human review. Decisions are
+human-owned.

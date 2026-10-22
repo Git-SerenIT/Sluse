@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+[Unit]
+Description=Sluse: VNC from the host only
+Before=sluse-vnc.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /usr/local/lib/sluse/vnc.nft
+ExecStop=/usr/sbin/nft delete table inet sluse_vnc
+
+[Install]
+WantedBy=multi-user.target

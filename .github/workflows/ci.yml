@@ -1,0 +1,608 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# CI. D-012 point 2: **this is the only route from source to a Windows binary.**
+# Development happens on an Ubuntu guest and the host is a clean deployment
+# target with no toolchain, so neither machine can build the artifact that ships.
+# A failure here blocks host testing rather than merely slowing a build.
+#
+# D-012 point 7 is what it buys: the `#[cfg(windows)]` tests — scope
+# containment, junction escape out of a source root, out of the artifacts tree,
+# out of the workspace, case-insensitive containment, UNC canonical form — run on
+# every push instead of when somebody remembers to run them on the host. Those
+# are the filesystem-semantics tests, and `scope.rs` is the preventive control,
+# so this is the largest correctness gain in the decision.
+#
+# **Cached since 2026-09-29 (jok)**, when a run took 36 minutes and CI had
+# become the bottleneck: 24 of them were the package job rebuilding every
+# dependency in release from nothing, after the tests had already built them in
+# debug. Cargo's own fingerprints decide what to recompile; the cache only saves
+# downloading and compiling what did not change. Each key is a lock file plus
+# the exact `rustc`, so a new compiler or a changed graph starts clean rather
+# than dragging a cache along. `CARGO_INCREMENTAL=0`: incremental state only
+# bloats a cache that is never edited in place.
+#
+# And the package is built **beside** the tests, not after them. What stops a
+# red tree from shipping is the last job, `install`, which needs every other
+# job and is the only one that publishes the package.
+#
+# Deliberately not here yet, so the list is a choice rather than an oversight:
+# no MSRV job (the root
+# `Cargo.toml` anticipates one; it needs the floor pinned in an action and the
+# floor is re-derived by hand today), no release job (packaging is its own
+# step), no third-party actions: only GitHub's own (`checkout`, `cache`,
+# `setup-node`, the artifact pair). The toolchains the runners already carry
+# are enough, and a dependency here is a dependency in the thing that builds
+# what a customer installs.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+
+# **Where it runs (D-067):** on every push and pull request in the public
+# repository, whose runners are free; in the private one only when started by
+# hand, since this file is exported to both. The gate is on the four first
+# jobs; `install` needs them all and skips with them, and a skipped job uses
+# no minutes.
+jobs:
+  windows:
+    if: github.event_name == 'workflow_dispatch' || github.repository != 'Git-SerenIT/Sluse-Private'
+    name: Windows — build, test, clippy
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        id: toolchain
+        shell: pwsh
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+          rustc --version
+          cargo --version
+          "rustc=$(rustc -V)" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: windows-debug-${{ steps.toolchain.outputs.rustc }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-debug-${{ steps.toolchain.outputs.rustc }}-
+
+      # `aws-lc-sys` compiles C on every platform and is where this build has
+      # historically failed: the host was missing `stdarg.h` and `stddef.h` for
+      # days, and then wanted NASM. The workspace names `aws-lc-rs` directly with
+      # `prebuilt-nasm` so feature unification supplies what rcgen does not ask
+      # for — if this step fails for NASM, that feature has been lost.
+      - name: Build
+        run: cargo build --workspace --locked
+
+      # The whole point. On this runner the `#[cfg(windows)]` tests compile and
+      # run; on the development guest they do not exist.
+      - name: Test
+        run: cargo test --workspace --locked
+        env:
+          # The fixed-VHD test asks Hyper-V itself; this runner has the module.
+          SLUSE_REQUIRE_HYPERV: '1'
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  guest:
+    if: github.event_name == 'workflow_dispatch' || github.repository != 'Git-SerenIT/Sluse-Private'
+    name: Linux — the development guest's own suite
+    # Pinned: ubuntu-latest becomes Ubuntu 26 on 2026-10-19, and pandoc's and
+    # poppler's versions with it, which the extract tests read. Move it on
+    # purpose, with the box's base, not under a run.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        id: toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy
+          echo "rustc=$(rustc -V)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: linux-${{ steps.toolchain.outputs.rustc }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: linux-${{ steps.toolchain.outputs.rustc }}-
+
+      # cmake, perl and libclang for aws-lc-sys; measured on the guest
+      # (docs/development.md). No NASM: that is an MSVC path.
+      # qemu-utils is the qcow2 reader's test oracle (slice 3), and only that:
+      # it is never shipped (D-027 point 1). pandoc and poppler-utils are the
+      # box's renderer and readers (D-049 to D-051), from Ubuntu's archive.
+      - name: System packages
+        run: sudo apt-get update && sudo apt-get install -y cmake pkg-config libclang-dev qemu-utils && sudo apt-get install -y --no-install-recommends pandoc poppler-utils
+
+      - name: Test
+        run: cargo test --workspace --locked
+        env:
+          SLUSE_REQUIRE_QEMU_IMG: '1'
+          SLUSE_REQUIRE_PANDOC: '1'
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      # The box's bundle (slice 2): the endpoint, the console and the units,
+      # built here so what goes into a box comes from CI and not a desk.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: The box's bundle
+        run: packaging/box/build-bundle.sh
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: sluse-box-linux
+          path: dist/sluse-box-linux.tar.gz
+          # Read by `install` in this run only; the package carries it.
+          retention-days: 1
+
+  console:
+    if: github.event_name == 'workflow_dispatch' || github.repository != 'Git-SerenIT/Sluse-Private'
+    name: Console — types and contrast
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Install
+        run: npm --prefix ui/console ci
+
+      # `tsc --noEmit` and `contrast.mjs`. The second reads the colour values out
+      # of look/tokens.css, both themes, and fails if any pair drops below AA — it exists because the
+      # first palette shipped an out-of-scope row at 1.88:1, greyed with an
+      # `opacity` that read as reasonable in the stylesheet.
+      - name: Check
+        run: npm --prefix ui/console run check
+
+      # The shell's reading of a box failure (causes.js): plain Node, no install.
+      - name: Shell
+        run: node --test ui/shell/src/causes.test.mjs
+
+  package:
+    if: github.event_name == 'workflow_dispatch' || github.repository != 'Git-SerenIT/Sluse-Private'
+    name: Windows — build the package
+    runs-on: windows-latest
+    # Beside the tests, not after them: `install` below is what gates on
+    # them, and nothing leaves this job but a staged tree.
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        id: toolchain
+        shell: pwsh
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          "rustc=$(rustc -V)" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: windows-release-${{ steps.toolchain.outputs.rustc }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-release-${{ steps.toolchain.outputs.rustc }}-
+
+      # The shell is its own Cargo workspace with its own lock file.
+      - uses: actions/cache@v5
+        with:
+          path: ui/shell/src-tauri/target/
+          key: shell-${{ steps.toolchain.outputs.rustc }}-${{ hashFiles('ui/shell/src-tauri/Cargo.lock') }}
+          restore-keys: shell-${{ steps.toolchain.outputs.rustc }}-
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Build the package
+        shell: pwsh
+        run: .\packaging\build-package.ps1 -StageOnly
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: staged-package
+          path: dist/sluse-*-x86_64-pc-windows-msvc/
+          retention-days: 1
+
+  install:
+    name: Windows — assemble the package and install it
+    runs-on: windows-latest
+    # Every other job, green. A package built from a red tree is a package
+    # somebody will install, so this is the only job that publishes one.
+    needs: [windows, console, guest, package]
+    steps:
+      # For packaging/msi/Sluse.wxs.
+      - uses: actions/checkout@v5
+
+      # The upload's root is `dist/` (the directory before its wildcard), so
+      # this lands as dist/sluse-<version>-<target>/, the name it was built as.
+      - uses: actions/download-artifact@v7
+        with:
+          name: staged-package
+          path: dist
+
+      # The box's bundle from the Linux job: the package carries it in box\,
+      # and the base's build puts it on the seed disk (slice 3).
+      - uses: actions/download-artifact@v7
+        with:
+          name: sluse-box-linux
+          path: dist
+
+      - name: Assemble the package
+        shell: pwsh
+        run: |
+          $pkg = (Get-ChildItem dist -Directory | Where-Object Name -like 'sluse-*-x86_64-pc-windows-msvc')
+          if (@($pkg).Count -ne 1) { Get-ChildItem dist -Recurse -Depth 1; throw "expected one staged package in dist, found $(@($pkg).Count)" }
+          New-Item -ItemType Directory -Force (Join-Path $pkg.FullName 'box') | Out-Null
+          Copy-Item dist\sluse-box-linux.tar.gz (Join-Path $pkg.FullName 'box')
+          Compress-Archive -Path $pkg.FullName -DestinationPath "$($pkg.FullName).zip" -CompressionLevel Optimal
+          Get-ChildItem dist\*.zip | ForEach-Object { Write-Host "$($_.Name)  $([math]::Round($_.Length / 1MB, 1)) MB" }
+
+      # The MSI (slice 5): WiX v5, the .NET tool; the toolset is a build
+      # tool, never shipped. Built from the assembled package, bundle included.
+      - name: Build the MSI
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          # The feature tree that is the MSI's two modes (D-039 slice 6).
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          $pkg = (Get-ChildItem dist -Directory | Where-Object Name -like 'sluse-*-x86_64-pc-windows-msvc')[0].FullName
+          $version = (Get-Content "$pkg\VERSION.txt" | Select-String '^version').Line -replace '^version\s+', ''
+          wix build packaging\msi\Sluse.wxs -ext WixToolset.UI.wixext -arch x64 -d "Stage=$pkg" -d "Version=$version" -o dist\Sluse.msi
+          if ($LASTEXITCODE -ne 0) { throw "wix build failed with $LASTEXITCODE" }
+
+      # **Installability is the claim** (`prototype/README.md`), and a runner is
+      # the cheapest machine on which to find out that the installer is broken.
+      # **As Intune would**: msiexec, quiet, as an administrator, which a hosted
+      # runner is. What this still does not show is a **standard user**
+      # running it afterwards: that is L1's.
+      - name: Install the MSI, as Intune would
+        shell: pwsh
+        run: |
+          $p = Start-Process msiexec.exe -ArgumentList '/i', 'dist\Sluse.msi', '/qn', '/norestart', '/l*v', 'msi-install.log' -Wait -PassThru
+          # 3010: installed, and a restart is wanted (Hyper-V). The runner has it.
+          if ($p.ExitCode -notin 0, 3010) { Get-Content msi-install.log -Tail 60; throw "msiexec /i exited $($p.ExitCode)" }
+          $default = Join-Path $env:ProgramFiles 'Sluse'
+          foreach ($f in 'bin\sluse.exe', 'bin\sluse-shell.exe', 'box\sluse-box-linux.tar.gz', 'ui\console\index.html', 'Test-Sluse.ps1', 'intune\sluse-artifacts-deny.xml', 'intune\{3CA83446-6F47-4A65-9891-2685B75CD7E3}.cip') {
+            if (-not (Test-Path (Join-Path $default $f))) { throw "the MSI did not install $f" }
+          }
+          if ((Get-Service Sluse).Status -ne 'Running') { throw "the service is $((Get-Service Sluse).Status)" }
+          if (-not (Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Sluse.lnk")) { throw 'no Start-menu shortcut' }
+
+      # D-023, D-039 slice 7: the Sluse log, which only SYSTEM may write. As
+      # this runner's administrator a write is refused; as SYSTEM, through a
+      # scheduled task, it lands. Windows PowerShell, which has Write-EventLog.
+      - name: The Sluse log admits SYSTEM's writes only
+        shell: pwsh
+        run: |
+          & (Join-Path $env:ProgramFiles 'Sluse\bin\sluse.exe') device event-log
+          if ($LASTEXITCODE -ne 0) { throw "device event-log exited $LASTEXITCODE" }
+          Write-Host (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Sluse').CustomSD
+          # Windows' own API, not .NET's wrapper, whose refusal message is
+          # about a registry key and so proves nothing about the descriptor
+          # (the run on 37008778372). The error has to be access denied (5).
+          $writer = Join-Path $env:RUNNER_TEMP 'sluse-log-write.ps1'
+          Set-Content $writer @'
+          param([string]$Message, [uint32]$Id)
+          Add-Type -Namespace Native -Name Log -MemberDefinition @"
+          [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern System.IntPtr RegisterEventSourceW(string server, string source);
+          [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool ReportEventW(System.IntPtr h, ushort type, ushort category, uint id, System.IntPtr sid, ushort n, uint size, string[] strings, System.IntPtr data);
+          [DllImport("advapi32.dll")] public static extern bool DeregisterEventSource(System.IntPtr h);
+          "@
+          $h = [Native.Log]::RegisterEventSourceW($null, 'Sluse')
+          if ($h -eq [IntPtr]::Zero) { $e = [Runtime.InteropServices.Marshal]::GetLastWin32Error(); Write-Host "RegisterEventSource: error $e"; exit $e }
+          $ok = [Native.Log]::ReportEventW($h, 4, 0, $Id, [IntPtr]::Zero, 1, 0, @($Message), [IntPtr]::Zero)
+          $e = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+          [Native.Log]::DeregisterEventSource($h) | Out-Null
+          if ($ok) { exit 0 }
+          Write-Host "ReportEvent: error $e"; exit $e
+          '@
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File $writer -Message 'an administrator' -Id 9999
+          if ($LASTEXITCODE -ne 5) { throw "an administrator's write was not refused as access denied (exit $LASTEXITCODE)" }
+          $marker = "system-$(Get-Random)"
+          schtasks /create /tn SluseLogTest /ru SYSTEM /sc once /st 23:59 /f /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -File $writer -Message $marker -Id 9998" | Out-Null
+          schtasks /run /tn SluseLogTest | Out-Null
+          $found = $false
+          foreach ($i in 1..30) {
+            Start-Sleep 1
+            if (Get-WinEvent -LogName Sluse -MaxEvents 20 -ErrorAction SilentlyContinue | Where-Object { $_.Properties.Value -contains $marker }) { $found = $true; break }
+          }
+          schtasks /delete /tn SluseLogTest /f | Out-Null
+          if (-not $found) { throw "SYSTEM's write did not reach the Sluse log" }
+
+      # Setup's Intune half on the MSI this run built (D-039 slice 5): the
+      # product code and version as Windows Installer's COM object reads
+      # them, against `sluse admin msi-info`; and our `.intunewin` of it,
+      # which Expand-Archive must open with both of its parts.
+      - name: The MSI's details and its .intunewin
+        shell: pwsh
+        run: |
+          $sluse = Join-Path $env:ProgramFiles 'Sluse\bin\sluse.exe'
+          $msi = (Resolve-Path dist\Sluse.msi).Path
+          $wi = New-Object -ComObject WindowsInstaller.Installer
+          $db = $wi.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $wi, @($msi, 0))
+          $read = { param($n) $v = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db, @("SELECT Value FROM Property WHERE Property='$n'")); $null = $v.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $v, $null); $r = $v.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $v, $null); $r.GetType().InvokeMember('StringData', 'GetProperty', $null, $r, 1) }
+          $want = @{ productCode = (& $read 'ProductCode'); version = (& $read 'ProductVersion') }
+          $got = & $sluse admin msi-info $msi | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $got.productCode -ne $want.productCode -or $got.version -ne $want.version) {
+            throw "msi-info said $($got | ConvertTo-Json -Compress); Windows Installer says $($want | ConvertTo-Json -Compress)"
+          }
+          New-Item -ItemType Directory msi-only | Out-Null
+          Copy-Item $msi msi-only\
+          & $sluse admin intunewin --source msi-only --setup Sluse.msi --out dist\Sluse.intunewin
+          if ($LASTEXITCODE -ne 0) { throw "intunewin exited $LASTEXITCODE" }
+          Expand-Archive dist\Sluse.intunewin -DestinationPath iw
+          foreach ($f in 'IntuneWinPackage\Contents\IntunePackage.intunewin', 'IntuneWinPackage\Metadata\Detection.xml') {
+            if (-not (Test-Path (Join-Path iw $f))) { throw "the .intunewin has no $f" }
+          }
+          ([xml](Get-Content iw\IntuneWinPackage\Metadata\Detection.xml)).ApplicationInfo.SetupFile
+
+      # The device's init on a machine with Hyper-V's management side: the
+      # switch, the host address, no NAT (M9, D-035), the firewall rule, the
+      # Event Log source (slice 5). **Informative, not a gate**: what a hosted runner
+      # lets a job do to its network is GitHub's, not ours. L1 is the proof.
+      - name: The device init, on the runner's Hyper-V (informative)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          & (Join-Path $env:ProgramFiles 'Sluse\bin\sluse.exe') device init
+          if ($LASTEXITCODE -ne 0) { throw "device init failed with $LASTEXITCODE" }
+          Get-VMSwitch -Name 'Sluse boxes' | Format-Table Name, SwitchType
+          if (Get-NetNat -ErrorAction SilentlyContinue | Where-Object InternalIPInterfaceAddressPrefix -eq '192.168.77.0/24') {
+            throw "the device init left a NAT: the box's only way out is the proxy (D-035)"
+          }
+          # D-029, D-035: the host's three ports are reserved by an administrator (*).
+          $ex = netsh int ipv4 show excludedportrange protocol=tcp
+          $ex | Write-Host
+          foreach ($p in 7580, 7581, 7584) {
+            if (-not ($ex | Where-Object { $_ -match '^\s*(\d+)\s+(\d+)\s*\*' -and [int]$Matches[1] -le $p -and [int]$Matches[2] -ge $p })) {
+              throw "port $p is not reserved after the device init"
+            }
+          }
+
+      # **The service, for real** (slice 1, D-027): started by the SCM as
+      # SYSTEM, answering on its pipe, learning who asks by impersonation, and
+      # running its Hyper-V script from an environment variable. The runner has
+      # no Hyper-V, so an adopted box fails at Get-VM — which is the proof that
+      # the script ran as SYSTEM. Opening a real box is L1's test, not this.
+      - name: The service answers on its pipe
+        shell: pwsh
+        run: |
+          # Ask returns the answer's lines. Always wrapped in @(...) where it
+          # is called: PowerShell unwraps a one-line answer into a string, and
+          # $got[-1] is then its last character.
+          function Ask($line) {
+            $p = [System.IO.Pipes.NamedPipeClientStream]::new('.', 'sluse', [System.IO.Pipes.PipeDirection]::InOut)
+            $p.Connect(10000)
+            $w = [System.IO.StreamWriter]::new($p); $w.AutoFlush = $true
+            $r = [System.IO.StreamReader]::new($p)
+            $w.WriteLine($line)
+            $out = @()
+            while ($null -ne ($l = $r.ReadLine())) { $out += $l; if ($l -notmatch '"event":"progress"') { break } }
+            $p.Dispose()
+            $out
+          }
+          $got = @(Ask '{"op":"status"}')
+          if ($got -ne '{"event":"state","state":"none"}') { throw "status, no box: $got" }
+
+          $acl = Get-Acl (Join-Path $env:ProgramData 'Sluse')
+          if ($acl.Owner -ne 'BUILTIN\Administrators') { throw "the data directory is owned by $($acl.Owner)" }
+          $who = $acl.Access.IdentityReference.Value | Sort-Object -Unique
+          if ($who | Where-Object { $_ -notin 'NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators' }) { throw "the data directory admits: $who" }
+
+          $sid = (whoami /user /fo csv | ConvertFrom-Csv).SID
+          & (Join-Path $env:ProgramFiles 'Sluse\bin\sluse.exe') box adopt --sid $sid --vm no-such-box --address 192.168.77.99
+          if ($LASTEXITCODE -ne 0) { throw "box adopt failed with $LASTEXITCODE" }
+          # Before starting a box the service runs the device's init, which
+          # needs sluse.json for the certificates (slice 5). The runner has
+          # none, so the open stops there, as a preflight failure.
+          $got = @(Ask '{"op":"open","keyboard":"dk"}')
+          Write-Host ($got -join "`n")
+          if ($got[-1] -notmatch '"event":"failed","code":"preflight"') { throw "an open with no config should stop at preflight: $got" }
+          $got = @(Ask '{"op":"open","keyboard":"dk; shutdown"}')
+          if ($got -notmatch '"code":"badRequest"') { throw "a keyboard that is not one: $got" }
+
+      # A fixture with a **real NTFS deny ACE**. A runner is a Windows machine,
+      # so the one assertion that was thought to need a provisioned host — the
+      # source refusing a read because of permissions, which the broker turns
+      # into the one refusal it tells the agent plainly (M3, D-008) — can be
+      # made here after all. What still needs the host is the *share* case:
+      # this is a local ACL, and a UNC path reached as a cached credential is
+      # a different question (`docs/development.md`).
+      - name: A fixture with permissions on it
+        shell: pwsh
+        run: |
+          $src = "$env:RUNNER_TEMP\fixture"
+          New-Item -ItemType Directory -Force -Path "$src\in-scope\docs", "$src\restricted\sealed", "$src\elsewhere" | Out-Null
+          'a note about capacity'    | Set-Content "$src\in-scope\docs\note.md"
+          'payroll, restricted'      | Set-Content "$src\restricted\payroll-01.txt"
+          'board minutes'            | Set-Content "$src\restricted\sealed\board-minutes.txt"
+          'board material'           | Set-Content "$src\elsewhere\board.txt"
+          # **Below the scope, not on it.** `restricted` is a configured scope,
+          # and `scope::compile` canonicalises every scope at start-up — so a
+          # deny ACE here fails the gate and the broker never starts, which is
+          # what the first run of this job found. Under the scope, the same ACE
+          # is the refusal M3 designed: AccessDenied, told plainly.
+          #
+          # The simple right `R` is correct when denying read, which is the goal
+          # here. On the write side it would not be: icacls' `W` maps to
+          # FILE_GENERIC_WRITE, which includes SYNCHRONIZE, which opening a file
+          # for reading requires.
+          icacls "$src\restricted\sealed" /deny "$($env:USERNAME):(OI)(CI)(R)"
+          if ($LASTEXITCODE -ne 0) { throw "icacls failed with $LASTEXITCODE" }
+          # Proven, not assumed: a fixture whose ACE did not take tests nothing,
+          # and looks identical to one that works.
+          try {
+            Get-Content "$src\restricted\sealed\board-minutes.txt" -ErrorAction Stop | Out-Null
+            throw 'the deny ACE did not take — sealed/ is still readable, so the refusal below would prove nothing'
+          } catch [System.UnauthorizedAccessException] {
+            Write-Host 'restricted\sealed refuses this account, as intended'
+          }
+          # And the scope root itself must stay readable, or the gate fails
+          # instead of the request.
+          Get-ChildItem "$src\restricted" | Out-Null
+
+      # **The acceptance script itself**, the one that ships in the package and
+      # that a person runs on the host. Running it here means it is exercised
+      # every push rather than read for the first time on the machine that
+      # matters. It starts the broker and the console from the installed
+      # binaries, so this is also the only place `sluse-endpoint` runs on
+      # Windows at all.
+      - name: Run the acceptance script against it
+        shell: pwsh
+        run: |
+          & (Join-Path $env:ProgramFiles 'Sluse\Test-Sluse.ps1') -SourceRoot "$env:RUNNER_TEMP\fixture"
+          if ($LASTEXITCODE -ne 0) { throw "the acceptance script reported failures" }
+
+      # The gate and the posture list, in full. `sluse start` refuses on a gate
+      # Fail so a start implies a pass — but *which* machine checks answered,
+      # and which said Unknown, is the difference between a Windows machine and
+      # a provisioned one, and it is invisible unless the log is shown.
+      - name: What the gate actually said
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:LOCALAPPDATA\Sluse\logs\*.log" -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "--- $($_.Name) ---"; Get-Content $_.FullName }
+
+      # Uninstall leaves nothing (the acceptance). The files, the service,
+      # the shortcut and the data directory are asserted; the network part
+      # only if the informative device init above made it.
+      - name: Uninstall leaves nothing
+        if: always()
+        shell: pwsh
+        run: |
+          $p = Start-Process msiexec.exe -ArgumentList '/x', 'dist\Sluse.msi', '/qn', '/norestart', '/l*v', 'msi-uninstall.log' -Wait -PassThru
+          if ($p.ExitCode -notin 0, 3010) { Get-Content msi-uninstall.log -Tail 60; throw "msiexec /x exited $($p.ExitCode)" }
+          $left = @()
+          if (Test-Path (Join-Path $env:ProgramFiles 'Sluse')) { $left += 'Program Files\Sluse' }
+          if (Test-Path (Join-Path $env:ProgramData 'Sluse')) { $left += 'ProgramData\Sluse' }
+          if (Get-Service Sluse -ErrorAction SilentlyContinue) { $left += 'the service' }
+          if (Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Sluse.lnk") { $left += 'the shortcut' }
+          if (Get-WinEvent -ListLog Sluse -ErrorAction SilentlyContinue) { $left += 'the Sluse log' }
+          if (Get-VMSwitch -Name 'Sluse boxes' -ErrorAction SilentlyContinue) { $left += 'the switch' }
+          # By name, and by its group, which catches a rule left under an older name.
+          if (Get-NetFirewallRule -DisplayName 'Sluse boxes: broker and proxy (host-only)' -ErrorAction SilentlyContinue) { $left += 'the firewall rule' }
+          if (Get-NetFirewallRule -Group 'Sluse' -ErrorAction SilentlyContinue) { $left += "a firewall rule in the group Sluse" }
+          if (Get-NetNat -ErrorAction SilentlyContinue | Where-Object InternalIPInterfaceAddressPrefix -eq '192.168.77.0/24') { $left += 'the NAT' }
+          # Only the single-port reservations the device init makes (D-029).
+          foreach ($p in 7580, 7581, 7584) {
+            if (netsh int ipv4 show excludedportrange protocol=tcp | Where-Object { $_ -match "^\s*$p\s+$p\s*\*" }) { $left += "the reservation of $p" }
+          }
+          if ($left) { throw "uninstall left: $($left -join ', ')" }
+
+      # The MSI's other mode (D-037 point 1, D-039 slice 6): Sluse Admin
+      # alone, as an administrator would script it. No Hyper-V, no service,
+      # no box: the shell and its Sluse Admin shortcut. Then gone again.
+      - name: Sluse Admin alone, then uninstalled
+        shell: pwsh
+        run: |
+          $p = Start-Process msiexec.exe -ArgumentList '/i', 'dist\Sluse.msi', 'ADDLOCAL=Admin', '/qn', '/norestart', '/l*v', 'msi-admin.log' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content msi-admin.log -Tail 60; throw "msiexec /i ADDLOCAL=Admin exited $($p.ExitCode)" }
+          $menu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
+          $bin = Join-Path $env:ProgramFiles 'Sluse\bin'
+          if (-not (Test-Path "$menu\Sluse Admin.lnk")) { throw 'no Sluse Admin shortcut' }
+          if ((New-Object -ComObject WScript.Shell).CreateShortcut("$menu\Sluse Admin.lnk").Arguments -ne '--admin') { throw 'the shortcut does not pass --admin' }
+          if (-not (Test-Path "$bin\sluse-shell.exe")) { throw 'no shell' }
+          $wrong = @()
+          if (Test-Path "$menu\Sluse.lnk") { $wrong += 'the device shortcut' }
+          if (Get-Service Sluse -ErrorAction SilentlyContinue) { $wrong += 'the service' }
+          if (Test-Path "$bin\sluse.exe") { $wrong += 'sluse.exe' }
+          if ($wrong) { throw "an admin-only install has: $($wrong -join ', ')" }
+          $p = Start-Process msiexec.exe -ArgumentList '/x', 'dist\Sluse.msi', '/qn', '/norestart' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "msiexec /x exited $($p.ExitCode)" }
+          if (Test-Path (Join-Path $env:ProgramFiles 'Sluse')) { throw 'uninstall left Program Files\Sluse' }
+
+      # D-043: the deployment's one Win32 app, as Intune runs it: the package
+      # `sluse admin package` writes from a saved config and the real MSI,
+      # its script as this runner's administrator (Intune: SYSTEM). Over Sluse
+      # Admin alone from the same build, as on L1 (2026-10-05), so the device
+      # half must be added. Installed and detected; the same build again
+      # without msiexec; uninstalled to nothing.
+      - name: One app, the MSI and the config together (D-043)
+        shell: pwsh
+        run: |
+          $pkg = (Get-ChildItem dist -Directory | Where-Object Name -like 'sluse-*-x86_64-pc-windows-msvc').FullName
+          $cfg = Join-Path $env:RUNNER_TEMP 'sluse-ci.json'
+          Set-Content -LiteralPath $cfg -Encoding ascii -Value '{"schemaVersion":3,"deployment":{"id":"ci-dep","name":"CI","revision":1},"sources":[{"name":"fixture","kind":{"type":"local-folder","address":{"root":"C:\\fixture"}},"scope":[],"sensitivity":2}],"volume":{"admissions":25,"windowSeconds":60}}'
+          & (Join-Path $pkg 'bin\sluse.exe') admin package --config $cfg --msi dist\Sluse.msi
+          if ($LASTEXITCODE -ne 0) { throw "admin package exited $LASTEXITCODE" }
+          $dir = Join-Path $env:RUNNER_TEMP 'sluse-ci.package'
+          $meta = Get-Content -Raw (Join-Path $dir 'package.json') | ConvertFrom-Json
+          $script = Join-Path $dir 'Install-Sluse.ps1'
+          $log = Join-Path $env:SystemRoot 'Temp\Sluse-msi.log'
+          $key = 'HKLM:\SOFTWARE\Sluse\Deployment'
+          $menu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
+          $p = Start-Process msiexec.exe -ArgumentList '/i', 'dist\Sluse.msi', 'ADDLOCAL=Admin', '/qn', '/norestart' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "msiexec /i ADDLOCAL=Admin exited $($p.ExitCode)" }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script
+          if ($LASTEXITCODE -notin 0, 3010) { Get-Content $log -Tail 60 -ErrorAction SilentlyContinue; throw "the package's install exited $LASTEXITCODE" }
+          if ((Get-ItemProperty $key).PackageVersion -ne $meta.packageVersion) { throw "detection would not find $($meta.packageVersion)" }
+          if (-not (Test-Path (Join-Path $env:ProgramFiles 'Sluse\bin\sluse.exe'))) { throw 'the package did not add the device half' }
+          if (-not (Test-Path "$menu\Sluse.lnk")) { throw 'no Sluse shortcut' }
+          if (-not (Test-Path "$menu\Sluse Admin.lnk")) { throw 'the package removed Sluse Admin' }
+          if ((Get-Service Sluse).Status -ne 'Running') { throw "the service is $((Get-Service Sluse).Status)" }
+          if (-not (Test-Path "$env:ProgramData\Sluse\sluse.json")) { throw 'the package did not install the config' }
+          # The same build again: no msiexec, so its log is untouched.
+          $before = (Get-Item $log).LastWriteTimeUtc
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script
+          if ($LASTEXITCODE -ne 0) { throw "the package's second install exited $LASTEXITCODE" }
+          if ((Get-Item $log).LastWriteTimeUtc -ne $before) { throw 'the second install ran msiexec' }
+          # Sluse removed behind Intune's back, as Settings > Apps does: the
+          # script's registry value outlives it, so only the app's file rule
+          # (sluse.exe) tells Intune; the package then puts Sluse back.
+          $p = Start-Process msiexec.exe -ArgumentList '/x', $meta.productCode, '/qn', '/norestart' -Wait -PassThru
+          if ($p.ExitCode -notin 0, 3010) { throw "msiexec /x exited $($p.ExitCode)" }
+          $exe = Join-Path $env:ProgramFiles 'Sluse\bin\sluse.exe'
+          if (Test-Path $exe) { throw 'msiexec /x left sluse.exe, which the file rule looks for' }
+          if (-not (Test-Path $key)) { Write-Host 'the registry value went with the MSI; the file rule is still the one that covers Sluse itself' }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script
+          if ($LASTEXITCODE -notin 0, 3010) { Get-Content $log -Tail 60; throw "the package's reinstall exited $LASTEXITCODE" }
+          if (-not (Test-Path $exe)) { throw 'the package did not put Sluse back' }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script -Uninstall
+          if ($LASTEXITCODE -notin 0, 3010) { Get-Content $log -Tail 60; throw "the package's uninstall exited $LASTEXITCODE" }
+          if (Test-Path (Join-Path $env:ProgramFiles 'Sluse')) { throw 'the uninstall left Program Files\Sluse' }
+          if (Test-Path $key) { throw 'the uninstall left the detection value' }
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: sluse-windows-package
+          path: |
+            dist/*.zip
+            dist/Sluse.msi
+          # Artifact storage is metered in GB-hours over the billing month,
+          # not as a size: one of these (43 MB) kept 7 days is about 7 GB-hours
+          # a push. The free plan's 0.5 GB was 372 GB-hours for October, used
+          # up by the 13th (deleting does not give hours back); the Team plan
+          # from 2026-10-15. Download the one an L1 day installs within it.
+          retention-days: 7

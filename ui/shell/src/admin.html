@@ -1,0 +1,493 @@
+<!doctype html>
+<!--
+  SPDX-License-Identifier: Apache-2.0
+  Copyright 2026 SerenIT ApS and Prompted EV
+
+  Sluse Admin (D-037, D-039 slice 6, D-062 slice 6): the tenant admin's
+  window, drawn as docs/design/mockups/admin/ draws it. A step rail, the
+  step, a sticky footer; errors stay in the step that made them. admin.js
+  fills what changes; the words that never change are here. Warnings, not
+  friction (D-038): what the box would refuse is refused, the rest is
+  allowed and explained.
+-->
+<html lang="en" data-theme-key="sluse.admin.theme">
+<head>
+  <meta charset="utf-8">
+  <title>Sluse Admin</title>
+  <link rel="stylesheet" href="look/tokens.css">
+  <link rel="stylesheet" href="look/components.css">
+  <link rel="stylesheet" href="admin.css">
+  <script src="theme.js"></script>
+  <script src="look/icons.js"></script>
+  <script type="module" src="admin.js"></script>
+</head>
+<body>
+<div class="appshell">
+  <header class="topbar ad-top">
+    <span class="topbar__brand"><span class="lockup" style="--tile:24px"><span class="app-icon" data-size="24"></span><span class="wordmark">sluse</span></span></span>
+    <span class="topbar__context">Admin</span>
+    <!-- The file being edited; its visible words are the summary's name. -->
+    <details class="menu menu--left ad-filemenu" id="filemenu">
+      <summary class="btn btn--quiet"><span class="ad-file" id="file-summary"></span><i data-icon="chevron-down" class="icon--chevron-down"></i></summary>
+      <div class="menu__list">
+        <div class="who__card" id="file-card"></div>
+        <hr class="menu__sep">
+        <button class="menu__item" type="button" data-act="open-file"><i data-icon="folder-open"></i>Open a saved configuration…</button>
+        <button class="menu__item" type="button" data-act="new-file"><i data-icon="plus"></i>Start a new configuration…</button>
+      </div>
+    </details>
+    <div class="topbar__actions">
+      <button class="btn btn--sm" type="button" id="who-signin" data-act="sign-in"><i data-icon="sign-in"></i>Sign in</button>
+      <details class="menu who" id="who">
+        <summary class="who__summary"><i data-icon="person"></i><span class="who__lines"><span class="who__label">Acting as</span><span class="who__value" id="who-value"></span></span><span class="pill" data-status="signed-out" id="who-expired" hidden>Sign-in expired</span><i data-icon="chevron-down" class="icon--chevron-down"></i></summary>
+        <div class="menu__list who__menu">
+          <div class="who__card" id="who-card"></div>
+          <hr class="menu__sep">
+          <button class="menu__item" type="button" data-act="sign-in" id="who-menu-signin"><i data-icon="sign-in"></i>Sign in</button>
+          <button class="menu__item" type="button" data-act="sign-in-other" id="who-menu-other"><i data-icon="refresh"></i>Sign in as someone else</button>
+          <button class="menu__item" type="button" data-act="sign-out" id="who-menu-out"><i data-icon="sign-out"></i>Sign out…</button>
+        </div>
+      </details>
+      <details class="menu themeswitch" data-theme-switch>
+        <summary class="btn themeswitch__summary">
+          <i data-icon="sun" data-theme-icon="light"></i><i data-icon="moon" data-theme-icon="dark" hidden></i>
+          <span class="visually-hidden">Theme: </span><span data-theme-now>Light</span>
+          <span class="visually-hidden" data-theme-follow>, following Windows</span>
+          <i data-icon="chevron-down" class="icon--chevron-down"></i>
+        </summary>
+        <div class="menu__list themeswitch__list" role="group" aria-label="Theme">
+          <button class="menu__item" type="button" data-theme-choice="system" aria-pressed="true"><i data-icon="theme"></i><span>Follow Windows<span class="menu__hint" data-theme-windows></span></span><i data-icon="check" class="themeswitch__tick"></i></button>
+          <hr class="menu__sep">
+          <button class="menu__item" type="button" data-theme-choice="light" aria-pressed="false"><i data-icon="sun"></i><span>Light</span><i data-icon="check" class="themeswitch__tick"></i></button>
+          <button class="menu__item" type="button" data-theme-choice="dark" aria-pressed="false"><i data-icon="moon"></i><span>Dark</span><i data-icon="check" class="themeswitch__tick"></i></button>
+        </div>
+      </details>
+    </div>
+  </header>
+  <div class="appshell__strips">
+    <div class="banner banner--strip" data-kind="warning" id="expired-strip" role="alert" hidden>
+      <div class="banner__body"><p class="banner__title" id="expired-title"></p>
+        <p class="banner__text">Browsing for sources, the consent check and publishing straight to Intune stop until you sign in again. Your choices in this window are kept.</p></div>
+      <div class="banner__actions"><button class="btn btn--sm btn--primary" type="button" data-act="sign-in"><i data-icon="sign-in"></i>Sign in again</button></div>
+    </div>
+  </div>
+
+  <div class="appshell__body">
+    <nav class="appshell__nav ad-rail" aria-label="Setup steps">
+      <ol class="stepper stepper--vertical" id="rail"></ol>
+      <div class="appshell__navfoot"><p>Open the steps in any order. Review runs the box's own checks over all of them.</p></div>
+    </nav>
+    <div class="appshell__main" tabindex="-1" id="scroll">
+      <main class="appshell__inner">
+
+<!-- ============================== Start ============================== -->
+<section class="ad-step" data-step="start" aria-labelledby="start-title">
+  <header class="pagehead"><div class="pagehead__text">
+    <div class="cluster" style="--cluster-gap: var(--space-4)">
+      <span class="mark" data-size="64" data-alt=""></span>
+      <div class="stack" style="--stack-gap: var(--space-1)">
+        <h1 class="t-h2" id="start-title">Set up Sluse for your organisation</h1>
+        <p id="start-lead">Sluse Admin makes Sluse's app registration in your tenant, helps you write one configuration for one deployment, and hands it to Intune. It reads your directory as you, and keeps its token in this window only.</p>
+      </div>
+    </div>
+  </div></header>
+  <div id="start-banner"></div>
+
+  <div class="ad-choices" id="start-choices">
+    <section class="ad-choice" aria-labelledby="c-signin">
+      <h2 class="t-h3" id="c-signin">Sign in as your tenant's administrator</h2>
+      <div class="stack" style="--stack-gap: var(--space-3)" id="signin-idle">
+        <p>You sign in as Microsoft Graph Command Line Tools, Microsoft's own app, so nothing needs registering first. Its consent page asks for what setup does as you.</p>
+        <p class="note" data-kind="warning">Leave "Consent on behalf of your organization" unticked. Ticked, it grants these permissions to that app for everyone in your tenant, not just for this setup.</p>
+        <div class="btn-row"><button class="btn btn--primary btn--lg" type="button" data-act="sign-in"><i data-icon="sign-in"></i>Sign in</button></div>
+        <details class="disclosure"><summary>What the consent page asks for</summary>
+          <div class="disclosure__body">
+            <ul class="rows">
+              <li class="row"><span class="row__main">Make and repair Sluse's app registration</span><span class="row__meta mono">Application.ReadWrite.All</span></li>
+              <li class="row"><span class="row__main">Assign a group of people to Sluse's app</span><span class="row__meta mono">AppRoleAssignment.ReadWrite.All</span></li>
+              <li class="row"><span class="row__main">Find groups and read your roles</span><span class="row__meta mono">Directory.Read.All</span></li>
+              <li class="row"><span class="row__main">Browse SharePoint sites to pick sources</span><span class="row__meta mono">Sites.Read.All</span></li>
+              <li class="row"><span class="row__main">Add Sluse's app to Intune</span><span class="row__meta mono">DeviceManagementApps.ReadWrite.All</span></li>
+              <li class="row"><span class="row__main">Keep you signed in while the window is open</span><span class="row__meta mono">offline_access, openid, profile</span></li>
+            </ul>
+            <p class="t-small t-muted">Each is used as you, so Entra still decides by your own roles.</p>
+          </div>
+        </details>
+        <details class="disclosure" id="blocked-help"><summary>If your tenant blocks Graph Command Line Tools</summary>
+          <div class="disclosure__body"><p class="t-small">Microsoft's page then shows AADSTS7000112 (the app is disabled) or AADSTS50105 (you are not assigned to it). Allow the app for this setup in Enterprise applications, or run the setup from a command prompt with a public client of your own:</p><span class="chip-mono"><code>sluse admin setup --client-id &lt;your public client's id&gt;</code><button class="chip-mono__copy" type="button" data-copy aria-label="Copy the command"><i data-icon="copy"></i></button></span></div>
+        </details>
+      </div>
+      <div class="ad-wait" id="signin-wait" aria-live="polite" hidden>
+        <div class="wait">
+          <div class="wait__head"><p class="wait__title">Signing in</p><p class="wait__clock" data-label="Waiting" id="signin-clock">0:00</p></div>
+          <div class="progress" data-indeterminate><div class="progress__fill"></div></div>
+          <ol class="steps" id="signin-steps"></ol>
+          <p class="wait__meta" id="signin-meta"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="ad-choice ad-choice--outline" aria-labelledby="c-open">
+      <h2 class="t-h3" id="c-open">Change a deployment you saved</h2>
+      <p>Open its saved configuration to change any step and save the next revision. Signing in is needed only to browse for new sources or to publish straight to Intune.</p>
+      <div class="btn-row"><button class="btn" type="button" data-act="open-file"><i data-icon="folder-open"></i>Open a saved configuration…</button></div>
+      <p class="t-small t-muted">If the file is lost, a device that runs the deployment holds a copy at <span class="mono">%ProgramData%\Sluse\sluse.json</span>. Copy it to this PC, then open the copy here.</p>
+    </section>
+  </div>
+
+  <section class="ad-sec" id="start-roles" aria-labelledby="r-t" hidden>
+    <div class="ad-sec__head"><h2 class="t-h3" id="r-t">What your account can do here</h2><span id="roles-pill"></span></div>
+    <div id="roles-banner"></div>
+    <table class="ad-roles">
+      <thead><tr><th scope="col">Step</th><th scope="col">You</th><th scope="col">Who can</th></tr></thead>
+      <tbody>
+        <tr><td>Make Sluse's app registration</td><td data-role="register"></td><td>An Application Administrator, a Cloud Application Administrator or a Global Administrator</td></tr>
+        <tr><td>Grant admin consent</td><td data-role="consent"></td><td>Any of those, or a Privileged Role Administrator</td></tr>
+        <tr><td>Publish straight to Intune</td><td data-role="publish"></td><td>An Intune Administrator or a Global Administrator. Saving a package to upload by hand needs no role.</td></tr>
+      </tbody>
+    </table>
+    <p class="t-small" id="roles-line"></p>
+    <p class="t-small t-muted">Sluse Admin does not stop you trying a step: Entra decides when you press its button. A role you are eligible for but have not activated does not show here.</p>
+    <div class="btn-row"><button class="btn btn--primary" type="button" data-go="tenant">Make Sluse's app in Tenant<i data-icon="chevron-right"></i></button><button class="btn btn--quiet" type="button" data-act="open-file"><i data-icon="folder-open"></i>Or open a saved configuration…</button></div>
+  </section>
+
+  <section class="ad-sec" id="start-opened" aria-labelledby="o-t" hidden></section>
+</section>
+
+<!-- ============================== Tenant ============================== -->
+<section class="ad-step" data-step="tenant" hidden>
+  <header class="pagehead"><div class="pagehead__text">
+    <h1 class="t-h2" id="tenant-title">Sluse's app in your tenant</h1>
+    <p>Three things in Entra, in order: Sluse's app registration, the admin consent it needs, and the people who may sign in to it.</p>
+  </div></header>
+  <ol class="seq">
+    <li id="seq-app">
+      <div class="seq__body">
+        <div class="seq__head"><h2 class="t-h3">Sluse's app</h2><span id="app-pill"></span></div>
+        <p class="ad-sec__lead">One app registration, a public client with no secret and no certificate. Running this again changes nothing that is already right, and removes what an older Sluse setup made for its old sign-in.</p>
+        <div id="app-note"></div>
+        <div class="btn-row"><button class="btn btn--primary" type="button" id="register">Make or repair Sluse's app</button></div>
+        <div id="app-result"></div>
+      </div>
+    </li>
+    <li id="seq-consent" data-seq="waits">
+      <div class="seq__body">
+        <div class="seq__head"><h2 class="t-h3">Admin consent</h2><span id="consent-pill"></span></div>
+        <p class="seq__waits">Shows here once Sluse's app is made or repaired.</p>
+        <p class="ad-sec__lead" id="consent-lead"></p>
+        <div class="stack" style="--stack-gap: var(--space-3)" id="consent-how">
+          <div class="cluster">
+            <button class="btn btn--primary" type="button" id="open-portal"><i data-icon="external"></i>Open API permissions in the Azure portal</button>
+            <span class="chip-mono chip-mono--truncate" style="max-width: 18rem"><code id="portal-url"></code><button class="chip-mono__copy" type="button" data-copy aria-label="Copy the portal link"><i data-icon="copy"></i></button></span>
+          </div>
+          <p class="t-small" id="consent-there"></p>
+        </div>
+        <table class="table">
+          <thead><tr><th>Sluse's app may</th><th>Permission</th><th>Consent</th></tr></thead>
+          <tbody id="consent-rows"></tbody>
+        </table>
+        <div id="consent-state"></div>
+      </div>
+    </li>
+    <li id="seq-who" data-seq="waits">
+      <div class="seq__body">
+        <div class="seq__head"><h2 class="t-h3">Who may sign in</h2><span id="who-pill"></span></div>
+        <p class="seq__waits">Shows here once Sluse's app is made or repaired.</p>
+        <p class="ad-sec__lead">Entra decides: Sluse's app is set to Assignment required, and the groups you assign may sign in. These are people. The devices are Intune's assignment, at Publish.</p>
+        <div class="stack" style="--stack-gap: var(--space-2)">
+          <div class="ad-sec__head"><h3 class="t-label t-muted" id="as-t" style="flex: 1 1 auto; margin: 0">Assigned to Sluse's app</h3>
+            <span class="t-small t-muted" id="assigned-at"></span>
+            <button class="btn btn--sm btn--quiet" type="button" id="assigned-again"><i data-icon="refresh"></i>Read again</button></div>
+          <div id="assigned"></div>
+        </div>
+        <h3 class="t-label t-muted" style="margin: var(--space-2) 0 0">Assign a group</h3>
+        <div class="ad-search">
+          <label class="field"><span class="field__label">Start of the group's name</span>
+            <input class="input" type="search" id="people-query" placeholder="Finance" data-enter="people-find" aria-describedby="find-hint"></label>
+          <button class="btn" type="button" id="people-find"><i data-icon="search"></i>Find</button>
+        </div>
+        <p class="field__hint" id="find-hint">Type the start of a group's name and press Enter.</p>
+        <div id="people-pick"></div>
+        <div id="assign-result"></div>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<!-- ============================== Sources ============================== -->
+<section class="ad-step" data-step="sources" hidden>
+  <header class="pagehead"><div class="pagehead__text">
+    <h1 class="t-h2">What Sluse may read</h1>
+    <p>One configuration for this deployment. Each user still reaches only what they can open themselves; the configuration narrows that.</p>
+  </div></header>
+  <section class="ad-sec" aria-labelledby="dep-t">
+    <h2 class="visually-hidden" id="dep-t">The deployment</h2>
+    <label class="field" style="max-width: 26rem"><span class="field__label">The deployment's name</span>
+      <input class="input" type="text" id="dep-name" placeholder="Pilot">
+      <span class="field__hint" id="dep-hint"></span></label>
+  </section>
+  <section class="ad-sec" aria-labelledby="src-t">
+    <div class="ad-sec__head"><h2 class="t-h3" id="src-t">Sources</h2>
+      <button class="btn btn--primary" type="button" data-act="add-source" id="add-source-top"><i data-icon="plus"></i>Add a source</button></div>
+    <div id="sources-banner"></div>
+    <div class="ad-sources" id="sources"></div>
+  </section>
+  <section class="ad-sec" aria-labelledby="uf-t">
+    <div class="ad-sec__head"><h2 class="t-h3" id="uf-t">Folders each user fills</h2></div>
+    <p class="ad-sec__lead">What is in these is the user's choice, not this configuration's. Each is off unless you turn it on.</p>
+    <div class="togglerow" data-uf="onedrive">
+      <span class="srccard__kind"><i data-icon="cloud"></i></span>
+      <div class="togglerow__text"><b>OneDrive: a Sluse folder</b><p>A folder named Sluse in each user's own OneDrive. Sluse offers to make it at the user's first start, and only reads it.</p></div>
+      <label class="toggle"><input type="checkbox" role="switch" aria-label="OneDrive Sluse folder"><span class="toggle__track"></span><span class="toggle__state" data-on="On" data-off="Off"></span></label>
+      <div class="togglerow__more" hidden>
+        <div class="cluster"><span class="t-small">Named <span class="mono">onedrive</span> in the box.</span><span class="spacer"></span><label class="t-small" for="sens-onedrive">Sensitivity</label><select class="select" id="sens-onedrive" style="width: 12.5rem; min-height: 32px"></select></div>
+        <p class="note" data-kind="warning">Each user decides what goes in it. It reads through Sluse's app, like SharePoint.</p>
+      </div>
+    </div>
+    <div class="togglerow" data-uf="inputs">
+      <span class="srccard__kind"><i data-icon="inbox"></i></span>
+      <div class="togglerow__text"><b>Sluse Inputs: a folder on each device</b><p>A Sluse Inputs folder in each user's own folder on the device, made by Sluse.</p></div>
+      <label class="toggle"><input type="checkbox" role="switch" aria-label="Sluse Inputs"><span class="toggle__track"></span><span class="toggle__state" data-on="On" data-off="Off"></span></label>
+      <div class="togglerow__more" hidden>
+        <div class="cluster"><span class="t-small">Named <span class="mono">inputs</span> in the box.</span><span class="spacer"></span><label class="t-small" for="sens-inputs">Sensitivity</label><select class="select" id="sens-inputs" style="width: 12.5rem; min-height: 32px"></select></div>
+        <p class="note" data-kind="warning">Each user decides what goes in it, and Sluse can say only that a file came from that device.</p>
+      </div>
+    </div>
+  </section>
+</section>
+
+<!-- ============================== Egress ============================== -->
+<section class="ad-step" data-step="egress" hidden>
+  <header class="pagehead"><div class="pagehead__text">
+    <h1 class="t-h2">Where the box may connect</h1>
+    <p>Choose bundles. The hosts they list are what the box may reach, written out in full in the configuration; only that list is enforced. The box's own system is always on. Your SharePoint is not on the list: Sluse brings its files.</p>
+  </div></header>
+  <div id="egress-banner"></div>
+  <div class="ad-egress">
+    <section class="ad-sec" aria-labelledby="b-t">
+      <div id="bundles-part">
+        <div class="ad-sec__head"><h2 class="t-h3" id="b-t">Bundles</h2><span class="t-small t-muted" id="catalog-version"></span></div>
+        <p class="note" data-kind="info">A bundle marked <b>Takes uploads</b> can also take what the box sends it. Sluse sees which host a connection is for, not what it carries.</p>
+        <ul class="ad-bundles" id="bundles"></ul>
+      </div>
+      <div class="stack" style="--stack-gap: var(--space-3)">
+        <label class="field"><span class="field__label">Your own hosts, one per line</span>
+          <textarea class="textarea textarea--mono" rows="3" id="own-hosts" placeholder="intranet.contoso.com" aria-describedby="own-check"></textarea>
+          <span class="field__hint">Write host.example.com or *.example.com, with no scheme, port, path or address.</span></label>
+        <ul class="ad-hostcheck" id="own-check" aria-label="What each of your hosts means"></ul>
+        <p class="t-small t-muted" id="own-hint" hidden>Hints as you type. Review runs the box's own check, which decides.</p>
+        <p class="note" data-kind="info" id="own-from-file" hidden>From the opened file: hosts it held that no bundle lists are kept here as your own.</p>
+      </div>
+    </section>
+    <aside class="hostlist ad-hostlist" aria-labelledby="h-t">
+      <h3 class="t-h3" id="h-t">Every host the box may reach <span class="t-num t-muted" style="font-weight: 400" id="host-count"></span></h3>
+      <p class="t-small t-muted" style="margin: 0">This is what the configuration enforces. It changes as you tick.</p>
+      <div id="hostlist"></div>
+      <p class="t-small" id="hostlist-new" hidden><span class="mono">+</span> new since the file was saved</p>
+      <button class="btn btn--sm btn--quiet" type="button" id="copy-hosts"><i data-icon="copy"></i>Copy the list</button>
+    </aside>
+  </div>
+</section>
+
+<!-- ============================== Advanced ============================== -->
+<section class="ad-step" data-step="advanced" hidden>
+  <header class="pagehead"><div class="pagehead__text">
+    <h1 class="t-h2">Advanced</h1>
+    <p>Defaults that work. Change them only for a reason.</p>
+  </div></header>
+  <section class="ad-sec" aria-labelledby="v-t">
+    <div class="ad-sec__head"><h2 class="t-h3" id="v-t">The volume alert</h2><span class="pill" data-status="info">Detects, does not stop</span></div>
+    <p class="ad-sec__lead">Many files admitted from one source in a short time raise a volume alert, recorded in the Event Log on the device, in Sluse's channel. Admissions go on.</p>
+    <div class="ad-numrow">
+      <label class="field" id="f-files"><span class="field__label">Files</span><input class="input" type="number" min="1" step="1" value="25" id="v-files" aria-describedby="m-files"></label>
+      <span class="t-small t-muted" style="padding-bottom: 8px">or</span>
+      <label class="field"><span class="field__label">MB</span><input class="input" type="number" min="0" step="1" value="50" id="v-mb" placeholder="No byte alert"></label>
+      <span class="t-small t-muted" style="padding-bottom: 8px">within</span>
+      <label class="field" id="f-secs"><span class="field__label">Seconds</span><input class="input" type="number" min="1" step="1" value="60" id="v-window" aria-describedby="w-words m-secs"></label>
+      <span class="t-small t-muted ad-words" id="w-words"></span>
+    </div>
+    <p class="field__msg" id="m-files" hidden><i data-icon="problem"></i>Files: 0 would alert on every admission. Use 1 or more.</p>
+    <p class="field__msg" id="m-secs" hidden><i data-icon="problem"></i>Seconds: a whole number, 1 or more.</p>
+    <p class="preview" id="v-preview"><i data-icon="info"></i><span></span></p>
+    <p class="field__hint">The configuration keeps the window in seconds. Every screen says it in plain words: 60 seconds, 10 minutes, 1 minute 30 seconds.</p>
+  </section>
+  <section class="ad-sec" aria-labelledby="f-t">
+    <div class="ad-sec__head"><h2 class="t-h3" id="f-t">The largest single fetch</h2></div>
+    <div class="ad-numrow"><label class="field"><span class="field__label">MB</span><input class="input" type="number" min="1" step="1" placeholder="No limit" id="fetch-mb"></label></div>
+    <p class="field__hint">A fetch larger than this is refused and recorded. Empty means no limit.</p>
+  </section>
+  <section class="ad-sec" aria-labelledby="bx-t">
+    <div class="ad-sec__head"><h2 class="t-h3" id="bx-t">The box</h2></div>
+    <fieldset class="fieldset"><legend>Memory</legend><div class="choicecards" id="mem-cards"></div></fieldset>
+    <p class="note" data-kind="warning" id="mem-note" hidden></p>
+    <fieldset class="fieldset"><legend>Home disk</legend><div class="choicecards" id="disk-cards"></div></fieldset>
+    <p class="field__hint">A larger disk grows an existing box; a smaller one never shrinks it.</p>
+  </section>
+  <section class="ad-sec" aria-labelledby="c-t">
+    <div class="togglerow">
+      <span class="srccard__kind"><i data-icon="clipboard"></i></span>
+      <div class="togglerow__text"><b id="c-t">Copying text out of the box</b><p>Off stops copy and paste out of the box. It does not stop retyping, or a photo of the screen.</p></div>
+      <label class="toggle"><input type="checkbox" role="switch" checked id="copy-out" aria-labelledby="c-t"><span class="toggle__track"></span><span class="toggle__state" data-on="On" data-off="Off"></span></label>
+    </div>
+  </section>
+  <section class="ad-sec" aria-labelledby="l-t">
+    <div class="togglerow">
+      <span class="srccard__kind"><i data-icon="journal"></i></span>
+      <div class="togglerow__text"><b id="l-t">The egress log on each device</b><p>Keeps every host the box connects to, one line per connection, under the device's logs. Off by default.</p></div>
+      <label class="toggle"><input type="checkbox" role="switch" id="egress-log" aria-labelledby="l-t"><span class="toggle__track"></span><span class="toggle__state" data-on="On" data-off="Off"></span></label>
+      <div class="togglerow__more" id="log-more" hidden>
+        <div class="ad-numrow"><label class="field" id="f-log"><span class="field__label">Up to, MB</span><input class="input" type="number" min="1" value="50" id="egress-mb"></label></div>
+        <p class="field__msg" id="m-log" hidden><i data-icon="problem"></i>0 MB with the log on keeps nothing. Use 1 or more, or turn the log off.</p>
+        <p class="note" data-kind="warning">The log keeps every host the box connects to, on each device, under logs.</p>
+      </div>
+    </div>
+  </section>
+  <section class="ad-sec" aria-labelledby="x-t">
+    <details class="disclosure"><summary><span id="x-t">What Sluse sets, and you cannot change here</span></summary>
+      <div class="disclosure__body">
+        <dl class="facts">
+          <div><dt>Audit</dt><dd>The Event Log on each device</dd></div>
+          <div><dt>Ports</dt><dd class="t-num">7580 to 7589</dd></div>
+          <div><dt>Box identity</dt><dd>A certificate per device</dd></div>
+          <div><dt>Close</dt><dd>90 seconds to close a box</dd></div>
+          <div><dt>Build retry</dt><dd>Every 15 minutes</dd></div>
+          <div><dt>Inline read</dt><dd>Up to 256 KiB</dd></div>
+          <div><dt>Sensitivity</dt><dd>Four levels</dd></div>
+          <div><dt>Box log</dt><dd>The box's serial log</dd></div>
+          <div><dt>Telemetry</dt><dd>None</dd></div>
+        </dl>
+      </div>
+    </details>
+  </section>
+</section>
+
+<!-- ============================== Review ============================== -->
+<section class="ad-step" data-step="review" hidden>
+  <header class="pagehead"><div class="pagehead__text">
+    <h1 class="t-h2">Review</h1>
+    <p>Your choices run through the box's own check each time you open this step. What a box would refuse is refused here; everything else is yours to decide, with what to know first.</p>
+  </div></header>
+  <article class="ad-sheet" id="sheet" aria-labelledby="sh-t"></article>
+  <section class="ad-sec" aria-labelledby="k-t" id="know"></section>
+  <section class="ad-sec" aria-labelledby="d-t" id="changed"></section>
+</section>
+
+<!-- ============================== Publish ============================== -->
+<section class="ad-step" data-step="publish" hidden>
+  <header class="pagehead"><div class="pagehead__text">
+    <h1 class="t-h2">Publish</h1>
+    <p>One Intune app carries Sluse and this configuration. Save it here, then upload it to Intune by hand, or publish it straight from here.</p>
+  </div></header>
+  <div class="panel" id="pub-facts"></div>
+  <ol class="seq">
+    <li id="seq-msi">
+      <div class="seq__body">
+        <div class="seq__head"><h2 class="t-h3">Sluse.msi</h2><span id="msi-pill"></span></div>
+        <p class="ad-sec__lead">Pick the Sluse.msi the app carries: the one you installed Sluse Admin from, or a newer release to move devices to it.</p>
+        <div id="msi-file"></div>
+        <div class="btn-row">
+          <button class="btn btn--primary" type="button" id="pick-msi"><i data-icon="folder-open"></i>Pick Sluse.msi…</button>
+          <span class="t-small t-muted" id="msi-keep" hidden>Cancelling the Open dialog keeps this one.</span>
+        </div>
+      </div>
+    </li>
+    <li id="seq-save" data-seq="waits">
+      <div class="seq__body">
+        <div class="seq__head"><h2 class="t-h3">Save the configuration and its package</h2><span id="save-pill"></span></div>
+        <p class="seq__waits">Waits for Sluse.msi.</p>
+        <p class="ad-sec__lead" id="save-lead">Saving runs the box's check first, then writes the configuration, a package folder and one .intunewin side by side. Reading and packing the MSI takes a few seconds.</p>
+        <div class="btn-row" id="save-row"><button class="btn btn--primary" type="button" id="save"><i data-icon="download"></i>Save the configuration and its .intunewin…</button></div>
+        <div id="save-state"></div>
+      </div>
+    </li>
+    <li id="seq-pub">
+      <div class="seq__body">
+        <div class="seq__head"><h2 class="t-h3">Or publish straight to Intune</h2><span id="pub-pill"></span></div>
+        <p class="ad-sec__lead">Needs an Intune Administrator. Uploads a saved package as one app, assigned, required, to a device group. A new revision supersedes the last as an update.</p>
+        <div id="pub-body" class="stack" style="--stack-gap: var(--space-4)"></div>
+      </div>
+    </li>
+  </ol>
+</section>
+
+      </main>
+      <footer class="appshell__foot">
+        <div class="ad-foot__status" role="status" aria-live="polite" id="foot-status"></div>
+        <button class="btn" type="button" id="back"><i data-icon="chevron-left"></i><span>Back</span></button>
+        <button class="btn" type="button" id="next"><span>Next</span><i data-icon="chevron-right"></i></button>
+      </footer>
+    </div>
+  </div>
+  <div class="toasts toasts--inframe" aria-live="polite" id="toasts"></div>
+</div>
+
+<!-- Dialogs: native, so the rest of the window is inert, Tab stays inside,
+     Esc cancels and the focus goes back to what opened it. admin.js fills
+     the words that depend on the file and the tenant. -->
+<dialog class="dialog dialog--wide" id="dlg-ask" aria-labelledby="dlg-ask-t">
+  <form method="dialog">
+    <div class="dialog__head" id="dlg-ask-head"><h2 class="dialog__title" id="dlg-ask-t"></h2></div>
+    <div class="dialog__body" id="dlg-ask-body"></div>
+    <div class="dialog__actions" id="dlg-ask-actions"></div>
+  </form>
+</dialog>
+
+<dialog class="dialog dialog--wide" id="dlg-add" aria-labelledby="add-t">
+  <form method="dialog">
+    <div class="dialog__head"><i data-icon="plus"></i><h2 class="dialog__title" id="add-t">Add a source</h2></div>
+    <div class="dialog__body">
+      <div class="tabs" role="tablist" aria-label="Kind of source">
+        <button class="tab" role="tab" type="button" data-tab="sp" aria-controls="pane-sp"><i data-icon="library"></i>SharePoint site</button>
+        <button class="tab" role="tab" type="button" data-tab="tm" aria-controls="pane-tm"><i data-icon="group"></i>A Team's site</button>
+        <button class="tab" role="tab" type="button" data-tab="sh" aria-controls="pane-sh"><i data-icon="server"></i>File share</button>
+      </div>
+      <div class="tabpanel stack" id="pane-sp" role="tabpanel" style="--stack-gap: var(--space-3)">
+        <div id="sp-note"></div>
+        <div class="ad-search" id="sp-search">
+          <label class="field"><span class="field__label">A SharePoint site's name</span><input class="input" type="search" id="site-query" data-enter="site-find"></label>
+          <button class="btn" type="button" id="site-find"><i data-icon="search"></i>Find sites</button>
+        </div>
+        <p class="field__hint" id="site-hint">Search uses letters, digits, spaces and hyphens; anything else is left out. Press Enter to find.</p>
+        <div id="sp-results"></div>
+      </div>
+      <div class="tabpanel stack" id="pane-tm" role="tabpanel" style="--stack-gap: var(--space-3)" hidden>
+        <p class="t-small" id="tm-lead"></p>
+        <div id="tm-body"></div>
+      </div>
+      <div class="tabpanel stack" id="pane-sh" role="tabpanel" style="--stack-gap: var(--space-3)" hidden>
+        <label class="field" id="share-field"><span class="field__label">The share's path</span><input class="input input--mono" type="text" placeholder="\\server\share" id="share-path" data-enter="add-go" aria-describedby="share-msg"><span class="field__hint" id="share-hint">A UNC path. Each user reaches it as themselves. Here, you browse it as your own Windows account on this PC.</span><span class="field__msg" id="share-msg" hidden><i data-icon="problem"></i>A share is \\server\share, never a mapped drive letter. For example <span class="mono">\\fs01\finance</span>.</span></label>
+      </div>
+      <p class="t-small t-muted" id="add-as"></p>
+    </div>
+    <div class="dialog__actions">
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn btn--primary" type="button" id="add-go" disabled>Add the library</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dialog dialog--xl" id="dlg-scope" aria-labelledby="sc-t">
+  <form method="dialog">
+    <div class="dialog__head"><i data-icon="folder"></i><div><h2 class="dialog__title" id="sc-t"></h2><p class="t-small t-muted" style="margin: 2px 0 0" id="sc-where"></p></div></div>
+    <div class="dialog__body">
+      <p class="t-small">Tick the folders the agent may reach. A ticked folder brings everything under it. With nothing ticked, the whole source is in reach.</p>
+      <div class="picker">
+        <div class="picker__tree" id="sc-tree"></div>
+        <aside class="picker__side" aria-labelledby="inreach-t">
+          <h3 class="t-label t-muted" id="inreach-t">In reach</h3>
+          <div id="sc-chips"></div>
+          <hr class="rule">
+          <p class="t-small t-muted">Counts are folders and files together, as you can see them.</p>
+          <p class="t-small t-muted">A scope is a path. If a folder is renamed later, the scope no longer matches it.</p>
+        </aside>
+      </div>
+      <p class="t-small t-muted" id="sc-as"></p>
+    </div>
+    <div class="dialog__actions">
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn btn--primary" value="ok" id="sc-go"></button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

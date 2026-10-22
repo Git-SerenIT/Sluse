@@ -1,0 +1,49 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# Headless sway with the console in it (D-025). No screen of its own; wayvnc
+# shows it. From S-8 1b's 1b-vnc-kiosk.sh.
+set -eu
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+# In the snap's own folder: Firefox is a snap, and confinement hides /tmp and
+# hidden folders from it.
+profile="$HOME/snap/firefox/common/sluse-kiosk"
+mkdir -p "$profile"
+# No first-run pages over the sign-in (S-8 1b). policies.json says the same
+# for the whole browser; this covers a pref the policy cannot reach. Firefox's
+# own traffic is switched off in policies.json, not here: a sign-in link an
+# app opens starts a second Firefox on the default profile, which this file
+# never reaches (L1, 2026-10-06).
+cat > "$profile/user.js" <<'PREFS'
+user_pref("datareporting.policy.firstRunURL", "");
+user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+PREFS
+# No tab strip, address bar or toolbars: the console is the only page, and
+# sway's own tabs switch between it and the apps (see browser).
+mkdir -p "$profile/chrome"
+cat > "$profile/chrome/userChrome.css" <<'CSS'
+#navigator-toolbox { visibility: collapse !important; }
+CSS
+export SLUSE_PROFILE="$profile"
+# Claude Desktop keeps its sign-in only in a keyring (D-045 point 6). A login
+# keyring with no password is a plain file that gnome-keyring opens unlocked,
+# on D-Bus activation, with no prompt: the sign-in sits unencrypted on the
+# home disk, as Claude Code's ~/.claude does. Made once; one already there is
+# left alone.
+keyrings="$HOME/.local/share/keyrings"
+if [ ! -e "$keyrings/login.keyring" ]; then
+  mkdir -p "$keyrings" && chmod 700 "$keyrings"
+  printf '[keyring]\ndisplay-name=login\nctime=0\nmtime=0\nlock-on-idle=false\nlock-after=false\n' > "$keyrings/login.keyring"
+  printf login > "$keyrings/default"
+fi
+# sway does not name itself; the portal reads the name to pick its backends
+# (sway's sway-portals.conf). See sway.conf. foot finds the theme's colours
+# (theme, Q70) first among the system's configs, after the person's own.
+exec env WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 XDG_CURRENT_DESKTOP=sway \
+    XDG_CONFIG_DIRS="$XDG_RUNTIME_DIR/sluse/xdg:${XDG_CONFIG_DIRS:-/etc/xdg}" \
+    sway -c /usr/local/lib/sluse/sway.conf

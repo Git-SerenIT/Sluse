@@ -1,0 +1,155 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 SerenIT ApS and Prompted EV */
+/* Sluse Admin (D-062 slice 6). The look is look/tokens.css and
+   look/components.css; this file is the Admin's own pieces, as the mock-ups'
+   admin.css has them (docs/design/mockups/admin/), without their frame. */
+
+html, body { height: 100%; margin: 0; }
+body { background: var(--surface); }
+[hidden] { display: none !important; }
+
+/* ---- The app on the foundation's .appshell ------------------------------ */
+   ====================================================================== */
+.ad-top .topbar__context { font-weight: var(--weight-black); color: var(--ink); }
+.ad-file { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--small-size); line-height: var(--small-line); }
+.ad-file__name { font-weight: var(--weight-black); white-space: nowrap; }
+.ad-file__path { color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 18rem; }
+.ad-filemenu > summary.btn { min-height: 40px; gap: var(--space-2); max-width: 34rem; }
+/* The bar's widest case (an opened file with unsaved changes, a sign-in
+   expired, and the theme switch) fits 1200px: the file's path gives way
+   first, ending in an ellipsis; the full path is in the file menu. */
+.ad-filemenu { flex: 0 1 auto; min-width: 0; }
+.ad-filemenu > summary.btn { box-sizing: border-box; max-width: 100%; }
+.ad-file, .ad-filemenu > summary .ad-file { min-width: 0; }
+.ad-file__path { flex: 0 1 auto; min-width: 2rem; }
+.ad-top .topbar__actions { flex: none; }
+.ad-filemenu .menu__list { min-width: 26rem; }
+.ad-rail .stepper__btn { text-decoration: none; text-align: left; width: 100%; }
+/* The step area keeps the last row when the strip above it is empty. */
+.appshell__body { grid-row: 3; }
+/* The step column: a reading measure, not the console's 1240px. */
+.appshell__inner { max-width: 864px; padding: var(--space-8) var(--space-8) var(--space-12); }
+.ad-foot__status { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--space-2); font-size: var(--small-size); line-height: var(--small-line); }
+.ad-foot__status .icon { width: 18px; height: 18px; }
+/* Toasts sit above the 64px step footer. */
+.toasts--inframe { bottom: 88px; }
+.ad-step { display: grid; gap: var(--space-8); }
+dialog.dialog { max-width: 36rem; }
+dialog.dialog--wide { max-width: 44rem; }
+dialog.dialog--xl { max-width: 60rem; width: calc(100% - 64px); }
+dialog.dialog form { margin: 0; }
+
+/* ---- Admin pieces -------------------------------------------------------- */
+/* A section of a step: a heading row with a status on the right. */
+.ad-sec { display: grid; gap: var(--space-4); }
+.ad-sec__head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.ad-sec__head .t-h3 { flex: 1 1 auto; }
+.ad-sec__lead { margin: 0; max-width: var(--measure); font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+/* A waiting sub-step shows its head and why it waits, not its status. */
+.seq > li[data-seq="waits"] .seq__head .pill { display: none; }
+
+/* Two big choices side by side (Start). */
+.ad-choices { display: grid; grid-template-columns: 1.25fr 1fr; gap: var(--space-4); align-items: start; }
+.ad-choice { display: grid; gap: var(--space-3); padding: var(--space-6); border-radius: var(--radius-md); background: var(--surface-2); }
+.ad-choice--outline { background: var(--surface); border: 1px solid var(--ink-muted); }
+.ad-choice p { margin: 0; font-size: var(--small-size); line-height: var(--small-line); }
+
+/* What this account can do: three capabilities, each a yes or a who. */
+.ad-roles { width: 100%; border-collapse: collapse; font-size: var(--small-size); line-height: var(--small-line); }
+.ad-roles th { text-align: left; font-weight: var(--weight-book); color: var(--ink-muted); font-size: var(--label-size); letter-spacing: var(--label-track); text-transform: uppercase; padding: 0 var(--space-3) var(--space-2) 0; border-bottom: 1px solid var(--ink-muted); }
+.ad-roles td { padding: var(--space-3) var(--space-3) var(--space-3) 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ad-roles td:first-child { width: 34%; }
+.ad-roles td:nth-child(2) { width: 12rem; white-space: nowrap; }
+
+/* Sources: the list of .srccard. */
+.ad-sources { display: grid; gap: var(--space-3); }
+.srccard[data-flash] { border-color: var(--ink); }
+.srccard__reachhead .spacer { min-width: var(--space-2); }
+
+/* A row of number fields that read as one sentence. */
+.ad-numrow { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
+.ad-numrow .field { width: 8.5rem; }
+.ad-numrow .input { font-variant-numeric: tabular-nums; }
+
+/* Bundles beside the host list (Egress). */
+.ad-egress { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; gap: var(--space-6); align-items: start; }
+.ad-bundles { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.ad-bundle { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--space-2) var(--space-3); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.ad-bundle .check { align-self: start; }
+.ad-bundle__title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: 32px; }
+.ad-bundle__title b { font-weight: var(--weight-black); }
+.ad-bundle__text { margin: 0; font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+.ad-bundle__body { display: grid; gap: var(--space-2); }
+.ad-bundle .disclosure__body { padding-left: var(--space-4); }
+/* The foundation's .hostlist, kept in view while the bundles scroll. */
+.ad-hostlist { position: sticky; top: 0; max-height: 640px; overflow: auto; }
+.ad-hostlist h3 { display: flex; align-items: baseline; gap: var(--space-2); }
+.ad-hostchips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.ad-hostcheck { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.ad-hostcheck li { display: grid; grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr); gap: var(--space-3); align-items: start; font-size: var(--small-size); line-height: var(--small-line); }
+.ad-hostcheck code { padding-top: 1px; }
+
+/* The deployment in words (Review): the one place the Admin is bold.
+   Edge grammar: solid 2px when the check accepts, a 3px double ink edge
+   when it refuses (with the problem icon and the word Refused), dashed and
+   muted only while the check runs. Dashed never means refused. */
+.ad-sheet { border: 2px solid var(--ink); border-radius: var(--radius-md); background: var(--surface); }
+.ad-sheet__head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-6); border-bottom: 1px solid var(--line); }
+.ad-sheet__title { margin: 0; }
+.ad-sheet__sub { margin: 2px 0 0; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); }
+.ad-sheet__rows { margin: 0; padding: 0 var(--space-6); }
+.ad-sheet__row { display: grid; grid-template-columns: 11rem minmax(0, 1fr) auto; gap: var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.ad-sheet__row:last-child { border-bottom: 0; }
+.ad-sheet__row dt { font-weight: var(--weight-black); font-size: var(--small-size); line-height: var(--small-line); }
+.ad-sheet__row dd { margin: 0; font-size: var(--body-size); line-height: var(--body-line); max-width: 60ch; }
+.ad-sheet__row dd p { margin: 0 0 var(--space-1); }
+.ad-sheet__row dd .t-small { color: var(--ink-muted); }
+/* Beside the configuration: facts Entra holds, which the box's check does
+   not see. A plain band under the rows, so they do not read as accepted. */
+.ad-sheet__beside { margin: 0; padding: var(--space-2) var(--space-6) 0; border-top: 1px solid var(--line); background: var(--surface-2); }
+.ad-sheet__beside > .t-label { display: block; padding-top: var(--space-3); color: var(--ink-muted); }
+.ad-sheet__beside .ad-sheet__row { padding: var(--space-3) 0 var(--space-4); }
+/* Attention (the foundation's 2px ink edge, an icon and a Black word): a fact
+   that is allowed but leaves the deployment unusable, such as no group
+   assigned. It does not block; the admin decides. */
+.ad-sheet__beside .ad-sheet__row--attention { margin: var(--space-2) 0 var(--space-4); padding: var(--space-3) var(--space-4); border: 2px solid var(--ink); border-radius: var(--radius-md); background: var(--surface); }
+.ad-sheet__row--attention dt { display: flex; align-items: center; gap: var(--space-1); }
+.ad-sheet__row--attention dt .icon { width: 18px; height: 18px; flex: none; }
+.ad-sheet__row--attention dd .t-small { color: var(--ink); }
+.ad-attn-word { font-weight: var(--weight-black); }
+.ad-sheet__foot { padding: var(--space-4) var(--space-6); border-top: 1px solid var(--line); font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); display: flex; gap: var(--space-2); align-items: center; }
+.ad-sheet__foot .icon { width: 18px; height: 18px; }
+.ad-sheet[data-verdict="refused"] { border: 3px double var(--ink); }
+.ad-sheet[data-verdict="checking"] { border-color: var(--ink-muted); border-style: dashed; }
+
+/* Warnings grouped by the step that made them (Review). */
+.ad-know { display: grid; gap: var(--space-6); }
+.ad-know__group { display: grid; gap: var(--space-2); }
+.ad-know__group > header { display: flex; align-items: center; gap: var(--space-2); }
+.ad-know__group > header h4 { margin: 0; font: var(--weight-black) var(--small-size)/var(--small-line) var(--font-display); flex: 1 1 auto; }
+.ad-know__list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+
+/* Saved files (Publish). */
+.ad-files { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.ad-file-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-2); align-items: start; }
+.ad-file-row__icon { width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--surface); display: grid; place-items: center; }
+.ad-file-row__main { display: grid; gap: var(--space-1); min-width: 0; font-size: var(--small-size); line-height: var(--small-line); }
+.ad-file-row__main b { font-weight: var(--weight-black); }
+.ad-file-row__main p { margin: 0; color: var(--ink-muted); }
+
+/* A search field with its button (group and device-group pickers). */
+.ad-search { display: flex; gap: var(--space-2); align-items: flex-end; }
+.ad-search .field { flex: 1 1 auto; }
+
+/* Wait panel inside a step: under way, so dashed. */
+.ad-wait { padding: var(--space-4); border: 1px dashed var(--ink-muted); border-radius: var(--radius-md); display: grid; gap: var(--space-3); }
+.ad-wait .wait__title { font-size: var(--h3-size); line-height: var(--h3-line); }
+.ad-wait .wait { max-width: none; }
+/* The Teams left out of a listing, by name (Q47). */
+.ad-skipped { margin: 0; padding-left: var(--space-6); display: grid; gap: 2px; font-size: var(--small-size); line-height: var(--small-line); }
+
+/* The volume window said in words beside its Seconds field (Q52). */
+.ad-words { padding-bottom: 8px; min-width: 7rem; }
+
+/* The groups Entra holds for Sluse's app (Q46): a Remove button per row. */
+.ad-assigned .row { align-items: center; }

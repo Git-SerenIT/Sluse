@@ -1,0 +1,249 @@
+/*
+  SPDX-License-Identifier: Apache-2.0
+  Copyright 2026 SerenIT ApS and Prompted EV
+
+  The console's own layout on look/tokens.css and look/components.css
+  (D-062): the mock-ups' console.css (docs/design/mockups/console/), its
+  frame left out, since the box is the frame. Status is shape and words,
+  never a hue (Q1). `npm run contrast` measures the tokens in both themes.
+*/
+
+html, body { margin: 0; height: 100%; }
+body { overflow: hidden; }
+[hidden] { display: none !important; }
+
+/* ======================================================================
+   2. The console app. Its viewport is the box less sway's 22px tab strip:
+      1600 x 878 in the default window, 1366 x 634 on a maximised laptop,
+      960 x 546 at the smallest window. It scrolls inside itself, as Firefox
+      does. Since Q34 nothing is scaled, so the foundation's targets hold as
+      they are (32px minimum, 36px default); round 1's 44 box-pixel rule,
+      which only made up for noVNC's 73%, is gone.
+   ====================================================================== */
+.cx {
+  width: 100%; height: 100vh; box-sizing: border-box;
+  container: cx / inline-size;
+  font-family: var(--font-text); font-size: var(--body-size); line-height: var(--body-line);
+}
+.cx .appshell__main { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { .cx .appshell__main { scroll-behavior: auto; } }
+
+/* Top bar: brand, open an app, last change, who Sluse reads as. The AI
+   apps come first; Terminal is set aside after them, quiet, with its icon
+   (Q42). */
+.cx-top { gap: var(--space-4); padding: 0 var(--space-4) 0 var(--space-6); }
+.cx-top .topbar__brand { gap: var(--space-3); }
+.cx-open { display: flex; align-items: center; gap: var(--space-2); padding-left: var(--space-4); border-left: 1px solid var(--line); min-width: 0; }
+.cx-open__label { color: var(--ink-muted); font-size: var(--small-size); margin-right: var(--space-1); }
+.cx-open .btn { padding: 0 var(--space-3); }
+.cx-open .btn.cx-open__aside { margin-left: var(--space-3); position: relative; color: var(--ink-muted); }
+.cx-open .btn.cx-open__aside::before { content: ""; position: absolute; left: calc(-1 * var(--space-2) - 1px); top: 8px; bottom: 8px; border-left: 1px solid var(--line); }
+.cx-open .btn.cx-open__aside:hover { color: var(--ink); }
+.cx-live { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-muted); font-size: var(--small-size); white-space: nowrap; }
+.cx-live time { font-variant-numeric: tabular-nums; color: var(--ink); }
+.cx-who-plain { display: inline-flex; align-items: center; min-height: var(--hit); }
+
+.cx-banners { display: grid; gap: var(--space-3); }
+.cx-banners:not(:has(> :not([hidden]))) { display: none; }
+.is-stale { position: relative; }
+
+/* A reason code shown in the row, for whoever supports Sluse: small, mono,
+   copyable by selection. The words come first; the code is the record's. */
+.code-line { display: block; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); }
+.code-line code { font-family: var(--font-mono); font-size: var(--path-size); line-height: var(--path-line); color: var(--ink); user-select: all; }
+
+/* ======================================================================
+   3a. The chamber: sources, the lock, the box. The overview's one picture.
+       Streams from each source converge on the gate in the lock's left
+       wall (admission is the control point); the box lies past the lock.
+   ====================================================================== */
+.chamber {
+  --gate-y: 76px;
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 380px minmax(0, 1fr);
+  background: var(--surface-2); border-radius: var(--radius-md); min-height: 300px;
+}
+.chamber__streams { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.chamber__streams path { fill: none; stroke: var(--ink-muted); stroke-width: 1.5; }
+.chamber__streams path[data-active] { stroke: var(--ink); stroke-width: 2.5; }
+.chamber__col { padding: var(--space-6); display: grid; gap: var(--space-3); align-content: start; position: relative; z-index: 1; min-width: 0; }
+.chamber__col > .t-label { color: var(--ink-muted); }
+.chamber__sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); width: max-content; max-width: 100%; }
+.chamber__src {
+  display: grid; grid-template-columns: 20px auto; column-gap: var(--space-2); align-items: center;
+  background: var(--surface); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+}
+/* Active: a heavier edge and its count in words, not a colour change. */
+.chamber__src[data-active] { border: 2px solid var(--ink); padding: calc(var(--space-2) - 1px) calc(var(--space-4) - 1px) calc(var(--space-2) - 1px) calc(var(--space-3) - 1px); }
+.chamber__src .icon { color: var(--ink-muted); }
+.chamber__src[data-active] .icon { color: var(--ink); }
+.chamber__src b { font-family: var(--font-mono); font-weight: var(--weight-book); font-size: var(--path-size); }
+.chamber__src small { grid-column: 2; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); }
+.chamber__count { grid-column: 2; font-size: var(--small-size); line-height: var(--small-line); font-weight: var(--weight-black); font-variant-numeric: tabular-nums; }
+.chamber__src:not([data-active]) .chamber__count { display: none; }
+
+/* The lock: two walls, the gate a node in the left wall. */
+.chamber__lock { background: var(--surface); border-inline: 3px solid var(--ink); position: relative; z-index: 1; }
+.chamber__gate {
+  position: absolute; left: -1.5px; top: var(--gate-y); transform: translate(-50%, -50%);
+  width: 40px; height: 40px; box-sizing: border-box; border-radius: 50%;
+  display: grid; place-items: center; background: var(--surface); border: 3px solid var(--ink); color: var(--ink);
+}
+.chamber__gate .icon { width: 20px; height: 20px; stroke-width: 2.25; }
+.chamber__lock .chamber__col { padding-left: var(--space-8); }
+.chamber__lede { margin: 0; font-size: var(--small-size); line-height: var(--small-line); max-width: 36ch; }
+.chamber__lede strong { display: block; font: var(--weight-black) var(--h3-size)/var(--h3-line) var(--font-display); margin-bottom: var(--space-1); }
+.chamber__window { display: grid; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.chamber__window .meter__label span:first-child { font-family: var(--font-mono); font-size: var(--path-size); color: var(--ink); }
+.chamber__foot { margin: 0; font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+
+.chamber__facts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); font-size: var(--small-size); line-height: var(--small-line); }
+.chamber__facts li { display: flex; gap: var(--space-2); align-items: baseline; }
+.chamber__facts .icon { width: 16px; height: 16px; flex: none; align-self: center; color: var(--ink-muted); }
+.chamber__facts b { font-weight: var(--weight-black); font-variant-numeric: tabular-nums; }
+
+/* ======================================================================
+   3b. Overview lists
+   ====================================================================== */
+.ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
+.ov-list { list-style: none; margin: 0; padding: 0; }
+.ov-item { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); align-items: center; padding: var(--space-2) 0; border-bottom: 1px solid var(--line); min-height: 40px; box-sizing: border-box; }
+.ov-item:last-child { border-bottom: 0; }
+.ov-item > .icon { color: var(--ink-muted); }
+.ov-item__name { font-family: var(--font-mono); font-size: var(--path-size); line-height: var(--path-line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-item__meta { grid-column: 2; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); }
+.ov-item__when { grid-row: 1 / span 2; grid-column: 3; color: var(--ink-muted); font-size: var(--small-size); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* One publish on the overview: its folder in Sluse Artifacts and its files. */
+.delivery { display: grid; gap: var(--space-2); padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.delivery:last-child { border-bottom: 0; }
+.delivery__head { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.delivery__head .icon { color: var(--ink-muted); }
+.delivery__when { margin-left: auto; color: var(--ink-muted); font-size: var(--small-size); white-space: nowrap; }
+.delivery__files { margin: 0; padding: 0 0 0 28px; list-style: none; display: grid; gap: 2px; }
+.delivery__files li { font-family: var(--font-mono); font-size: var(--path-size); line-height: var(--path-line); }
+.delivery__foot { padding-left: 28px; display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; font-size: var(--small-size); }
+
+.howto { list-style: none; counter-reset: how; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.howto li { counter-increment: how; display: grid; grid-template-columns: 28px 1fr; gap: var(--space-1) var(--space-3); font-size: var(--small-size); line-height: var(--small-line); }
+.howto li::before {
+  content: counter(how); grid-row: 1 / span 2; width: 28px; height: 28px; box-sizing: border-box; border-radius: 50%;
+  border: 1.5px solid var(--ink-muted); display: grid; place-items: center; font-size: var(--label-size); font-variant-numeric: tabular-nums;
+}
+.howto b { font-weight: var(--weight-black); font-size: var(--body-size); }
+.howto span { color: var(--ink-muted); }
+
+/* ======================================================================
+   3c. Artifacts page: one group of cards for each publish
+   ====================================================================== */
+.dlv { display: grid; gap: var(--space-4); }
+.dlv + .dlv, .dlv-wrap > .dlv { padding-top: var(--space-8); border-top: 1px solid var(--line); }
+.dlv__head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: center; }
+.dlv__title { display: flex; gap: var(--space-2); align-items: center; margin: 0; font: inherit; }
+.dlv__title > .icon { width: 24px; height: 24px; }
+.dlv__title.t-h3 { font: var(--weight-black) var(--h3-size)/var(--h3-line) var(--font-display); }
+.dlv__sub { color: var(--ink-muted); font-size: var(--small-size); margin: 0; flex-basis: 100%; padding-left: 32px; }
+.dlv__cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+/* The publish the overview's link points to: the grammar's attention bar
+   (as on a selected row), not a focus ring. Real focus goes to its heading. */
+.dlv[data-focused] { box-shadow: inset 3px 0 0 var(--ink); padding-left: var(--space-6); }
+.prov .prov__name small { font-family: var(--font-text); color: var(--ink-muted); font-size: var(--small-size); }
+
+.legend { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-4); align-items: center; font-size: var(--small-size); line-height: var(--small-line); margin: 0; }
+.legend dd { margin: 0; color: var(--ink-muted); }
+
+/* ======================================================================
+   3d. Copies, Sources, Record: tables in groups
+   ====================================================================== */
+.group { display: grid; gap: var(--space-2); }
+.group__head { display: flex; align-items: baseline; gap: var(--space-3); }
+.group__head .t-h3 { font-family: var(--font-mono); font-weight: var(--weight-book); font-size: var(--body-size); }
+.group__head small { color: var(--ink-muted); font-size: var(--small-size); }
+.table td.state { width: 1%; white-space: nowrap; }
+.table td.when, .table td.size { white-space: nowrap; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.table td.size { text-align: right; }
+.table th.size { text-align: right; }
+.paths { display: grid; gap: 2px; }
+.paths .mono { display: block; }
+.paths del { text-decoration-thickness: 1.5px; color: var(--ink-muted); }
+.paths .t-small { color: var(--ink-muted); }
+.tallies { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+
+.name-cell { display: flex; align-items: center; gap: var(--space-2); }
+.name-cell .icon { color: var(--ink-muted); flex: none; }
+.linkrow { background: none; border: 0; padding: 0; font: inherit; color: var(--ink); cursor: pointer; text-align: left; display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--hit); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--ink-muted); }
+.linkrow:hover { text-decoration-color: var(--ink); text-decoration-thickness: 2px; }
+.table tr[data-out] td { color: var(--ink-muted); }
+.table tr[data-busy] { background: var(--tint-wash); }
+
+.listing { position: relative; }
+.listing__bar { height: 3px; margin-bottom: -3px; }
+
+.twocol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
+.twocol > section { min-width: 0; display: grid; gap: var(--space-3); align-content: start; }
+
+/* ======================================================================
+   3e. The gate: the foundation's full-screen wait (.passage), drawn over
+       the whole console. No bar, no buttons.
+   ====================================================================== */
+.cx-gate { position: absolute; inset: 0; background: var(--surface); z-index: 2; overflow: auto; }
+.cx-gate[hidden] { display: none; }
+
+/* ======================================================================
+   3f. Your artifacts across sessions (Q37): this session first, then a
+       labelled break, then earlier sessions, newest first, on the lowered
+       ground so they read as past work at a glance.
+   ====================================================================== */
+.sess { display: grid; gap: var(--space-6); }
+.sess__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); padding-bottom: var(--space-3); border-bottom: 2px solid var(--ink); }
+.sess__head h2, .sess__head h3 { margin: 0; }
+.sess__when { color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); }
+.sess__id { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-muted); font-size: var(--small-size); }
+.sess-earlier { display: grid; gap: var(--space-8); background: var(--surface-2); border-radius: var(--radius-md); padding: var(--space-6); }
+.sess-earlier__head { display: grid; gap: var(--space-1); }
+.sess-earlier__head p { margin: 0; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); max-width: var(--measure); }
+.sess-earlier .sess__head { border-bottom-width: 1px; border-bottom-color: var(--ink-muted); }
+.sess-earlier .dlv + .dlv { border-top-color: var(--ink-muted); }
+.sess__none { margin: 0; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); }
+
+/* ======================================================================
+   3g. A narrow window. The console fills whatever the Sluse window gives
+       the box (Q34), down to 960 x 600 (Q25).
+   ====================================================================== */
+@container cx (max-width: 1240px) {
+  .appshell__inner { padding: var(--space-6) var(--space-8) var(--space-8); gap: var(--space-6); }
+  .cx-top { gap: var(--space-3); padding-left: var(--space-4); }
+  .cx-open { padding-left: var(--space-3); }
+}
+@container cx (max-width: 1120px) {
+  .appshell__body { grid-template-columns: 208px minmax(0, 1fr); }
+  .appshell__inner { padding: var(--space-6); }
+  .chamber { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
+  .chamber__box { grid-column: 1 / -1; border-top: 3px solid var(--ink); }
+  .ov-grid, .dlv__cards, .twocol { grid-template-columns: minmax(0, 1fr); }
+  .howto { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .cx-live__word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .table-wrap > .table--fixed { min-width: 880px; }
+  .sess-earlier { padding: var(--space-4); }
+}
+
+/* About this box */
+.about { display: grid; gap: var(--space-3); }
+.about .facts { grid-template-columns: 1fr 1fr; }
+
+/* Q36: a meter whose count is not known (Sluse not answering): the grammar's
+   dotted edge, no fill, and the words "Not known" in its label. */
+.meter[data-unknown] .meter__track { background: transparent; border: 1px dotted var(--ink-muted); box-sizing: border-box; }
+.meter[data-unknown] .meter__fill { display: none; }
+/* The first publish under a session head has no rule of its own: the head's
+   rule is the divider (the Not published group before it is often hidden). */
+.sess .dlv[hidden] + .dlv, .sess__head + .dlv { border-top: 0; padding-top: 0; }
+
+
+/* Not in the mock-ups' CSS: the console's page state, set by main.ts. */
+.cx[data-gate] .appshell__body, .cx[data-gate] .appshell__strips { display: none; }
+.cx-gate .passage-wrap { min-height: 100%; }
+.copied { color: var(--ink-muted); font-size: var(--small-size); }
+/* Two records side by side on a development device: each keeps its columns
+   and scrolls sideways in its frame (Q79). */
+.twocol .table-wrap > .table--fixed { min-width: 880px; }

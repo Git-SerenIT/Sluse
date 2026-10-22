@@ -1,0 +1,1414 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 SerenIT ApS and Prompted EV */
+/* Sluse components: the product's copy of the mock-ups' foundation
+   (docs/design/mockups/foundation/components.css, D-062), without the
+   brand cards and the mock furniture. Pieces drawn only for the mock-ups
+   stay until the slice that uses them decides.
+   Built only from tokens.css. Load tokens.css first.
+
+   Three rules hold everywhere below:
+   1. No colour but the two and their tints. Status, danger and emphasis are
+      carried by shape (fill, border weight, border style), an icon and a word.
+   2. Fill weight says how much something matters: plain < settled (tint
+      fill) < attention (2px ink edge) < blocking (inverse ground).
+      Border style says how certain it is: solid = settled, dashed = under way
+      or not checked, dotted = not known.
+   3. Mono is for what a person copies exactly: paths, ids, hosts, hashes. */
+
+/* ======================================================================
+   Layout helpers
+   ====================================================================== */
+.stack { display: flex; flex-direction: column; gap: var(--stack-gap, var(--space-4)); }
+.stack > * { margin: 0; }
+.cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cluster-gap, var(--space-2)); }
+.spacer { flex: 1 1 auto; }
+.panel {
+  background: var(--surface-2); color: var(--ink);
+  border-radius: var(--radius-md); padding: var(--space-4);
+}
+.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+.prose { max-width: var(--measure); }
+.prose p { margin: 0 0 var(--space-3); }
+
+/* Headings, if a page wants element defaults rather than the .t-* classes */
+.sl h1, h1.sl { font: var(--weight-black) var(--h1-size)/var(--h1-line) var(--font-display); letter-spacing: -0.01em; margin: 0; }
+.sl h2, h2.sl { font: var(--weight-black) var(--h2-size)/var(--h2-line) var(--font-display); margin: 0; }
+.sl h3, h3.sl { font: var(--weight-black) var(--h3-size)/var(--h3-line) var(--font-display); margin: 0; }
+
+code, kbd, samp, pre { font-family: var(--font-mono); font-size: var(--path-size); line-height: var(--path-line); }
+
+/* ======================================================================
+   Icons (see icons.js)
+   ====================================================================== */
+.icon {
+  width: var(--icon); height: var(--icon); flex: none;
+  stroke: currentColor; fill: none; stroke-width: 1.75;
+  stroke-linecap: round; stroke-linejoin: round;
+  vertical-align: middle;
+}
+.icon--sm { width: var(--icon-sm); height: var(--icon-sm); }
+.icon--lg { width: 32px; height: 32px; stroke-width: 1.5; }
+.icon--spinner { animation: sl-spin 900ms linear infinite; }
+@keyframes sl-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .icon--spinner { animation: none; } }
+
+/* ======================================================================
+   Brand: app icon, tileless mark, wordmark, lockups (see icons.js SluseBrand)
+   ====================================================================== */
+.app-icon { display: inline-block; flex: none; line-height: 0; }
+.app-icon img { display: block; width: 100%; height: 100%; }
+/* Tileless mark: the cream drawing on Dark, the navy drawing on Light. Both files
+   are in the DOM; the theme shows the one its ground allows. */
+.mark { display: inline-block; flex: none; line-height: 0; }
+.mark img { width: 100%; height: 100%; }
+.mark .mark__on-navy { display: var(--show-on-navy); }
+.mark .mark__on-cream { display: var(--show-on-cream); }
+
+.wordmark {
+  font-family: var(--font-display); font-weight: var(--weight-black);
+  letter-spacing: var(--wordmark-track); text-transform: lowercase;
+  color: var(--ink); line-height: 1;
+}
+/* Horizontal lockup: tile = 1.12 x wordmark size, gap = 1/3 tile.
+   Set --tile on the lockup; everything else follows. */
+.lockup {
+  --tile: 48px;
+  display: inline-flex; align-items: center; gap: calc(var(--tile) / 3);
+  color: var(--ink); text-decoration: none;
+}
+.lockup > .app-icon, .lockup > .mark { width: var(--tile); height: var(--tile); }
+.lockup > .wordmark { font-size: calc(var(--tile) / 1.12); padding-bottom: calc(var(--tile) * .06); }
+/* Stacked: wordmark at half the tile height. */
+.lockup--stacked { flex-direction: column; gap: calc(var(--tile) / 6); }
+.lockup--stacked > .wordmark { font-size: calc(var(--tile) / 2); }
+/* Clear space: a quarter of the tile width on every side. */
+.lockup--clear, .clearspace { padding: calc(var(--tile, 48px) / 4); }
+
+/* ======================================================================
+   Buttons
+   Primary: ink ground. Secondary: muted edge. Quiet: no edge.
+   Destructive: a double edge and an icon, never a hue; its label names the
+   loss ("Wipe the box"), and the confirm that follows says what goes.
+   ====================================================================== */
+.btn {
+  --btn-h: var(--control-h);
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: var(--btn-h); min-width: var(--hit);
+  padding: 0 var(--space-4);
+  font: var(--weight-book) var(--small-size)/var(--small-line) var(--font-text);
+  color: var(--ink); background: transparent;
+  border: 1px solid var(--ink-muted); border-radius: var(--radius-md);
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  position: relative;
+}
+.btn:hover { background: var(--tint-wash); border-color: var(--ink); }
+.btn:active { background: var(--tint-press); }
+.btn .icon { width: 18px; height: 18px; margin-inline-start: -2px; }
+
+.btn--primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn--primary:hover { background: color-mix(in srgb, var(--ink) 86%, var(--surface)); border-color: var(--ink); }
+.btn--primary:active { background: color-mix(in srgb, var(--ink) 78%, var(--surface)); }
+
+.btn--secondary { /* the default .btn; named for clarity in markup */ }
+
+.btn--quiet { border-color: transparent; }
+.btn--quiet:hover { border-color: transparent; background: var(--tint-wash); }
+/* On a surface-2 panel, hover must stay light enough for muted text. */
+.panel .btn--quiet:hover, .card .btn--quiet:hover { background: var(--tint-hover); }
+
+.btn--destructive {
+  border: 3px double var(--ink);
+  padding: 0 calc(var(--space-4) - 2px);
+}
+.btn--destructive:hover { border-color: var(--ink); background: var(--tint-wash); }
+
+/* Link-styled action inside running text */
+.btn--link {
+  min-height: 0; min-width: 0; padding: 0; border: 0; background: none;
+  font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+.btn--link:hover { background: none; text-decoration-thickness: 2px; }
+
+.btn--sm { --btn-h: var(--control-h-sm); padding: 0 var(--space-3); }
+.btn--lg { --btn-h: 44px; padding: 0 var(--space-6); font-size: var(--body-size); line-height: var(--body-line); }
+.btn--icon { padding: 0; width: var(--btn-h); }
+.btn--icon .icon { margin: 0; }
+
+/* Disabled: "not available now" is a dash in the grammar, as on a disabled
+   input. ink-muted, never --line: line is for dividers, not a control's edge. */
+.btn:disabled, .btn[aria-disabled="true"] {
+  cursor: not-allowed; color: var(--ink-muted);
+  background: transparent; border: 1px dashed var(--ink-muted);
+}
+.btn--primary:disabled, .btn--primary[aria-disabled="true"],
+.btn--destructive:disabled, .btn--destructive[aria-disabled="true"] { background: transparent; border: 1px dashed var(--ink-muted); }
+/* The double edge was 3px; give the 2px back to the padding. */
+.btn--destructive:disabled, .btn--destructive[aria-disabled="true"] { padding: 0 var(--space-4); }
+.btn--destructive.btn--sm:disabled, .btn--destructive.btn--sm[aria-disabled="true"] { padding: 0 var(--space-3); }
+.btn--quiet:disabled, .btn--quiet[aria-disabled="true"] { border-color: transparent; }
+
+/* Busy: the label stays, a ring turns beside it. Not clickable meanwhile. */
+.btn[aria-busy="true"] { cursor: progress; pointer-events: none; }
+.btn[aria-busy="true"]::after {
+  content: ""; width: 14px; height: 14px; flex: none;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: sl-spin 800ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn[aria-busy="true"]::after { animation: none; border-style: dotted; }
+}
+
+.btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.btn-row--end { justify-content: flex-end; }
+
+/* ======================================================================
+   Form controls
+   ====================================================================== */
+.field { display: grid; gap: var(--space-1); }
+.field__label { font-size: var(--small-size); line-height: var(--small-line); color: var(--ink); }
+.field__hint { font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); margin: 0; }
+.field__msg {
+  display: flex; gap: var(--space-1); align-items: flex-start;
+  font-size: var(--small-size); line-height: var(--small-line); color: var(--ink); margin: 0;
+}
+.field__msg .icon { width: 16px; height: 16px; margin-top: 2px; }
+
+.input, .select, .textarea {
+  box-sizing: border-box; width: 100%;
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  font: var(--weight-book) var(--small-size)/var(--small-line) var(--font-text);
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--ink-muted); border-radius: var(--radius-sm);
+}
+.panel .input, .panel .select, .panel .textarea,
+.card .input, .card .select, .card .textarea { background: var(--surface); }
+.textarea { padding: var(--space-2) var(--space-3); min-height: 6rem; resize: vertical; }
+.input--mono, .textarea--mono { font-family: var(--font-mono); font-size: var(--path-size); }
+.input::placeholder, .textarea::placeholder { color: var(--ink-muted); opacity: 1; }
+.input:hover, .select:hover, .textarea:hover { border-color: var(--ink); }
+.input:focus-visible, .select:focus-visible, .textarea:focus-visible { border-color: var(--ink); }
+.input:disabled, .select:disabled, .textarea:disabled {
+  color: var(--ink-muted); border-style: dashed; border-color: var(--ink-muted); cursor: not-allowed;
+}
+/* Invalid: a heavier edge and a message with the problem icon. */
+.field--invalid .input, .field--invalid .select, .field--invalid .textarea,
+.input[aria-invalid="true"] { border-width: 2px; border-color: var(--ink); padding-inline: calc(var(--space-3) - 1px); }
+
+.select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: calc(var(--space-3) + 20px);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-muted) 50%),
+    linear-gradient(135deg, var(--ink-muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.select option { background: var(--surface); color: var(--ink); }
+
+/* Checkbox and radio: a real input on top of a drawn box, so the box can be
+   drawn in tokens and the input still takes focus, keys and forms. */
+.check, .radio {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  min-height: var(--hit); cursor: pointer; position: relative;
+  font-size: var(--small-size); line-height: var(--small-line);
+}
+.check > input, .radio > input, .toggle > input {
+  position: absolute; opacity: 0; margin: 0;
+  width: var(--hit); height: var(--hit); left: -7px; top: 50%; transform: translateY(-50%);
+  cursor: pointer;
+}
+.check__box, .radio__dot {
+  width: 18px; height: 18px; flex: none; box-sizing: border-box;
+  border: 1.5px solid var(--ink-muted); background: var(--surface);
+  display: inline-grid; place-items: center;
+}
+.check__box { border-radius: var(--radius-sm); }
+.radio__dot { border-radius: 50%; }
+.check:hover .check__box, .radio:hover .radio__dot { border-color: var(--ink); }
+.check > input:checked + .check__box { background: var(--ink); border-color: var(--ink); }
+.check > input:checked + .check__box::after {
+  content: ""; width: 9px; height: 5px; margin-top: -2px;
+  border-left: 2px solid var(--surface); border-bottom: 2px solid var(--surface);
+  transform: rotate(-45deg);
+}
+.check > input:indeterminate + .check__box { background: var(--ink); border-color: var(--ink); }
+.check > input:indeterminate + .check__box::after { content: ""; width: 8px; height: 2px; background: var(--surface); }
+.radio > input:checked + .radio__dot { border-color: var(--ink); }
+.radio > input:checked + .radio__dot::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ink); }
+.check > input:focus-visible + .check__box,
+.radio > input:focus-visible + .radio__dot,
+.toggle > input:focus-visible + .toggle__track { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.check > input:disabled + .check__box { border-style: dashed; background: transparent; }
+.check:has(> input:disabled), .radio:has(> input:disabled), .toggle:has(> input:disabled) { color: var(--ink-muted); cursor: not-allowed; }
+.check > input:disabled:checked + .check__box { background: var(--ink-muted); border-color: var(--ink-muted); border-style: solid; }
+
+/* Toggle: the track, plus the state in words beside it. */
+.toggle {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  min-height: var(--hit); cursor: pointer; position: relative;
+  font-size: var(--small-size); line-height: var(--small-line);
+}
+.toggle__track {
+  width: 36px; height: 20px; flex: none; box-sizing: border-box; border-radius: var(--radius-pill);
+  border: 1.5px solid var(--ink-muted); background: var(--surface); position: relative;
+  transition: background-color var(--dur) var(--ease);
+}
+.toggle__track::after {
+  content: ""; position: absolute; top: 2.5px; left: 2.5px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--ink-muted); transition: transform var(--dur) var(--ease);
+}
+.toggle > input:checked + .toggle__track { background: var(--ink); border-color: var(--ink); }
+.toggle > input:checked + .toggle__track::after { background: var(--surface); transform: translateX(16px); }
+.toggle__state { color: var(--ink-muted); min-width: 2.5em; }
+.toggle__state::before { content: attr(data-off); }
+.toggle > input:checked ~ .toggle__state { color: var(--ink); }
+.toggle > input:checked ~ .toggle__state::before { content: attr(data-on); }
+
+.fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: var(--space-1); }
+.fieldset > legend { padding: 0; margin-bottom: var(--space-1); font-size: var(--small-size); }
+
+/* ======================================================================
+   Status pills: data-status picks shape and icon; the word is the content.
+   <span class="pill" data-status="refused">Refused</span>
+   ====================================================================== */
+.pill {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  min-height: 24px; padding: 0 var(--space-2) 0 var(--space-1); box-sizing: border-box;
+  font: var(--weight-book) var(--label-size)/var(--label-line) var(--font-text);
+  letter-spacing: var(--label-track); text-transform: uppercase;
+  border-radius: var(--radius-pill); white-space: nowrap; vertical-align: middle;
+  color: var(--ink); background: var(--surface-2); border: 1px solid transparent;
+}
+.pill .icon { width: 16px; height: 16px; stroke-width: 2; }
+.pill:not(:has(.icon)) { padding-left: var(--space-2); }
+
+/* settled: done and fine */
+.pill[data-status="admitted"], .pill[data-status="released"], .pill[data-status="published"],
+.pill[data-status="current"], .pill[data-status="done"], .pill[data-status="granted"],
+.pill[data-status="signed-in"], .pill[data-status="ready"], .pill[data-status="in-scope"],
+.pill[data-status="allowed"], .pill[data-status="on"], .pill[data-status="let-in"] {
+  background: var(--surface-2); border-color: var(--ink-muted);
+}
+/* attention: read this one. Heavier edge, heavier word. */
+.pill[data-status="refused"], .pill[data-status="stale"], .pill[data-status="orphaned"],
+.pill[data-status="changed"], .pill[data-status="warning"], .pill[data-status="out-of-scope"],
+.pill[data-status="denied"] {
+  background: var(--surface); border: 2px solid var(--ink); font-weight: var(--weight-black);
+  padding-left: calc(var(--space-1) - 1px); /* the heavier edge takes 1px of the padding */
+}
+/* blocking: something stopped. Inverse ground. */
+.pill[data-status="problem"], .pill[data-status="error"], .pill[data-status="failed"] {
+  background: var(--ink); color: var(--surface); border-color: var(--ink); font-weight: var(--weight-black);
+}
+/* open: under way, or not checked yet. Dashed, and only that (Q15).
+   Off and Signed out / Not signed in are settled facts, so they are plain
+   (below); where the person must act, the notice around the pill carries
+   the attention shape, not the pill. */
+.pill[data-status="pending"], .pill[data-status="waiting"], .pill[data-status="checking"],
+.pill[data-status="working"], .pill[data-status="not-checked"],
+.pill[data-status="signing-in"] {
+  background: transparent; border: 1px dashed var(--ink-muted);
+}
+/* absent: not known, or gone. Dotted, muted. */
+.pill[data-status="missing"], .pill[data-status="unknown"], .pill[data-status="none"] {
+  background: transparent; border: 1.5px dotted var(--ink-muted); color: var(--ink-muted);
+}
+/* plain: a fact, no judgement (declared states, kinds). Tint, no edge.
+   Encrypted is plain too (Q14, jok, 2026-10-19): by D-055 point 4
+   encryption is the control working, not a fault, so it is a neutral pill
+   with its own icon (sealed, a closed envelope) and no attention edge. */
+.pill[data-status="read"], .pill[data-status="unread"], .pill[data-status="fetched"],
+.pill[data-status="info"], .pill[data-status="plain"], .pill[data-status="encrypted"],
+.pill[data-status="off"], .pill[data-status="signed-out"] {
+  background: var(--surface-2); border-color: transparent;
+}
+.panel .pill[data-status="read"], .card .pill[data-status="read"],
+.panel .pill[data-status="fetched"], .card .pill[data-status="fetched"],
+.panel .pill[data-status="plain"], .card .pill[data-status="plain"],
+.panel .pill[data-status="info"], .card .pill[data-status="info"],
+.panel .pill[data-status="unread"], .card .pill[data-status="unread"],
+.panel .pill[data-status="encrypted"], .card .pill[data-status="encrypted"],
+.prov .pill[data-status="read"], .prov .pill[data-status="fetched"], .prov .pill[data-status="unread"],
+.prov .pill[data-status="encrypted"], .prov .pill[data-status="plain"],
+.panel .pill[data-status="off"], .card .pill[data-status="off"],
+.panel .pill[data-status="signed-out"], .card .pill[data-status="signed-out"] {
+  background: var(--surface); border-color: transparent;
+}
+.pill--count { font-variant-numeric: tabular-nums; }
+
+/* A status written into running text or a row: icon + word, no pill. */
+.status {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  font-size: var(--small-size); line-height: var(--small-line);
+}
+.status .icon { width: 18px; height: 18px; }
+.status[data-status="refused"], .status[data-status="problem"], .status[data-status="failed"] { font-weight: var(--weight-black); }
+.status[data-status="missing"], .status[data-status="unknown"], .status[data-status="not-checked"] { color: var(--ink-muted); }
+/* .note, .status and .field__msg are flex rows: icon, then text. icons.js
+   wraps mixed inline content (text, a mono path, a link) in one
+   span.sl-text, so it stays one line of prose, not flex columns. */
+.sl-text { min-width: 0; }
+
+/* ======================================================================
+   Banners and notes
+   data-kind: info (muted bar), warning (ink edge), problem (inverse).
+   ====================================================================== */
+.banner {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: start;
+  gap: var(--space-3); padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md); border: 1px solid transparent;
+  background: var(--surface-2); color: var(--ink);
+  box-shadow: inset 4px 0 0 var(--ink-muted);
+  font-size: var(--small-size); line-height: var(--small-line);
+}
+.banner > .icon { margin-top: 0; }
+.banner__body { display: grid; gap: var(--space-1); min-width: 0; }
+.banner__title { font-weight: var(--weight-black); font-size: var(--body-size); line-height: var(--body-line); margin: 0; }
+.banner__text { margin: 0; max-width: var(--measure); }
+.banner__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.banner__close { align-self: start; margin: -6px -8px -6px 0; }
+.banner[data-kind="warning"] { border-color: var(--ink); box-shadow: inset 4px 0 0 var(--ink); }
+.banner[data-kind="problem"] {
+  /* an inverse scope (tokens.css): the opposite theme on this one element */
+  box-shadow: none; border-color: var(--surface);
+}
+/* Strip: full width, square, under a bar (the shell's notices). Never over the box. */
+.banner--strip {
+  border-radius: 0; border-width: 0 0 1px 0; border-color: var(--line);
+  padding: var(--space-2) var(--space-4); align-items: center; min-height: 40px; box-sizing: border-box;
+}
+.banner--strip .banner__body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.banner--strip .banner__title { font-size: var(--small-size); line-height: var(--small-line); }
+.banner--strip .banner__actions { margin-top: 0; }
+.banner--strip .banner__close { margin: 0 -8px 0 0; }
+.banner--strip[data-kind="warning"] { border-color: var(--ink); border-width: 0 0 2px 0; }
+
+/* Note: a small inline statement, e.g. under a field or in a step. */
+.note {
+  display: flex; gap: var(--space-2); align-items: flex-start;
+  font-size: var(--small-size); line-height: var(--small-line); margin: 0;
+}
+.note > .icon { width: 18px; height: 18px; margin-top: 1px; }
+.note[data-kind="warning"] { padding-left: var(--space-2); border-left: 2px solid var(--ink); }
+.note[data-kind="problem"] { font-weight: var(--weight-black); }
+.note[data-kind="info"] { color: var(--ink-muted); }
+
+/* ======================================================================
+   Waits: title, clock, named steps, a real bar where a percentage exists.
+   No remaining-time estimate, ever.
+   ====================================================================== */
+.wait { display: grid; gap: var(--space-4); max-width: 34rem; width: 100%; }
+.wait__head { display: flex; align-items: baseline; gap: var(--space-4); flex-wrap: wrap; }
+.wait__title { font: var(--weight-black) var(--h2-size)/var(--h2-line) var(--font-display); margin: 0; flex: 1 1 auto; }
+.wait__clock {
+  /* Body 16/24 with tabular figures: a clock is not copied, so not mono. */
+  font-family: var(--font-text); font-size: var(--body-size); line-height: var(--body-line);
+  font-variant-numeric: tabular-nums; color: var(--ink); margin: 0;
+}
+.wait__clock::before { content: attr(data-label); font-family: var(--font-text); color: var(--ink-muted); font-size: var(--small-size); margin-right: var(--space-2); }
+.wait__meta { margin: 0; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); }
+/* Several meta lines read as one block: wrap them in .wait__metas (a hidden
+   line between two siblings no longer pulls the second one up). The old
+   sibling rule stays for pages that do not wrap them. */
+.wait__metas { display: grid; gap: var(--space-1); }
+.wait__metas > .wait__meta { margin: 0; }
+.wait > .wait__meta + .wait__meta { margin-top: calc(var(--space-4) * -1 + var(--space-1)); }
+
+.progress {
+  --value: 0%;
+  height: 6px; border-radius: var(--radius-pill); background: var(--tint-track);
+  overflow: hidden; position: relative;
+}
+.progress__fill { height: 100%; width: var(--value); background: var(--ink); border-radius: inherit; transition: width var(--dur) linear; }
+.progress[data-indeterminate] .progress__fill {
+  width: 28%; position: absolute; left: 0; top: 0;
+  animation: sl-sweep var(--dur-slow) var(--ease) infinite;
+}
+@keyframes sl-sweep { from { transform: translateX(-100%); } to { transform: translateX(360%); } }
+@media (prefers-reduced-motion: reduce) {
+  /* The clock and the steps carry the wait; a frozen bar would lie. */
+  .progress[data-indeterminate] { display: none; }
+}
+
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.step {
+  display: grid; grid-template-columns: 20px 1fr auto; gap: var(--space-3); align-items: center;
+  min-height: 32px; font-size: var(--small-size); line-height: var(--small-line);
+}
+.step > .icon { width: 20px; height: 20px; }
+.step__text { min-width: 0; }
+.step__time { font-family: var(--font-mono); font-size: var(--path-size); font-variant-numeric: tabular-nums; color: var(--ink-muted); }
+.step[data-step="done"] { color: var(--ink-muted); }
+.step[data-step="current"] { color: var(--ink); font-weight: var(--weight-black); }
+.step[data-step="current"] .step__time { color: var(--ink); font-weight: var(--weight-book); }
+.step[data-step="next"] { color: var(--ink-muted); }
+.step[data-step="failed"] { color: var(--ink); font-weight: var(--weight-black); }
+.step__sub { grid-column: 2 / -1; font-weight: var(--weight-book); color: var(--ink-muted); margin-top: calc(var(--space-1) * -1); }
+
+/* ======================================================================
+   Dialogs (native <dialog>)
+   ====================================================================== */
+.dialog {
+  box-sizing: border-box; width: calc(100% - 2 * var(--space-4)); max-width: 32rem;
+  padding: 0; border: 1px solid var(--ink-muted); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-lift);
+}
+.dialog::backdrop { background: var(--scrim, rgb(21 41 74 / .72)); } /* fallback: older engines do not inherit custom properties into ::backdrop */
+.dialog__head { padding: var(--space-6) var(--space-6) 0; display: flex; gap: var(--space-3); align-items: flex-start; }
+.dialog__head > .icon { width: 28px; height: 28px; margin-top: -1px; }
+.dialog__title { font: var(--weight-black) var(--h3-size)/var(--h3-line) var(--font-display); margin: 0; }
+.dialog__body { padding: var(--space-3) var(--space-6) 0; display: grid; gap: var(--space-3); font-size: var(--body-size); line-height: var(--body-line); }
+.dialog__body p { margin: 0; }
+.dialog__actions { padding: var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
+/* A dialog drawn in the page, for specimens and static mock-ups. */
+.dialog--static { position: static; display: block; margin: 0; }
+/* Destructive confirmation: a heavier frame. */
+.dialog--destructive { border: 3px double var(--ink); }
+.dialog--wide { max-width: 40rem; }
+.dialog--xl { max-width: 60rem; }
+
+/* What goes, what stays: every wipe says it before it happens (D-026 point 2). */
+.consequences { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-3); }
+.consequences__col { background: var(--surface-2); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); }
+.consequences__col h3 { font: var(--weight-black) var(--small-size)/var(--small-line) var(--font-display); margin: 0 0 var(--space-2); display: flex; align-items: center; gap: var(--space-1); }
+.consequences__col ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-1); font-size: var(--small-size); line-height: var(--small-line); }
+.consequences__col li { padding-left: var(--space-4); position: relative; }
+.consequences__col li::before { content: ""; position: absolute; left: 2px; top: 9px; width: 7px; height: 2px; background: currentColor; }
+.consequences__col--goes { box-shadow: inset 0 0 0 2px var(--ink); background: var(--surface); }
+
+/* ======================================================================
+   Tables and rows
+   ====================================================================== */
+.table-wrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: var(--small-size); line-height: var(--small-line); }
+.table th {
+  text-align: left; vertical-align: bottom; font-weight: var(--weight-book);
+  font-size: var(--label-size); line-height: var(--label-line); letter-spacing: var(--label-track); text-transform: uppercase;
+  color: var(--ink-muted); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--ink-muted);
+}
+.table td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table tbody tr:hover { background: var(--tint-wash); }
+.panel .table tbody tr:hover, .card .table tbody tr:hover { background: var(--tint-hover); }
+.table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.table .mono { font-family: var(--font-mono); font-size: var(--path-size); overflow-wrap: break-word; }
+.table--dense td { padding: var(--space-1) var(--space-2); }
+.table--dense th { padding: var(--space-1) var(--space-2); }
+.table tr[aria-selected="true"] { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--ink); }
+/* A refused row reads heavier: a 2px ink edge at its start, not a colour. */
+.table tr[data-outcome="refused"] td:first-child, .table tr[data-outcome="error"] td:first-child { box-shadow: inset 3px 0 0 var(--ink); }
+
+.rows { list-style: none; margin: 0; padding: 0; }
+.row {
+  display: flex; align-items: center; gap: var(--space-3); min-height: 40px;
+  padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line);
+  font-size: var(--small-size); line-height: var(--small-line);
+}
+.row:last-child { border-bottom: 0; }
+.row__main { flex: 1 1 auto; min-width: 0; }
+.row__meta { color: var(--ink-muted); white-space: nowrap; }
+a.row, button.row { width: 100%; text-align: left; background: none; border-left: 0; border-right: 0; border-top: 0; color: inherit; font: inherit; cursor: pointer; text-decoration: none; }
+a.row:hover, button.row:hover { background: var(--tint-wash); }
+
+/* Facts: label over value, in a grid. */
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: var(--space-3) var(--space-4); margin: 0; }
+.facts > div { min-width: 0; }
+.facts dt { font-size: var(--label-size); line-height: var(--label-line); letter-spacing: var(--label-track); text-transform: uppercase; color: var(--ink-muted); }
+.facts dd { margin: 2px 0 0; font-size: var(--small-size); line-height: var(--small-line); overflow-wrap: anywhere; }
+/* Wide: a narrow first column and one wide column, for a GUID or a path
+   that wraps badly in the auto-fill grid (Admin's app facts). */
+.facts--wide { grid-template-columns: 10rem minmax(0, 1fr); }
+/* Rows: label beside value, one fact per row. */
+.facts--rows { grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr); gap: var(--space-2) var(--space-4); align-items: baseline; }
+.facts--rows > div { display: contents; }
+.facts--rows dd { margin: 0; }
+
+/* ======================================================================
+   Mono chip: a path, id, host or hash, and a Copy button beside it.
+   <span class="chip-mono"><code>\\fs01\finance</code><button class="chip-mono__copy" data-copy aria-label="Copy the path">…</button></span>
+   ====================================================================== */
+.chip-mono {
+  display: inline-flex; align-items: stretch; max-width: 100%; min-height: 28px; box-sizing: border-box;
+  background: var(--surface-2); color: var(--ink);
+  border-radius: var(--radius-sm); vertical-align: middle;
+}
+.panel .chip-mono, .card .chip-mono, .consequences__col .chip-mono { background: var(--surface); }
+.chip-mono > code {
+  display: inline-flex; align-items: center; padding: var(--space-1) var(--space-2);
+  font-size: var(--path-size); line-height: var(--path-line);
+  overflow-wrap: anywhere; word-break: break-word; min-width: 0; user-select: all;
+}
+.chip-mono--truncate > code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; align-self: center; }
+.chip-mono__copy {
+  flex: none; display: inline-grid; place-items: center; width: 32px; min-height: 28px;
+  margin: 0; padding: 0; border: 0; border-left: 1px solid var(--line);
+  background: transparent; color: var(--ink-muted); cursor: pointer;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; position: relative;
+}
+.chip-mono__copy .icon { width: 16px; height: 16px; }
+.chip-mono__copy:hover { color: var(--ink); background: var(--tint-hover); }
+/* Extend the hit area to 32px tall without growing the chip. */
+.chip-mono__copy::before { content: ""; position: absolute; inset: -2px 0; }
+.chip-mono__copy[data-copied] { color: var(--ink); }
+.chip-mono__copy[data-copied]::after {
+  content: "Copied"; position: absolute; bottom: calc(100% + 6px); right: 0;
+  font: var(--weight-book) var(--label-size)/var(--label-line) var(--font-text);
+  letter-spacing: var(--label-track); text-transform: uppercase;
+  background: var(--ink); color: var(--surface); padding: 2px var(--space-2); border-radius: var(--radius-sm);
+  white-space: nowrap; pointer-events: none;
+}
+/* Inline mono with no button: for running text. Select-all on click. */
+.mono { font-family: var(--font-mono); font-size: var(--path-size); line-height: var(--path-line); overflow-wrap: anywhere; }
+.mono-inline {
+  font-family: var(--font-mono); font-size: var(--path-size);
+  background: var(--surface-2); border-radius: var(--radius-sm); padding: 0 var(--space-1); user-select: all;
+}
+
+/* ======================================================================
+   Cards and stats
+   ====================================================================== */
+.card {
+  background: var(--surface-2); color: var(--ink);
+  border-radius: var(--radius-md); padding: var(--space-4);
+  display: grid; gap: var(--space-3); align-content: start;
+  border: 1px solid transparent;
+}
+.card__head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.card__title { font: var(--weight-black) var(--h3-size)/var(--h3-line) var(--font-display); margin: 0; flex: 1 1 auto; }
+.card__text { margin: 0; font-size: var(--small-size); line-height: var(--small-line); max-width: var(--measure); }
+.card__foot { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.card--outline { background: var(--surface); border-color: var(--ink-muted); }
+.card--attention { background: var(--surface); border: 2px solid var(--ink); }
+
+.stat { display: grid; gap: 0; }
+.stat__num { font: var(--weight-black) var(--h1-size)/var(--h1-line) var(--font-display); font-variant-numeric: tabular-nums; }
+.stat__unit { font-size: var(--body-size); }
+.stat__label { font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+
+/* ======================================================================
+   Provenance card: an artifact and the sources declared for it, drawn as a
+   rail from the artifact down to each source. The one picture of lineage.
+   ====================================================================== */
+.prov {
+  background: var(--surface-2); color: var(--ink);
+  border-radius: var(--radius-md); padding: var(--space-4) var(--space-4) var(--space-4) var(--space-4);
+  display: grid; gap: var(--space-4); border: 1px solid transparent;
+}
+.prov[data-outcome="refused"], .prov[data-outcome="error"] { background: var(--surface); border: 2px solid var(--ink); }
+.prov__tree { display: grid; gap: 0; }
+.prov__head { display: grid; grid-template-columns: 32px 1fr auto; gap: var(--space-3); align-items: center; position: relative; }
+/* the rail's first stretch: from under the node to the bottom of the head */
+.prov__head::after { content: ""; position: absolute; left: 15px; top: 32px; bottom: 0; width: 2px; background: var(--ink-muted); }
+.prov__tree > .prov__head:last-child::after { display: none; }
+.prov__node {
+  width: 32px; height: 32px; box-sizing: border-box; display: grid; place-items: center;
+  border: 2px solid var(--ink); border-radius: var(--radius-sm); background: var(--surface);
+}
+/* A refused or failed node stays solid (Q15, jok, 2026-10-19): dashed means
+   only under way or not checked. The card's 2px edge, the Refused pill (its
+   icon and word) and .prov__reason say it; the node keeps its own icon. */
+.prov[data-outcome="refused"] .prov__node, .prov[data-outcome="error"] .prov__node { border-style: solid; }
+.prov__node .icon { width: 18px; height: 18px; }
+.prov__name {
+  /* Path large, mono 16/24 (--path-lg, Q13). */
+  margin: 0; font-family: var(--font-mono); font-weight: var(--weight-book);
+  font-size: var(--path-lg-size); line-height: var(--path-lg-line); overflow-wrap: anywhere;
+}
+.prov__where { grid-column: 2 / -1; margin: -2px 0 0; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); }
+/* Everything under the head hangs from the rail. Rail x = node centre. */
+.prov__tree > :not(.prov__head) { position: relative; padding-left: 48px; margin: 0; }
+.prov__tree > :not(.prov__head)::before {
+  content: ""; position: absolute; left: 15px; top: 0; bottom: 0; width: 2px; background: var(--ink-muted);
+}
+.prov__label { padding-top: var(--space-3); padding-bottom: var(--space-2); font-size: var(--label-size); line-height: var(--label-line); letter-spacing: var(--label-track); text-transform: uppercase; color: var(--ink-muted); }
+.prov__tree > .prov__label:last-child::before { bottom: auto; height: calc(var(--space-3) + 8px); }
+.lineage { list-style: none; padding-top: 0; padding-bottom: 0; display: grid; gap: var(--space-2); }
+.prov__tree > .lineage::before { display: none; }
+.lineage__item { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); min-height: 32px; }
+/* vertical segment: full height, except the last stops at its branch */
+.lineage__item::before {
+  content: ""; position: absolute; left: -33px; top: calc(var(--space-2) * -1); bottom: 0; width: 2px; background: var(--ink-muted);
+}
+.lineage__item:first-child::before { top: 0; }
+.lineage__item:last-child::before { bottom: auto; height: calc(17px + var(--space-2)); }
+.lineage__item:first-child:last-child::before { height: 17px; }
+/* the branch */
+.lineage__item::after {
+  content: ""; position: absolute; left: -33px; top: 15px; width: 25px; height: 2px; background: var(--ink-muted);
+}
+.lineage__meta { flex-basis: 100%; font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+/* Two ids under one source: the admission and the hash, label beside value,
+   so each wraps in its own column at half width. */
+.lineage__ids { flex-basis: 100%; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-3); align-items: center; margin: 0; font-size: var(--small-size); line-height: var(--small-line); }
+.lineage__ids > div { display: contents; }
+.lineage__ids dt { color: var(--ink-muted); }
+.lineage__ids dd { margin: 0; min-width: 0; }
+.lineage__ids .chip-mono { max-width: 100%; }
+.prov__empty { font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); padding-bottom: var(--space-1); }
+.prov__tree > .prov__empty::before { bottom: auto; height: 10px; }
+.prov__reason { display: flex; gap: var(--space-2); align-items: flex-start; font-size: var(--small-size); line-height: var(--small-line); }
+.prov__reason .icon { width: 18px; height: 18px; margin-top: 1px; }
+.prov__facts { padding-top: var(--space-3); border-top: 1px solid var(--line); }
+
+/* ======================================================================
+   Meter: a volume window. Never red; at the threshold it hatches.
+   ====================================================================== */
+.meter { display: grid; gap: var(--space-1); }
+.meter__track { height: 8px; border-radius: var(--radius-pill); background: var(--tint-track); overflow: hidden; }
+.meter__fill { height: 100%; width: var(--value, 0%); background: var(--ink); border-radius: inherit; }
+.meter[data-over] .meter__fill {
+  width: 100%;
+  background: repeating-linear-gradient(-45deg, var(--ink) 0 3px, transparent 3px 6px);
+}
+.meter__label { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+.meter__label strong { color: var(--ink); font-weight: var(--weight-black); font-variant-numeric: tabular-nums; }
+
+/* ======================================================================
+   Empty states: say what will appear here, and how it gets here.
+   ====================================================================== */
+.empty { display: grid; gap: var(--space-2); justify-items: start; padding: var(--space-6) 0; max-width: 40rem; }
+.empty__icon {
+  width: 48px; height: 48px; box-sizing: border-box; display: grid; place-items: center;
+  border: 1.5px dashed var(--ink-muted); border-radius: 50%; color: var(--ink-muted); margin-bottom: var(--space-1);
+}
+.empty__icon .icon { width: 24px; height: 24px; }
+.empty__title { font: var(--weight-black) var(--h3-size)/var(--h3-line) var(--font-display); margin: 0; }
+.empty__text { margin: 0; font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); max-width: 52ch; }
+.empty__action { margin-top: var(--space-2); }
+.empty--center { justify-items: center; text-align: center; margin-inline: auto; }
+
+/* ======================================================================
+   Tabs (role=tablist; mock.js wires arrow keys)
+   ====================================================================== */
+.tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab {
+  min-height: 40px; padding: 0 var(--space-3); margin-bottom: -1px;
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  background: none; border: 0; border-bottom: 3px solid transparent; color: var(--ink-muted);
+  font: var(--weight-book) var(--small-size)/var(--small-line) var(--font-text); cursor: pointer; white-space: nowrap;
+}
+.tab .icon { width: 18px; height: 18px; }
+.tab:hover { color: var(--ink); border-bottom-color: var(--line); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tab__count { font-variant-numeric: tabular-nums; font-size: var(--label-size); line-height: var(--label-line); letter-spacing: var(--label-track); padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--ink); }
+.tabpanel { padding-top: var(--space-4); }
+.tabpanel:focus-visible { outline-offset: 4px; }
+
+/* ======================================================================
+   Sidebar navigation
+   ====================================================================== */
+.sidenav { display: flex; flex-direction: column; gap: 2px; }
+.sidenav__group { font-size: var(--label-size); line-height: var(--label-line); letter-spacing: var(--label-track); text-transform: uppercase; color: var(--ink-muted); padding: var(--space-4) var(--space-3) var(--space-1); margin: 0; }
+.sidenav__item {
+  display: flex; align-items: center; gap: var(--space-2); min-height: 36px; padding: 0 var(--space-3);
+  border-radius: var(--radius-sm); color: var(--ink); text-decoration: none;
+  font: var(--weight-book) var(--small-size)/var(--small-line) var(--font-text);
+  background: none; border: 0; width: 100%; text-align: left; cursor: pointer; box-sizing: border-box;
+}
+.sidenav__item .icon { width: 18px; height: 18px; color: var(--ink-muted); }
+.sidenav__item:hover { background: var(--tint-wash); }
+.sidenav__item[aria-current="page"], .sidenav__item[aria-current="true"] {
+  background: var(--surface-2); box-shadow: inset 3px 0 0 var(--ink); font-weight: var(--weight-black);
+}
+.sidenav__item[aria-current] .icon { color: var(--ink); }
+.sidenav__count { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink-muted); font-weight: var(--weight-book); font-size: var(--label-size); line-height: var(--label-line); letter-spacing: var(--label-track); }
+
+/* ======================================================================
+   Top bar and menu
+   .topbar: an app bar (console, admin). .topbar--compact: the shell's 32px
+   bar above the box. Actions only where the state allows them.
+   ====================================================================== */
+.topbar {
+  display: flex; align-items: center; gap: var(--space-4);
+  min-height: 56px; padding: 0 var(--space-4); box-sizing: border-box;
+  background: var(--surface); color: var(--ink); border-bottom: 1px solid var(--line);
+}
+.topbar__brand { display: inline-flex; align-items: center; color: inherit; text-decoration: none; flex: none; }
+.topbar__brand .lockup { --tile: 24px; }
+.topbar__context { white-space: nowrap; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); padding-left: var(--space-3); border-left: 1px solid var(--line); }
+.topbar__actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-1); }
+.topbar__who { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--small-size); color: var(--ink-muted); }
+.topbar__who .icon { width: 16px; height: 16px; }
+
+.topbar--compact { min-height: 32px; height: 32px; gap: var(--space-3); padding: 0 var(--space-2) 0 var(--space-3); }
+.topbar--compact .lockup { --tile: 16px; }
+/* Compact bar text is Small 14/20, like every other control: it fits a
+   32px bar with 6px above and below. A menu's summary.btn gets the same
+   look as the bar's buttons. */
+.topbar--compact .btn, .topbar--compact .menu > summary.btn {
+  --btn-h: 32px; height: 32px; border-color: transparent; border-radius: 0; padding: 0 var(--space-3);
+  font-size: var(--small-size); line-height: var(--small-line);
+}
+.topbar--compact .btn:hover, .topbar--compact .menu > summary.btn:hover { background: var(--tint-wash); border-color: transparent; }
+.topbar--compact .btn .icon, .topbar--compact .menu > summary.btn .icon { width: 16px; height: 16px; }
+.topbar--compact .btn:disabled, .topbar--compact .btn[aria-disabled="true"] { border-color: transparent; }
+.topbar--compact .btn[aria-busy="true"] { color: var(--ink-muted); }
+.topbar--compact .topbar__actions { gap: 0; align-self: stretch; }
+.topbar--compact .topbar__actions > .btn, .topbar--compact .topbar__actions > .menu { border-left: 1px solid var(--line); }
+.topbar--compact .status { font-size: var(--small-size); line-height: var(--small-line); white-space: nowrap; flex: none; }
+.topbar--compact .status .icon { width: 16px; height: 16px; }
+/* A status group in the compact bar: facts (who, the clipboard), each its
+   own menu or plain status, divided by rules. */
+.topbar__status { display: flex; align-self: stretch; align-items: stretch; }
+.topbar__status > .menu, .topbar__status > .status { border-left: 1px solid var(--line); }
+.topbar__status > .status { padding: 0 var(--space-3); white-space: nowrap; }
+.topbar__status { flex: none; }
+.topbar__status > .menu:last-child, .topbar__status > .status:last-child { border-right: 1px solid var(--line); }
+/* The picture's scale ("Shown at 83%"): Small, muted, tabular. */
+.topbar__scale { align-self: center; padding: 0 var(--space-3); font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.menu { position: relative; display: inline-block; }
+.menu > summary { list-style: none; }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary .icon--chevron-down { transition: transform var(--dur) var(--ease); }
+.menu[open] > summary .icon--chevron-down { transform: rotate(180deg); }
+.menu__list {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: var(--z-menu);
+  min-width: 15rem; padding: var(--space-1); box-sizing: border-box;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--ink-muted); border-radius: var(--radius-md); box-shadow: var(--shadow-lift);
+  display: grid; gap: 2px;
+}
+.menu--left .menu__list { right: auto; left: 0; }
+.menu__item {
+  display: flex; align-items: center; gap: var(--space-2); min-height: 36px; padding: 0 var(--space-3);
+  background: none; border: 0; border-radius: var(--radius-sm); color: var(--ink);
+  font: var(--weight-book) var(--small-size)/var(--small-line) var(--font-text); text-align: left; cursor: pointer; width: 100%;
+}
+.menu__item .icon { width: 18px; height: 18px; }
+.menu__item:hover { background: var(--surface-2); }
+.menu__hint { display: block; color: var(--ink-muted); font-size: var(--small-size); line-height: var(--small-line); }
+.menu__item:has(.menu__hint) { padding-block: var(--space-1); }
+.menu__sep { border: 0; border-top: 1px solid var(--line); margin: var(--space-1) 0; }
+/* Destructive item: under a separator, with its icon; it opens a confirm, so it ends in an ellipsis. */
+.menu__item--destructive { font-weight: var(--weight-black); }
+/* A menu that opens upward, for one at the foot of a column (the console's
+   side navigation). Combine with .menu--left to align its left edges. */
+.menu--up .menu__list { top: auto; bottom: calc(100% + 4px); }
+
+/* ======================================================================
+   Wizard stepper (Sluse Admin). Free navigation: every step is a button.
+   data-flag on an item: done | warning | problem.
+   ====================================================================== */
+.stepper { list-style: none; margin: 0; padding: 0; display: flex; gap: 0; counter-reset: sl-step; overflow-x: auto; }
+.stepper__item { counter-increment: sl-step; display: flex; align-items: center; flex: 1 1 auto; min-width: max-content; }
+.stepper__item:first-child { flex: 0 0 auto; }
+.stepper__item + .stepper__item::before { content: ""; flex: 1 1 var(--space-4); min-width: var(--space-3); height: 1px; background: var(--ink-muted); margin: 0 var(--space-2); }
+.stepper__btn {
+  display: inline-flex; align-items: center; gap: var(--space-2); min-height: 40px; padding: 0 var(--space-2);
+  background: none; border: 0; border-radius: var(--radius-sm); color: var(--ink-muted); cursor: pointer;
+  font: var(--weight-book) var(--small-size)/var(--small-line) var(--font-text); white-space: nowrap;
+}
+.stepper__btn::before {
+  content: counter(sl-step); width: 24px; height: 24px; box-sizing: border-box; display: inline-grid; place-items: center;
+  border: 1.5px solid var(--ink-muted); border-radius: 50%; font-size: var(--label-size); font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.stepper__btn:hover { color: var(--ink); background: var(--tint-wash); }
+.stepper__btn[aria-current="step"] { color: var(--ink); font-weight: var(--weight-black); }
+.stepper__btn[aria-current="step"]::before { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.stepper__btn .icon { width: 16px; height: 16px; }
+.stepper__item[data-flag="done"] .stepper__btn::before { border-style: solid; border-color: var(--ink); }
+.stepper__item[data-flag="warning"] .stepper__btn, .stepper__item[data-flag="problem"] .stepper__btn { color: var(--ink); }
+.stepper__text { display: grid; gap: 0; min-width: 0; text-align: left; }
+.stepper__name { color: var(--ink); }
+/* A summary line under the step's name: what the step holds now. */
+.stepper__sum { font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); font-weight: var(--weight-book); }
+/* Vertical: a side rail. Items fill the rail's width (min-width 0, never
+   max-content), names wrap, and the connector is a short vertical line
+   under the number, not the horizontal connector turned on its side. */
+.stepper--vertical { flex-direction: column; overflow: visible; gap: 0; }
+.stepper--vertical .stepper__item { flex-direction: column; align-items: stretch; flex: none; min-width: 0; }
+.stepper--vertical .stepper__item + .stepper__item::before {
+  flex: none; min-width: 0; width: 1px; height: var(--space-2);
+  margin: 0 0 0 calc(var(--space-2) + 11px);
+}
+.stepper--vertical .stepper__btn { width: 100%; min-height: 44px; align-items: flex-start; padding: var(--space-2); white-space: normal; text-align: left; box-sizing: border-box; }
+.stepper--vertical .stepper__btn::before { margin-top: -2px; flex: none; }
+.stepper--vertical .stepper__btn > .icon { margin-left: auto; margin-top: 2px; flex: none; }
+.stepper--vertical .stepper__btn[aria-current="step"] { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--ink); }
+
+/* ======================================================================
+   Toasts: short confirmations of an action the person just took.
+   Not for problems: a problem stays on screen until it is dealt with.
+   ====================================================================== */
+.toasts {
+  position: fixed; left: 50%; bottom: var(--space-6); transform: translateX(-50%); z-index: var(--z-toast);
+  display: grid; gap: var(--space-2); width: max-content; max-width: calc(100% - 2 * var(--space-4));
+}
+.toast {
+  /* an inverse scope (tokens.css) */
+  display: flex; align-items: center; gap: var(--space-3); min-height: 44px; box-sizing: border-box;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--small-size); line-height: var(--small-line); box-shadow: var(--shadow-lift);
+}
+.toast > .icon { width: 18px; height: 18px; }
+.toast .btn { border-color: transparent; }
+.toast[data-entering] { animation: sl-rise var(--dur) var(--ease); }
+/* Toasts inside a frame (a mock window, the box's screen): the frame must be
+   positioned. Mock.toast(text, { within: frameEl }) puts them here. */
+.toasts--inframe { position: absolute; bottom: var(--space-6); }
+@keyframes sl-rise { from { opacity: 0; transform: translateY(6px); } }
+
+/* ======================================================================
+   Disclosure and technical details ("Details" with Copy, for IT)
+   ====================================================================== */
+.disclosure > summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: var(--space-1);
+  min-height: var(--hit); padding-right: var(--space-2); color: var(--ink);
+  font-size: var(--small-size); line-height: var(--small-line); border-radius: var(--radius-sm);
+}
+.disclosure > summary::-webkit-details-marker { display: none; }
+.disclosure > summary::before {
+  content: ""; width: 7px; height: 7px; margin: 0 var(--space-2) 0 var(--space-1); flex: none;
+  border-right: 1.75px solid currentColor; border-bottom: 1.75px solid currentColor;
+  transform: rotate(-45deg); transition: transform var(--dur) var(--ease);
+}
+.disclosure[open] > summary::before { transform: rotate(45deg); margin-top: -4px; }
+.disclosure > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+.disclosure__body { padding: var(--space-2) 0 0 var(--space-6); display: grid; gap: var(--space-2); }
+
+.techdetails { background: var(--surface-2); border-radius: var(--radius-md); overflow: hidden; }
+.techdetails__bar { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3); border-bottom: 1px solid var(--line); }
+.techdetails__bar .t-label { color: var(--ink-muted); flex: 1 1 auto; }
+.techdetails pre {
+  margin: 0; padding: var(--space-3); max-height: 16rem; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; color: var(--ink);
+}
+
+/* ======================================================================
+   Breadcrumbs and a lazy tree (scope picker)
+   ====================================================================== */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 0; list-style: none; margin: 0; padding: 0; font-size: var(--small-size); }
+.crumbs li { display: inline-flex; align-items: center; }
+.crumbs li + li::before { content: "/"; color: var(--ink-muted); font-family: var(--font-mono); padding: 0 var(--space-1); }
+.crumbs button, .crumbs a {
+  min-height: var(--hit); padding: 0 var(--space-2); border: 0; background: none; color: var(--ink); cursor: pointer;
+  font: inherit; text-decoration: underline; text-underline-offset: 3px; border-radius: var(--radius-sm);
+}
+.crumbs [aria-current] { text-decoration: none; font-weight: var(--weight-black); }
+.crumbs .mono { font-size: var(--path-size); }
+.crumbs [aria-current]:not(button):not(a) { padding: 0 var(--space-2); }
+
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree ul { margin-left: 15px; padding-left: var(--space-4); border-left: 1px solid var(--line); }
+.tree__row { display: flex; align-items: center; gap: var(--space-1); min-height: var(--hit); font-size: var(--small-size); }
+.tree__toggle {
+  width: 32px; height: 32px; flex: none; display: inline-grid; place-items: center;
+  background: none; border: 0; border-radius: var(--radius-sm); color: var(--ink); cursor: pointer;
+}
+.tree__toggle:hover { background: var(--tint-wash); }
+.tree__toggle .icon { width: 16px; height: 16px; transition: transform var(--dur) var(--ease); }
+.tree__toggle[aria-expanded="true"] .icon { transform: rotate(90deg); }
+.tree__toggle--leaf { visibility: hidden; }
+.tree__count { color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A row that says the branch is loading, empty, or could not be read. */
+.tree__status { display: flex; align-items: center; gap: var(--space-2); min-height: var(--hit); padding-left: 36px; font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+.tree__status .icon { width: 16px; height: 16px; }
+/* A tree of checkboxes is a nested list, not role=tree: the toggles carry
+   aria-expanded and every control is reached with Tab. mock.js removes
+   role=tree / treeitem / group from a .tree (see the gallery). */
+
+/* ======================================================================
+   Chips for picked values (scopes, groups): a word and a remove button
+   ====================================================================== */
+.chip {
+  display: inline-flex; align-items: center; gap: 2px; min-height: 28px; box-sizing: border-box;
+  padding: 0 0 0 var(--space-2); border: 1px solid var(--ink-muted); border-radius: var(--radius-sm);
+  font-size: var(--small-size); background: var(--surface);
+}
+.chip .mono { font-size: var(--path-size); }
+/* 32 wide, 28 tall, and the hit area reaches 32 x 32 above and below. */
+.chip__remove { width: 32px; height: 28px; margin: -1px 0; display: inline-grid; place-items: center; border: 0; border-left: 1px solid var(--line); background: none; color: var(--ink-muted); cursor: pointer; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; position: relative; }
+.chip__remove::before { content: ""; position: absolute; inset: -2px 0; }
+.chip__remove:hover { color: var(--ink); background: var(--tint-wash); }
+.chip__remove .icon { width: 14px; height: 14px; }
+
+/* ======================================================================
+   Kbd and small helpers
+   ====================================================================== */
+kbd, .kbd { display: inline-block; padding: 0 var(--space-1); border: 1px solid var(--ink-muted); border-bottom-width: 2px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: var(--path-size); line-height: var(--path-line); }
+.divider-label { display: flex; align-items: center; gap: var(--space-3); color: var(--ink-muted); font-size: var(--label-size); letter-spacing: var(--label-track); text-transform: uppercase; }
+.divider-label::before, .divider-label::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* ======================================================================
+   OS window frame, for mock-ups of host windows (shell, Admin, sign-in).
+   Windows draws this, not Sluse: system greys, not tokens. data-os picks
+   the user's Windows theme, which is independent of Sluse's.
+   ====================================================================== */
+.oswindow {
+  --os-bg: #f3f3f3; --os-fg: #1a1a1a; --os-edge: #c8c8c8;
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--os-edge); border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / .14), 0 16px 40px rgb(0 0 0 / .18);
+  background: var(--surface);
+}
+.oswindow[data-os="dark"] { --os-bg: #202020; --os-fg: #f2f2f2; --os-edge: #3a3a3a; }
+.oswindow__titlebar {
+  height: 32px; flex: none; display: flex; align-items: center; gap: 8px; padding-left: 10px;
+  background: var(--os-bg); color: var(--os-fg); font: 12px/1 "Segoe UI", system-ui, sans-serif;
+  user-select: none;
+}
+.oswindow__titlebar .app-icon { width: 16px; height: 16px; }
+.oswindow__title { flex: 1 1 auto; }
+.oswindow__ctl { width: 46px; height: 32px; display: grid; place-items: center; font: 10px/1 "Segoe UI", system-ui, sans-serif; color: var(--os-fg); }
+/* As a real button: no chrome of its own, a focus ring in the OS ink. */
+button.oswindow__ctl { border: 0; background: none; padding: 0; margin: 0; cursor: pointer; }
+button.oswindow__ctl:focus-visible { outline: 2px solid var(--os-fg); outline-offset: -3px; }
+/* Hover stays grey, the X included: Windows' red would be a third hue in
+   every surface's frame, and the frame's colour is Windows', shown grey. */
+.oswindow__ctl:hover { background: rgb(0 0 0 / .06); }
+.oswindow__ctl--close:hover { background: #5f5f5f; color: #fff; }
+.oswindow[data-os="dark"] .oswindow__ctl:hover { background: rgb(255 255 255 / .08); }
+.oswindow[data-os="dark"] .oswindow__ctl--close:hover { background: #5f5f5f; color: #fff; }
+/* Maximised: no edge, no corner, no shadow. */
+.oswindow[data-max] { border-radius: 0; border-width: 0; box-shadow: none; }
+.oswindow__body { flex: 1 1 auto; position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
+
+/* ######################################################################
+   Added in revision 2 (October 2026): what two or more surfaces built on
+   their own. A surface can drop its copy once it uses these. Names that a
+   surface already uses (.ledger, .popover, .passage, .seg, .skel, ...) keep
+   that surface's markup, so its own rule still wins where it differs.
+   ###################################################################### */
+
+/* Thin scrollbars in the theme's muted ink. The default draws a white
+   track on navy. scrollbar-color inherits, so it is set per theme scope. */
+:root, [data-theme], .inverse { scrollbar-color: var(--ink-muted) transparent; }
+:where(*) { scrollbar-width: thin; }
+
+/* ======================================================================
+   Identity: who Sluse acts for. One component on every surface.
+   Label: "Reading as" on the user's surfaces (shell, console), "Acting as"
+   in Sluse Admin. One pill set: Signed in, Not signed in, Signed out,
+   Signing in, Not known (data-status signed-in, signed-out for both "Not
+   signed in" after a failure and "Signed out" after a sign-out in the box
+   (Q7), signing-in, unknown). Signed out and Not signed in are plain.
+   <details class="menu who">
+     <summary class="who__summary"><i data-icon="person"></i>
+       <span class="who__lines"><span class="who__label">Reading as</span><span class="who__value">ana@contoso.dk</span></span>
+       <i data-icon="chevron-down" class="icon--chevron-down"></i></summary>
+     <div class="menu__list who__menu"><div class="who__card">…</div>…</div>
+   </details>
+   ====================================================================== */
+.who { flex: none; }
+.who__summary {
+  display: inline-flex; align-items: center; gap: var(--space-2); min-height: 40px; padding: 0 var(--space-3);
+  border: 1px solid var(--ink-muted); border-radius: var(--radius-md); cursor: pointer; box-sizing: border-box;
+  color: var(--ink); background: transparent;
+}
+.who__summary:hover { background: var(--tint-wash); border-color: var(--ink); }
+.who__summary > .icon { width: 18px; height: 18px; }
+.who__summary .icon--chevron-down { width: 16px; height: 16px; color: var(--ink-muted); }
+.who__lines { display: grid; text-align: left; min-width: 0; }
+.who__label { font-size: var(--label-size); line-height: var(--label-line); letter-spacing: var(--label-track); text-transform: uppercase; color: var(--ink-muted); }
+.who__value { font-size: var(--small-size); line-height: var(--small-line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22rem; }
+.who__value.mono { font-size: var(--path-size); line-height: var(--path-line); }
+.who__menu { min-width: 22rem; }
+.who__card { padding: var(--space-3); display: grid; gap: var(--space-2); justify-items: start; font-size: var(--small-size); line-height: var(--small-line); }
+.who__card p { margin: 0; }
+/* In the 32px bar: no box, one line ("Reading as" beside the address). */
+.topbar--compact .who__summary { min-height: 32px; height: 32px; border: 0; border-radius: 0; padding: 0 var(--space-3); }
+.topbar--compact .who__lines { display: flex; align-items: baseline; gap: var(--space-2); }
+.topbar--compact .who__summary > .icon { width: 16px; height: 16px; }
+
+/* ======================================================================
+   Theme switch (Q3, jok, 2026-10-19; D-061 point 2): the product's own
+   Light / Dark choice, on every surface, one pattern. Product UI: not the
+   Mock controls' theme buttons, though the mock keeps the two in sync.
+   - Three states: Follow Windows (the default, "system"), Light, Dark.
+     Follow Windows stays so a person who never touches the switch gets
+     Windows' setting, and one who did can go back to it.
+   - A disclosure of three buttons with aria-pressed (menus here are not
+     ARIA menus). The summary shows the theme in use, by icon (sun, moon)
+     and word; its accessible name is "Theme: Light", plus ", following
+     Windows" when it follows. The chosen item is marked by an ink edge,
+     Black weight and a tick: never by tint alone.
+   - Where: the shell's 32px bar, last in .topbar__actions, in every state
+     (it is not a box control, Q17); Sluse Admin's top bar, after the
+     identity menu. Not in the console (Q69, jok, 2026-10-19): the box
+     takes the Sluse window's theme, and one switch is the only one.
+   <details class="menu themeswitch" data-theme-switch>
+     <summary class="btn themeswitch__summary">…sun, moon, "Theme: ", the word, chevron</summary>
+     <div class="menu__list themeswitch__list" role="group" aria-label="Theme">
+       <button class="menu__item" type="button" data-theme-choice="system" aria-pressed="true">…</button>
+       <hr class="menu__sep">
+       <button class="menu__item" type="button" data-theme-choice="light" aria-pressed="false">…</button>
+       <button class="menu__item" type="button" data-theme-choice="dark" aria-pressed="false">…</button>
+     </div></details>
+   Behaviour in ui/shell/src/theme.js; the mock-ups' in mock.js.
+   ====================================================================== */
+.themeswitch { flex: none; }
+.themeswitch__summary { gap: var(--space-2); }
+.themeswitch__summary > .icon { width: 18px; height: 18px; }
+.themeswitch__summary .icon--chevron-down { width: 16px; height: 16px; color: var(--ink-muted); }
+.themeswitch__list { min-width: 16rem; }
+.themeswitch__list .menu__item > .icon { width: 18px; height: 18px; }
+.themeswitch__list .menu__item > span { flex: 1 1 auto; min-width: 0; }
+.themeswitch__tick { visibility: hidden; }
+.themeswitch__list .menu__item[aria-pressed="true"] {
+  background: var(--surface-2); box-shadow: inset 3px 0 0 var(--ink); font-weight: var(--weight-black);
+}
+.themeswitch__list .menu__item[aria-pressed="true"] .menu__hint { font-weight: var(--weight-book); }
+.themeswitch__list .menu__item[aria-pressed="true"] .themeswitch__tick { visibility: visible; }
+/* Only where a bar runs out of room: the word goes, the icon stays, and
+   the accessible name still says it. Set title="Theme: Light" with it. */
+.themeswitch--compact [data-theme-now] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ======================================================================
+   Popover: a .menu__list that holds words and facts, not actions.
+   <div class="menu__list popover" role="group" aria-label="…">
+   ====================================================================== */
+.popover { min-width: 22rem; max-width: 26rem; padding: var(--space-4); gap: var(--space-3); font-size: var(--small-size); line-height: var(--small-line); }
+.popover p { margin: 0; }
+.popover .facts { grid-template-columns: 1fr; gap: var(--space-2); }
+.popover__title { font: var(--weight-black) var(--body-size)/var(--body-line) var(--font-display); margin: 0; }
+
+/* ======================================================================
+   The full-screen wait and error: one spec for the shell's waits and the
+   console's gates (they follow each other on one person's screen).
+   - Left, .passage__lead: the tileless mark at 64, the title in H1, one
+     sentence, the big clock labelled "Elapsed", the bar, meta lines,
+     a banner if it looks stuck, Details.
+   - Right, .ledger: the named steps with their times.
+   - One column (.passage--single) under 1100px or when there are no steps.
+   The compact .wait stays for a wait inside a step (Admin's panels).
+   ====================================================================== */
+.passage-wrap { min-height: 100%; box-sizing: border-box; display: grid; align-content: center; justify-content: center; padding: var(--space-12) var(--space-16); }
+.passage { --passage-mark: 64px; display: grid; grid-template-columns: minmax(0, 36rem) minmax(0, 28rem); gap: var(--space-12) calc(var(--space-12) + var(--space-16)); align-items: start; }
+.passage--single { grid-template-columns: minmax(0, 36rem); }
+@media (max-width: 1100px) { .passage { grid-template-columns: minmax(0, 36rem); } }
+.passage__lead { display: grid; gap: var(--space-4); justify-items: start; }
+.passage__lead > .mark { width: var(--passage-mark); height: var(--passage-mark); margin-bottom: var(--space-4); }
+.passage__title { font: var(--weight-black) var(--h1-size)/var(--h1-line) var(--font-display); letter-spacing: -0.01em; margin: 0; max-width: 18em; }
+.passage__text { margin: 0; max-width: 34rem; }
+.passage__lead > .progress { width: 100%; }
+.passage__meta { display: grid; gap: var(--space-1); }
+.passage__meta .wait__meta, .passage__meta .wait__meta + .wait__meta { margin: 0; }
+.passage__lead > .banner, .passage__lead > .disclosure { width: 100%; box-sizing: border-box; }
+.passage__lead .disclosure { margin-top: var(--space-4); }
+.passage__actions { margin-top: var(--space-2); }
+.passage__foot { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line); width: 100%; }
+.passage__foot .note { color: var(--ink-muted); }
+/* The ledger's first row sits level with the title: the mark, its margin
+   and the lead's gap above it. */
+.passage > .ledger { margin-top: calc(var(--passage-mark) + var(--space-4) + var(--space-4)); }
+@media (max-width: 1100px) { .passage > .ledger { margin-top: 0; } }
+
+/* The elapsed clock, large: the one number a wait may show. H2 Black with
+   tabular figures, so the digits do not jump. Not mono: no one copies it. */
+.bigclock { display: flex; align-items: baseline; gap: var(--space-3); margin: 0; }
+.bigclock__label { font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+.bigclock__num { font: var(--weight-black) var(--h2-size)/var(--h2-line) var(--font-display); font-variant-numeric: tabular-nums; }
+
+/* Ledger: .steps with a drawn rail, roomier rows, the sub-step on its own
+   row. Done steps hang from a solid rail, steps to come from a dashed one.
+   <ol class="steps ledger"><li class="step" data-step="done"><span class="step__text">…</span><span class="step__time">0:12</span><span class="step__sub">…</span></li></ol> */
+.ledger { gap: 0; }
+.ledger .step { position: relative; min-height: 48px; align-items: start; padding: var(--space-3) 0; box-sizing: border-box; row-gap: 2px; }
+.ledger .step > .icon { position: relative; z-index: 1; background: var(--surface); border-radius: 50%; margin-top: 2px; }
+.ledger .step::before { content: ""; position: absolute; left: 9px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+.ledger .step[data-step="done"]::before { background: var(--ink-muted); }
+.ledger .step:first-child::before { top: 22px; }
+.ledger .step:last-child::before { bottom: auto; height: 22px; }
+.ledger .step:only-child::before { display: none; }
+.ledger .step[data-step="next"]::before { background: repeating-linear-gradient(to bottom, var(--line) 0 4px, transparent 4px 8px); }
+.ledger .step__text { font-size: var(--body-size); line-height: var(--body-line); }
+.ledger .step[data-step="current"] .step__text, .ledger .step[data-step="failed"] .step__text { font-weight: var(--weight-black); }
+.ledger .step__time { padding-top: 2px; }
+.ledger .step__sub { font-size: var(--small-size); line-height: var(--small-line); margin-top: 0; grid-row: 2; }
+
+/* The closed screen: one line, centred, for two seconds. */
+.closedline { min-height: 100%; display: grid; place-content: center; justify-items: center; gap: var(--space-6); text-align: center; padding: var(--space-12); box-sizing: border-box; }
+.closedline p { margin: 0; font: var(--weight-black) var(--h2-size)/var(--h2-line) var(--font-display); max-width: 22em; }
+
+/* ======================================================================
+   Layers inside a frame: a dialog or toast that belongs to a mocked window
+   or to the box's screen, so it scales with it and its size against the
+   window is honest. The frame must be positioned (.oswindow__body is).
+   <div class="modal-layer" hidden><div class="dialog" id="dlg-x" role="dialog" aria-modal="true" hidden>…</div></div>
+   Open with data-open-dialog="dlg-x" or Mock.dialog("dlg-x"); Esc, a click
+   on the scrim and data-close-dialog close it.
+   ====================================================================== */
+.modal-layer { position: absolute; inset: 0; z-index: var(--z-dialog); background: var(--scrim); display: grid; place-items: center; padding: var(--space-6); box-sizing: border-box; }
+.modal-layer[hidden] { display: none; }
+.modal-layer > .dialog { position: static; display: block; margin: 0; max-height: calc(100% - var(--space-4)); overflow: auto; }
+
+/* Over a live picture (the box's screen): a card on the last frame while
+   reconnecting, the answer to a drag. Never carries a file. */
+.overlay { position: absolute; inset: 0; z-index: 4; display: grid; grid-template-columns: minmax(0, 30rem); place-content: center; padding: var(--space-8); box-sizing: border-box; }
+.overlay__card {
+  display: grid; gap: var(--space-3); justify-items: start; width: 100%; max-width: 30rem; box-sizing: border-box;
+  padding: var(--space-6); background: var(--surface); color: var(--ink);
+  border: 1px solid var(--ink-muted); border-radius: var(--radius-md); box-shadow: var(--shadow-lift);
+}
+.overlay__card h2 { font: var(--weight-black) var(--h3-size)/var(--h3-line) var(--font-display); margin: 0; }
+.overlay__card p { margin: 0; font-size: var(--small-size); line-height: var(--small-line); }
+.overlay__card .progress { width: 100%; }
+.overlay--drag { background: color-mix(in srgb, var(--surface) 30%, transparent); }
+.overlay--drag .overlay__card { border: 2px dashed var(--ink); }
+.overlay__ring { width: 56px; height: 56px; box-sizing: border-box; border: 2px dashed var(--ink-muted); border-radius: 50%; display: grid; place-items: center; }
+.overlay__ring .icon { width: 24px; height: 24px; }
+
+/* A problem strip under a bar pinned to navy: in the light theme the strip
+   is inverse, so navy too. A rule of the strip's own ink keeps them apart. */
+.banner--strip[data-kind="problem"] { border-top: 2px solid var(--ink); }
+
+/* ======================================================================
+   App shell: top bar, full-width strips, side navigation, scrolling main.
+   The console and Sluse Admin both use it.
+   <div class="appshell">
+     <header class="topbar">…</header>
+     <div class="appshell__strips">…banner--strip…</div>
+     <div class="appshell__body"><nav class="appshell__nav">…<div class="appshell__navfoot">…</div></nav>
+       <main class="appshell__main"><div class="appshell__inner">…</div></main></div>
+   </div>
+   ====================================================================== */
+.appshell { position: relative; display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; height: 100%; background: var(--surface); color: var(--ink); overflow: hidden; }
+.appshell__strips { display: grid; }
+.appshell__strips:not(:has(> :not([hidden]))) { display: none; }
+.appshell__body { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 0; }
+.appshell__nav { border-right: 1px solid var(--line); padding: var(--space-4) var(--space-3); display: flex; flex-direction: column; gap: 2px; overflow: auto; min-height: 0; }
+.appshell__nav .sidenav__item { min-height: 40px; }
+.appshell__navfoot { margin-top: auto; padding: var(--space-4) var(--space-3) var(--space-1); display: grid; gap: var(--space-2); border-top: 1px solid var(--line); font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+.appshell__navfoot p { margin: 0; }
+.appshell__main { overflow: auto; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.appshell__inner { padding: var(--space-8) var(--space-12) var(--space-12); display: grid; gap: var(--space-8); max-width: 1240px; box-sizing: border-box; width: 100%; }
+/* A footer that stays (Admin's step footer): status on the left, actions right. */
+.appshell__foot { flex: none; min-height: 64px; box-sizing: border-box; padding: var(--space-3) var(--space-8); display: flex; align-items: center; gap: var(--space-4); border-top: 1px solid var(--line); background: var(--surface); position: sticky; bottom: 0; margin-top: auto; }
+.appshell__foot .status { flex: 1 1 auto; min-width: 0; }
+
+/* Page head: title, a one-line description, actions to the right. */
+.pagehead { display: flex; align-items: flex-end; gap: var(--space-6); flex-wrap: wrap; }
+.pagehead__text { flex: 1 1 32rem; display: grid; gap: var(--space-2); min-width: 0; }
+.pagehead__text p { margin: 0; color: var(--ink-muted); max-width: 72ch; font-size: var(--small-size); line-height: var(--small-line); }
+.pagehead__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* ======================================================================
+   First paint and stale reads
+   ====================================================================== */
+/* Skeleton: the shape of what is coming. Still: no shimmer (the motion
+   rule allows motion only for waits and answers). aria-hidden on each. */
+.skel { display: block; background: var(--surface-2); border-radius: var(--radius-sm); }
+.panel .skel, .card .skel { background: var(--tint-press); }
+.skel--line { height: 14px; }
+.skel--num { height: 40px; width: 96px; }
+.skel--block { height: 300px; border-radius: var(--radius-md); }
+/* As of: content drawn from a read that later failed. Dashed (not
+   current), a word and a time: "As of 14:31". */
+.stale-tag {
+  display: inline-flex; align-items: center; gap: var(--space-1); min-height: 24px; box-sizing: border-box;
+  font-size: var(--label-size); line-height: var(--label-line); letter-spacing: var(--label-track); text-transform: uppercase;
+  color: var(--ink-muted); border: 1px dashed var(--ink-muted); border-radius: var(--radius-pill); padding: 0 var(--space-2);
+}
+.stale-tag .icon { width: 16px; height: 16px; }
+
+/* ======================================================================
+   Segmented control: radio buttons drawn as one control, for a filter.
+   <div class="seg" role="radiogroup" aria-label="Show"><label><input type="radio" name="f" checked>All <span class="count">12</span></label>…</div>
+   ====================================================================== */
+.seg { display: inline-flex; border: 1px solid var(--ink-muted); border-radius: var(--radius-md); overflow: hidden; }
+.seg label { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); min-height: 36px; padding: 0 var(--space-3); cursor: pointer; font-size: var(--small-size); line-height: var(--small-line); border-left: 1px solid var(--ink-muted); }
+.seg label:first-child { border-left: 0; }
+.seg label:hover { background: var(--tint-wash); }
+.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg label:has(input:checked) { background: var(--ink); color: var(--surface); font-weight: var(--weight-black); }
+.seg label:has(input:focus-visible) { outline: var(--focus-ring); outline-offset: -4px; }
+.seg label:has(input:checked:focus-visible) { outline-color: var(--surface); }
+.seg .count { font-variant-numeric: tabular-nums; color: inherit; font-weight: var(--weight-book); }
+
+/* ======================================================================
+   Fixed tables: grouped tables whose columns line up down the page.
+   <table class="table table--fixed"><colgroup><col class="c-state"><col><col class="c-when"></colgroup>…
+   ====================================================================== */
+.table--fixed { table-layout: fixed; }
+.table--fixed td { overflow-wrap: anywhere; }
+.table--fixed col.c-state { width: 180px; }
+.table--fixed col.c-when { width: 140px; }
+.table--fixed col.c-size { width: 96px; }
+.table--fixed col.c-hash { width: 190px; }
+.table--fixed col.c-kind { width: 220px; }
+.table--fixed col.c-op { width: 190px; }
+.table--fixed col.c-out { width: 130px; }
+.table--fixed col.c-time { width: 96px; }
+
+/* ======================================================================
+   Sequences and sources (Admin first, the console's Sources next)
+   ====================================================================== */
+/* A numbered sub-sequence inside a page: circles on a rail.
+   <ol class="seq"><li data-seq="done|waits"><div class="seq__body">…</div></li></ol>
+   done: filled. waits: dashed and muted, its body folded to its head and
+   one .seq__waits line ("Waits for step 1"). */
+.seq { list-style: none; margin: 0; padding: 0; counter-reset: sl-seq; display: grid; gap: 0; }
+.seq > li { counter-increment: sl-seq; position: relative; padding: 0 0 var(--space-8) 52px; }
+.seq > li::before {
+  content: counter(sl-seq); position: absolute; left: 0; top: 0; width: 32px; height: 32px; box-sizing: border-box;
+  display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--ink);
+  font: var(--weight-black) var(--small-size)/1 var(--font-display); font-variant-numeric: tabular-nums; background: var(--surface);
+}
+.seq > li::after { content: ""; position: absolute; left: 15px; top: 36px; bottom: var(--space-1); width: 2px; background: var(--line); }
+.seq > li:last-child { padding-bottom: 0; }
+.seq > li:last-child::after { display: none; }
+.seq > li[data-seq="done"]::before { background: var(--ink); color: var(--surface); }
+.seq > li[data-seq="done"]::after { background: var(--ink-muted); }
+.seq > li[data-seq="waits"]::before { border-style: dashed; border-color: var(--ink-muted); color: var(--ink-muted); }
+.seq__body { display: grid; gap: var(--space-4); }
+.seq__head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; min-height: 32px; }
+.seq__head > :first-child { flex: 1 1 auto; margin: 0; }
+.seq__waits { margin: 0; font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+.seq > li:not([data-seq="waits"]) .seq__waits { display: none; }
+.seq > li[data-seq="waits"] .seq__body > :not(.seq__head):not(.seq__waits) { display: none; }
+
+/* A source: kind tile, mono name, where it is, sensitivity, a menu, and
+   what is in reach. data-problem draws it as attention. */
+.srccard { background: var(--surface-2); border-radius: var(--radius-md); padding: var(--space-4); display: grid; gap: var(--space-3); border: 1px solid transparent; }
+.srccard[data-problem] { background: var(--surface); border: 2px solid var(--ink); padding: calc(var(--space-4) - 1px); }
+.srccard__head { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; }
+.srccard__kind { width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--surface); display: grid; place-items: center; }
+.srccard[data-problem] .srccard__kind { background: var(--surface-2); }
+.srccard__title { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-height: 24px; }
+.srccard__name { font-family: var(--font-mono); font-size: var(--path-lg-size); line-height: var(--path-lg-line); font-weight: var(--weight-book); margin: 0; } /* Path large, Q13 */
+.srccard__where { margin: 2px 0 0; font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); overflow-wrap: anywhere; }
+.srccard__tools { display: flex; align-items: center; gap: var(--space-2); }
+.srccard__tools .select { width: 12.5rem; min-height: 32px; }
+.srccard__reach { display: grid; gap: var(--space-2); padding-left: 52px; }
+.srccard__reachhead { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: var(--small-size); line-height: var(--small-line); }
+.srccard__reachhead b { font-weight: var(--weight-black); }
+
+/* A toggle row: icon, title and explanation, the switch, and what shows
+   when it is on. <div class="togglerow" data-on>…<div class="togglerow__more">…</div></div> */
+.togglerow { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; padding: var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--ink-muted); }
+.togglerow[data-on] { background: var(--surface-2); border-color: transparent; }
+.togglerow > .icon { width: 24px; height: 24px; margin: 4px 0 0 8px; }
+.togglerow__text { display: grid; gap: var(--space-1); font-size: var(--small-size); line-height: var(--small-line); }
+.togglerow__text b { font-weight: var(--weight-black); font-size: var(--body-size); line-height: var(--body-line); }
+.togglerow__text p { margin: 0; color: var(--ink-muted); }
+.togglerow__more { grid-column: 2 / -1; display: grid; gap: var(--space-3); }
+.togglerow:not([data-on]) .togglerow__more { display: none; }
+
+/* Choice cards: radios drawn as cards, for a small fixed set (memory, disk). */
+.choicecards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-2); border: 0; margin: 0; padding: 0; }
+.choicecard { position: relative; display: grid; gap: 2px; padding: var(--space-3); border: 1px solid var(--ink-muted); border-radius: var(--radius-md); cursor: pointer; font-size: var(--small-size); line-height: var(--small-line); }
+.choicecard > input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.choicecard b { font: var(--weight-black) var(--h3-size)/var(--h3-line) var(--font-display); font-variant-numeric: tabular-nums; }
+.choicecard span { color: var(--ink-muted); }
+.choicecard:hover { background: var(--tint-wash); border-color: var(--ink); }
+.choicecard:has(> input:checked) { border: 2px solid var(--ink); padding: calc(var(--space-3) - 1px); background: var(--surface-2); }
+.choicecard:has(> input:checked)::after { content: ""; position: absolute; top: var(--space-3); right: var(--space-3); width: 10px; height: 5px; border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(-45deg); }
+.choicecard:has(> input:focus-visible) { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.choicecard:has(> input:disabled) { border-style: dashed; color: var(--ink-muted); cursor: not-allowed; }
+
+/* A picker list: rows with a radio, a selected-row edge, an action under
+   them. Group, site, library and device-group pickers. */
+.picklist { border: 1px solid var(--ink-muted); border-radius: var(--radius-md); overflow: hidden; }
+.picklist .rows { max-height: 15rem; overflow: auto; }
+.picklist .row { min-height: 44px; padding: var(--space-1) var(--space-3); }
+.picklist .row:hover { background: var(--tint-wash); }
+.picklist .row:has(input:checked) { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--ink); }
+.picklist .row .radio, .picklist .row .check { flex: 1 1 auto; min-width: 0; }
+.picklist__foot { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-top: 1px solid var(--line); font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); background: var(--surface); }
+.picklist__state { padding: var(--space-4); }
+
+/* The scope picker: the tree beside what is in reach. */
+.picker { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 0; border: 1px solid var(--ink-muted); border-radius: var(--radius-md); min-height: 22rem; overflow: hidden; }
+.picker__tree { padding: var(--space-3); overflow: auto; max-height: 26rem; }
+.picker__side { padding: var(--space-4); background: var(--surface-2); display: grid; gap: var(--space-3); align-content: start; }
+.picker .tree__row .check { flex: 1 1 auto; min-width: 0; }
+
+/* What changed: one line per change, its sign in mono.
+   <ul class="diff"><li><span class="diff__sign" aria-label="added">+</span><span>…</span><span class="pill">…</span></li></ul>
+   + added, − removed, ± changed. The sign is never the only signal: the
+   line says it too. */
+.diff { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.diff > li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: var(--space-2); align-items: baseline; padding: var(--space-2) 0; border-bottom: 1px solid var(--line); font-size: var(--small-size); line-height: var(--small-line); }
+.diff__sign { font-family: var(--font-mono); font-weight: var(--weight-black); text-align: center; }
+.diff > li[data-sign="removed"] > :nth-child(2) { text-decoration: line-through; text-decoration-thickness: 1px; color: var(--ink-muted); }
+
+/* A form, field by field, to copy into another product's form (Intune). */
+.fieldtable { width: 100%; border-collapse: collapse; font-size: var(--small-size); line-height: var(--small-line); }
+.fieldtable caption { text-align: left; font: var(--weight-black) var(--small-size)/var(--small-line) var(--font-display); padding: var(--space-4) 0 var(--space-2); }
+.fieldtable th { text-align: left; font-weight: var(--weight-book); color: var(--ink-muted); width: 34%; padding: var(--space-2) var(--space-3) var(--space-2) 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.fieldtable td { padding: var(--space-1) 0; border-bottom: 1px solid var(--line); }
+.fieldtable td .chip-mono { max-width: 100%; }
+.fieldtable td .t-small { color: var(--ink-muted); display: block; padding: 2px 0 var(--space-1); }
+
+/* A host list: hosts in Path 13/20, + for new, struck for gone. */
+.hostlist { background: var(--surface-2); border-radius: var(--radius-md); padding: var(--space-4); display: grid; gap: var(--space-3); align-content: start; }
+.hostlist__group { display: grid; gap: 2px; }
+.hostlist__group > .t-label { color: var(--ink-muted); padding-bottom: 2px; }
+.hostlist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.hostlist li { font-family: var(--font-mono); font-size: var(--path-size); line-height: var(--path-line); overflow-wrap: anywhere; display: flex; gap: var(--space-1); }
+.hostlist li[data-new]::before { content: "+"; font-weight: var(--weight-black); }
+.hostlist li[data-gone] { text-decoration: line-through; color: var(--ink-muted); }
+.hostlist li[data-gone]::before { content: "\2212"; }
+
+/* A setting's effect in one sentence, under the setting. */
+.preview { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-2); font-size: var(--small-size); line-height: var(--small-line); display: flex; gap: var(--space-2); align-items: flex-start; }
+.preview > .icon { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+
+/* ======================================================================
+   The box's own pixels, in the 1600 x 900 the box draws (sway.conf).
+   Sluse owns these (the tab strip's colours, the wallpaper, the terminal's
+   palette), so role tokens only. data-look="today" shows what ships now,
+   in the tools' own defaults; data-look="proposed" (on the element or an
+   ancestor) shows the proposal. Pin the strip with data-theme="dark" to
+   continue the shell's navy bar above it: sway.conf cannot follow a theme.
+   ====================================================================== */
+/* The box's size: 1600 x 900 unless the page sets --bx-w and --bx-h.
+   Since Q34 the box renders at the Sluse window's size, so a surface sets
+   the two variables (or width and height inline, which still win). */
+.bx { position: relative; width: var(--bx-w, 1600px); height: var(--bx-h, 900px); overflow: hidden; display: flex; flex-direction: column; background: #000; }
+.bx__view { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+/* sway's tab strip: one tab per window, named by its title. 22px. */
+.swaybar { flex: none; display: flex; height: 22px; box-sizing: border-box; font: 13px/20px "DejaVu Sans Mono", monospace; background: #222; }
+.swaybar__tab { flex: 1 1 0; min-width: 0; padding: 0 6px; border: 1px solid #333; background: #222; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.swaybar__tab[aria-current] { background: #285577; border-color: #4c7899; color: #fff; }
+[data-look="proposed"] .swaybar, .swaybar[data-look="proposed"] { background: var(--surface-2); font: var(--weight-book) var(--small-size)/20px var(--font-text); }
+[data-look="proposed"] .swaybar__tab, .swaybar[data-look="proposed"] .swaybar__tab { text-align: left; padding-left: var(--space-3); border-color: var(--surface); background: var(--surface-2); color: var(--ink); }
+/* The focused tab stays inside the navy strip (round 2 review): a lighter
+   tint of the strip, Black weight and a 2px rule of ink on its bottom edge.
+   With only the console open the strip still reads as a strip, not a band.
+   Measured in the Dark scope the strip is pinned to: ink on the tint
+   #485872 6.8:1, ink on the unfocused surface-2 10.8:1. */
+[data-look="proposed"] .swaybar__tab[aria-current], .swaybar[data-look="proposed"] .swaybar__tab[aria-current] { background: color-mix(in srgb, var(--ink) 16%, var(--surface-2)); border-color: var(--surface); color: var(--ink); font-weight: var(--weight-black); box-shadow: inset 0 -2px 0 var(--ink); }
+
+/* The wallpaper: today sway's flat grey; proposed the ground, the tileless
+   mark and one line. */
+.bxwall { position: absolute; inset: 0; background: #333; }
+[data-look="proposed"] .bxwall, .bxwall[data-look="proposed"] { background: var(--surface); color: var(--ink); display: grid; place-content: center; justify-items: center; gap: var(--space-6); text-align: center; }
+.bxwall__inner { display: none; }
+[data-look="proposed"] .bxwall__inner, .bxwall[data-look="proposed"] .bxwall__inner { display: grid; justify-items: center; gap: var(--space-4); max-width: 34rem; }
+.bxwall__line { margin: 0; font: var(--weight-black) var(--h2-size)/var(--h2-line) var(--font-display); }
+.bxwall__sub { margin: 0; font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); }
+.bxwall__foot { position: absolute; left: 0; right: 0; bottom: var(--space-6); text-align: center; font-size: var(--small-size); line-height: var(--small-line); color: var(--ink-muted); display: none; }
+[data-look="proposed"] .bxwall__foot, .bxwall[data-look="proposed"] .bxwall__foot { display: block; }
+
+/* foot, the box's terminal. Proposed: the theme's ground and ink through
+   foot.ini, Cascadia Mono, and Sluse's own lines (.t-dim) in muted ink so
+   they read as the frame, not the program. The cursor blinks only without
+   reduced motion. */
+.term { position: absolute; inset: 0; padding: 14px 20px; box-sizing: border-box; overflow: hidden; background: #111; color: #dcdcdc; font: 15px/1.55 "DejaVu Sans Mono", "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; }
+[data-look="proposed"] .term, .term[data-look="proposed"] { background: var(--surface); color: var(--ink); font-family: var(--font-mono); padding: var(--space-4) var(--space-6); }
+.term .t-dim { color: #8a8a8a; }
+[data-look="proposed"] .term .t-dim, .term[data-look="proposed"] .t-dim { color: var(--ink-muted); }
+.term .t-b { font-weight: 700; }
+.term .t-rule { display: block; border-top: 1px solid currentColor; opacity: .35; margin: 6px 0; }
+.term .t-cursor { display: inline-block; width: .6em; height: 1.1em; vertical-align: text-bottom; background: currentColor; animation: sl-blink 1.1s steps(1) infinite; }
+@keyframes sl-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .term .t-cursor { animation: none; } }
+
+/* A fixed-resolution remote screen scaled into a host window (noVNC's
+   scaleViewport): the picture is never reflowed, only scaled, centred,
+   and never above 1:1. Mock.js sets --remote-scale from the room it has.
+   Since Q34 the box itself is never scaled in the product; .remote stays
+   for mock pictures drawn smaller than their real size.
+   <div class="remote" data-w="1600" data-h="900"><div class="remote__screen">…a .bx…</div></div> */
+.remote { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--surface); }
+.remote__screen { position: absolute; left: 0; top: 0; transform-origin: 0 0; transform: translate(var(--remote-x, 0px), var(--remote-y, 0px)) scale(var(--remote-scale, 1)); }
+.remote[data-frozen] .remote__screen { filter: grayscale(1) brightness(.55); }
+

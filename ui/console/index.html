@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!--
+  SPDX-License-Identifier: Apache-2.0
+  Copyright 2026 SerenIT ApS and Prompted EV
+
+  The Sluse console: the first tab of the box's screen. The screens are the
+  mock-ups' (docs/design/mockups/console/, D-062): one app with a side
+  navigation, each section a URL hash so a reload keeps the place.
+
+  No <script src> to anywhere but here, no stylesheet from anywhere but here,
+  no font from anywhere but here. Not a hardening measure: a fact. This page
+  is served inside a guest with no route to the internet, which is the
+  product. Signing in is not this page's: the host's Sluse window does it
+  (D-036), so nothing here talks to Entra. It has no theme switch (Q69): the
+  box takes the Sluse window's theme.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sluse console</title>
+  <link rel="stylesheet" href="look/tokens.css">
+  <link rel="stylesheet" href="look/components.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+  <script src="look/icons.js"></script>
+</head>
+<body>
+  <div class="appshell cx" id="cx">
+    <header class="topbar cx-top">
+      <span class="topbar__brand"><span class="lockup" style="--tile:24px"><span class="app-icon" data-size="24" data-alt=""></span><span class="wordmark">sluse</span></span></span>
+      <!-- The AI apps first; Terminal set aside after them (Q42). -->
+      <nav class="cx-open" aria-label="Open an app in the box"><span class="cx-open__label">Open</span>
+        <button class="btn" type="button" data-app="claude-desktop">Claude</button>
+        <button class="btn" type="button" data-app="claude-code">Claude Code</button>
+        <button class="btn" type="button" data-app="codex">Codex</button>
+        <button class="btn btn--quiet cx-open__aside" type="button" data-app="terminal"><i data-icon="terminal"></i>Terminal</button>
+      </nav>
+      <div class="topbar__actions">
+        <span class="cx-live" id="live" role="status" aria-live="polite">Reading the record</span>
+        <button class="btn btn--quiet btn--icon" type="button" id="refresh" aria-label="Refresh" title="Refresh: read everything again now"><i data-icon="refresh"></i></button>
+      </div>
+    </header>
+    <div class="appshell__strips" id="strips"></div>
+    <div class="appshell__body">
+      <nav class="appshell__nav sidenav" aria-label="Console">
+        <a class="sidenav__item" href="#work"><i data-icon="box"></i>Work</a>
+        <a class="sidenav__item" href="#artifacts"><i data-icon="artifact"></i>Your artifacts<span class="sidenav__count" id="n-artifacts"></span></a>
+        <a class="sidenav__item" href="#copies"><i data-icon="download"></i>Copies in the box<span class="sidenav__count" id="n-copies"></span></a>
+        <a class="sidenav__item" href="#sources"><i data-icon="source"></i>Sources<span class="sidenav__count" id="n-sources"></span></a>
+        <a class="sidenav__item" href="#record"><i data-icon="journal"></i>Record<span class="sidenav__count" id="n-record"></span></a>
+        <div class="appshell__navfoot">
+          <p id="since"></p>
+          <button class="sidenav__item" type="button" data-about><i data-icon="info"></i>About this box</button>
+          <p id="deployment"></p>
+        </div>
+      </nav>
+      <main class="appshell__main" id="main" tabindex="-1"><div class="appshell__inner" id="page"></div></main>
+    </div>
+    <!-- Over the whole page while Sluse has not answered, or while the box
+         waits for a sign-in every source needs (Q8). Nothing to press. -->
+    <div class="cx-gate" id="gate" hidden></div>
+  </div>
+
+
+  <dialog class="dialog dialog--wide" id="dlg-about" aria-labelledby="dlg-about-t">
+    <form method="dialog">
+      <div class="dialog__head"><span class="app-icon" data-size="32" data-alt=""></span><h2 class="dialog__title" id="dlg-about-t">About this box</h2></div>
+      <div class="dialog__body about" id="about"></div>
+      <div class="dialog__actions"><button class="btn btn--primary" value="ok" autofocus>Close</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="dialog dialog--wide" id="dlg-states" aria-labelledby="dlg-states-t">
+    <form method="dialog">
+      <div class="dialog__head"><i data-icon="info"></i><h2 class="dialog__title" id="dlg-states-t">What the states mean</h2></div>
+      <div class="dialog__body" id="states"></div>
+      <div class="dialog__actions"><button class="btn btn--primary" value="ok" autofocus>Close</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="dialog dialog--wide dialog--destructive" id="dlg-clear" role="alertdialog" aria-labelledby="dlg-clear-t">
+    <form method="dialog">
+      <div class="dialog__head"><i data-icon="wipe"></i><h2 class="dialog__title" id="dlg-clear-t">Delete the copies in your box?</h2></div>
+      <div class="dialog__body">
+        <p>This deletes every copy Sluse let into this box when an AI agent fetched a file, from every session. It removes those files, not the record of them.</p>
+        <div class="consequences">
+          <div class="consequences__col consequences__col--goes"><h3><i data-icon="wipe" data-size="16"></i>Goes</h3><ul><li id="clear-what"></li><li>The provenance file beside each copy</li><li>Downloads that did not finish</li></ul></div>
+          <div class="consequences__col"><h3><i data-icon="check" data-size="16"></i>Stays</h3><ul><li>The record of every admission, in this box and on your computer</li><li>What was published, in Sluse Artifacts</li><li>The files at their sources</li></ul></div>
+        </div>
+        <p class="t-small t-muted">An AI agent can ask Sluse for a file again later. That is a new admission, recorded like the first.</p>
+      </div>
+      <div class="dialog__actions"><button class="btn" value="cancel" autofocus>Cancel</button><button class="btn btn--destructive" value="ok"><i data-icon="wipe"></i>Delete the copies</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="dialog" id="dlg-message" role="alertdialog" aria-labelledby="dlg-message-t">
+    <form method="dialog">
+      <div class="dialog__head"><i data-icon="problem"></i><h2 class="dialog__title" id="dlg-message-t"></h2></div>
+      <div class="dialog__body" id="message"></div>
+      <div class="dialog__actions"><button class="btn btn--primary" value="ok" autofocus>Close</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="dist/main.js"></script>
+</body>
+</html>

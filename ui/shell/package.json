@@ -1,0 +1,17 @@
+{
+  "name": "sluse-shell",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The Sluse host shell: one window on the user's box (D-025).",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@novnc/novnc": "1.7.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.0"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "boxId": "box-local-example",
+  "environment": "local",
+  "broker": {
+    "listen": "127.0.0.1:7580",
+    "url": "https://127.0.0.1:7580",
+    "certPath": "certs\\broker.pem",
+    "keyPath": "certs\\broker.key",
+    "clientCaPath": "certs\\client-ca.pem",
+    "certPin": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "endpoint": {
+    "clientCertPath": "certs\\endpoint.pem",
+    "clientKeyPath": "certs\\endpoint.key",
+    "consoleListen": "127.0.0.1:7582"
+  },
+  "artifacts": "artifacts",
+  "workspace": "workspace",
+  "journalDir": "journal",
+  "audit": {
+    "sink": "jsonl",
+    "path": "audit\\broker.jsonl"
+  }
+}

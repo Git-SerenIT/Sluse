@@ -1,0 +1,21 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# wayvnc on the kiosk's output, websocket only, for the shell's noVNC. Its
+# own unit, so a new secret or layout restarts it without closing anything
+# the user has open.
+set -eu
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+. /run/sluse/keyboard
+# Sway's socket, looked for every 0.2 s for up to a minute: exiting into the
+# unit's 2 s restart cost up to 2 s at every open (review, 2026-10-21).
+sock=
+for _ in $(seq 300); do
+    sock=$(ls "$XDG_RUNTIME_DIR" 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -n1) || true
+    [ -n "$sock" ] && break
+    sleep 0.2
+done
+[ -n "$sock" ] || { echo "sway is not up yet" >&2; exit 1; }
+export WAYLAND_DISPLAY="$sock"
+exec wayvnc -C /run/sluse/wayvnc.conf --websocket --output=HEADLESS-1 --keyboard="$KBD"

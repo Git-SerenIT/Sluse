@@ -1,0 +1,42 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# The user's home disk (D-026, S-8 step 4): the box's second disk, which
+# holds /home and is kept across a reset. On its first boot it is blank:
+# format it, label it SLUSEHOME, and copy the base's /home onto it, so the
+# user, the runtimes and their sign-ins live there. Then mount it over /home.
+set -eu
+# The second disk, not all of udev: settle waited for every device and cost
+# seconds at each boot (review, 2026-10-21). At most 10 s, then on as before.
+for _ in $(seq 100); do
+    [ "$(lsblk -dn -o TYPE | grep -c disk)" -ge 2 ] && break
+    sleep 0.1
+done
+if ! blkid -L SLUSEHOME >/dev/null 2>&1; then
+    for d in $(lsblk -dpnro NAME,TYPE | awk '$2 == "disk" {print $1}'); do
+        # Blank: no partitions and no filesystem. The system disk has
+        # partitions; nothing else is attached.
+        if [ -z "$(lsblk -no FSTYPE "$d" | tr -d ' \n')" ] && [ "$(lsblk -no NAME "$d" | wc -l)" = 1 ]; then
+            mkfs.ext4 -q -L SLUSEHOME "$d"
+            mount "$d" /mnt && cp -a /home/. /mnt/ && umount /mnt
+            break
+        fi
+    done
+fi
+if blkid -L SLUSEHOME >/dev/null 2>&1; then
+    mountpoint -q /home || mount -L SLUSEHOME /home
+    # The host may have grown the disk (box.homeGB, D-038 point 7). The
+    # filesystem is the whole disk, so it grows online, and a disk that has
+    # not grown is left as it is. Never shrunk: the host only grows it.
+    # Only when the disk is larger than the filesystem by more than a few
+    # blocks' rounding: a resize2fs at every boot cost seconds for nothing.
+    dev=$(blkid -L SLUSEHOME)
+    fs=$(dumpe2fs -h "$dev" 2>/dev/null | awk -F: '/^Block count/ {c=$2} /^Block size/ {s=$2} END {printf "%d", c * s}')
+    if [ "$(blockdev --getsize64 "$dev")" -gt "$((fs + 67108864))" ]; then
+        resize2fs "$dev" >/dev/null 2>&1 || echo "the home disk's filesystem did not grow"
+    fi
+else
+    # Only the base's own build has no home disk.
+    echo "no home disk; /home stays on the system disk"
+fi

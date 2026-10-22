@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+[Unit]
+Description=Sluse: this box's identity, from the host's bootstrap
+After=hv-kvp-daemon.service systemd-networkd.service
+
+[Service]
+Type=oneshot
+# Root, to read the KVP pool, which holds this open's token. The files it
+# writes belong to the desktop user, who runs the endpoint.
+ExecStart=/usr/local/bin/sluse-endpoint --config @HOME@/Sluse/sluse.json --enrol --owner @UID@:@GID@ --restart sluse-console.service
+# Exit 75 means the host has not sent a bootstrap yet: try again.
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

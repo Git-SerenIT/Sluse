@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# The box's screen, to the host only (D-027 point 4). The host is the only
+# peer that should reach it, and another box on the segment must not.
+table inet sluse_vnc
+delete table inet sluse_vnc
+table inet sluse_vnc {
+    chain input {
+        type filter hook input priority 0; policy accept;
+        tcp dport 7583 ip saddr 192.168.77.1 accept
+        tcp dport 7583 drop
+    }
+}

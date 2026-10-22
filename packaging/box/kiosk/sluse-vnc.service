@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+[Unit]
+Description=Sluse: the kiosk's screen over VNC, to the host only
+After=sluse-kiosk.service sluse-firewall.service
+Requires=sluse-firewall.service
+BindsTo=sluse-kiosk.service
+# Nothing to serve until the host has sent this open's secret.
+ConditionPathExists=/run/sluse/wayvnc.conf
+# No start limit: until sway is up this exits and is restarted every 2 s,
+# and the default (5 in 10 s) left it failed for good (L1, 2026-09-30).
+StartLimitIntervalSec=0
+
+[Service]
+User=@KIOSK_USER@
+ExecStart=/usr/local/libexec/sluse/vnc
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=sluse-kiosk.service

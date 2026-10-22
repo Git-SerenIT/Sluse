@@ -1,0 +1,412 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Authored",
+  "description": "The authored file: what the admin decided (D-038 point 2). Identity,\npolicy and settings, and nothing about one device. **Its hash is\n`config_version`**, so every device of a deployment cites the same one.",
+  "type": "object",
+  "properties": {
+    "box": {
+      "description": "The box's size and the copy-out switch (D-038 point 7).",
+      "$ref": "#/$defs/BoxSettings",
+      "default": {
+        "copyOut": true,
+        "homeGB": 40,
+        "memoryGB": 6
+      }
+    },
+    "deployment": {
+      "description": "Which deployment this file is, for the install's refusal of a second\none (D-038 point 4). Setup always writes it; a hand-written LOCAL file\nmay leave it out.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Deployment"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "egress": {
+      "description": "Where the box may connect out to, through the host's proxy (M9,\nD-035). **Absent means nowhere**: a box whose config has no list\nreaches the broker and nothing else.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EgressConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "entra": {
+      "description": "The tenant and Sluse's app registration. **Required when any source is\n`sharepoint`**, and absent otherwise. No credential: the broker is a\npublic client (D-036).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EntraConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "maxFetchBytes": {
+      "description": "The ceiling on one `fetch`, or `None` for no ceiling. **D-016.**\n\nDefaults to absent, deliberately. Admission is the control point and not\nsize (invariant 4), and `fetch` exists so an agent can have a file it\nwill process with local tools — a default cap would break that for a\nnumber nobody has measured. A deployment that wants a ceiling says so,\nand then `SluseError::TooLarge` refuses above it exactly as `read` does.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "schemaVersion": {
+      "description": "Checked before anything else, and refused if unknown. A file from a\nnewer platform must stop an older box rather than be half-understood.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "sources": {
+      "description": "The sources, in the order the console shows them. At least one.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SourceConfig"
+      }
+    },
+    "volume": {
+      "description": "When to raise a bulk-admission alert.",
+      "$ref": "#/$defs/VolumeConfig"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sources",
+    "volume"
+  ],
+  "$defs": {
+    "BoxSettings": {
+      "description": "The box's size and the copy-out switch.",
+      "type": "object",
+      "properties": {
+        "copyOut": {
+          "description": "Copying out of the box through the clipboard. It stops copy and paste\nout, not retyping or photographing the screen.",
+          "type": "boolean",
+          "default": true
+        },
+        "homeGB": {
+          "description": "The home disk. Setup offers 40, 80 or 120. Grows an existing box,\nnever shrinks it.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 40,
+          "minimum": 0
+        },
+        "memoryGB": {
+          "description": "The box's memory. Setup offers 4, 6 or 8.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 6,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Deployment": {
+      "description": "Which deployment an authored file belongs to.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Setup makes it once and keeps it. Letters, digits, `-` and `_`: it is\ncompared by the install script and written to the registry.",
+          "type": "string"
+        },
+        "name": {
+          "description": "What the admin calls it. Display only.",
+          "type": "string",
+          "default": ""
+        },
+        "revision": {
+          "description": "Counts publishes, from 1. Display only: the hash is the version.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision"
+      ]
+    },
+    "EgressConfig": {
+      "description": "The box's way out: host names, nothing else (D-035). The proxy sees the\nhost a connection is for, never its method or path, so a host that takes\nuploads is a way out for whatever the box sends it (`threat-model.md`).",
+      "type": "object",
+      "properties": {
+        "allow": {
+          "description": "`host.example.com` for that host alone, `*.example.com` for every\nname under it but not `example.com` itself. Lowercase, no scheme, port,\npath or address: an address is refused, because the list names whom\nthe box talks to, and a name's addresses change. **The only part that\nis enforced** (D-038 point 5).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bundles": {
+          "description": "The bundles setup's catalog offered and the admin chose. Display only:\n`allow` is written out in full.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "catalog": {
+          "description": "The catalog version the bundles came from. A device that ships a newer\none says so in posture; it never widens `allow` by itself.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "log": {
+          "description": "The per-connection log, `egress.jsonl`. Off when absent.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EgressLog"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "allow"
+      ]
+    },
+    "EgressLog": {
+      "description": "The per-connection egress log (D-038 point 7). Refusals reach the Event\nLog whether or not it is on.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxMB": {
+          "description": "The size at which it rolls over, keeping one older file.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "maxMB"
+      ]
+    },
+    "EntraConfig": {
+      "description": "Sluse's app registration in Entra. **No credential** (D-036): the broker\nis a public client, the user signs in on the host, and the broker holds\nthe user's tokens in memory.",
+      "type": "object",
+      "properties": {
+        "clientId": {
+          "description": "The registration's application (client) id: the ID token's audience.",
+          "type": "string"
+        },
+        "tenantId": {
+          "description": "The directory (tenant) id, a GUID. Tokens from any other tenant are\nrefused, whatever else about them is right.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tenantId",
+        "clientId"
+      ]
+    },
+    "SourceConfig": {
+      "description": "One source: what it is called, where it is, and how much of it is in scope.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "What kind of source, and its address.",
+          "$ref": "#/$defs/SourceKind"
+        },
+        "name": {
+          "description": "The name the agent uses as the first segment of every path.",
+          "$ref": "#/$defs/SourceName"
+        },
+        "scope": {
+          "description": "Paths relative to the source's root. **Only these, and the directories\non the way to them, exist from the agent's side** (D-008: blinders, not\na fence). Empty means the whole root is in scope.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "sensitivity": {
+          "description": "Which of the configured sensitivity levels applies to this source.",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "sensitivity"
+      ]
+    },
+    "SourceKind": {
+      "description": "The kinds of source, and the address each one needs.\n\nAdjacently tagged: `{\"type\": \"smb\", \"address\": {\"unc\": \"\\\\\\\\host\\\\share\"}}`.\nThe shape follows `docs/config.md`, which names the two parts \"type\" and\n\"address\", and it keeps `deny_unknown_fields` working — serde cannot enforce\nthat alongside a flattened field, and silently accepting a mistyped key in a\nfile that defines scope is exactly the failure invariant 6 exists to stop.",
+      "oneOf": [
+        {
+          "description": "A directory on the machine the broker runs on. The LOCAL fixture, and\nnothing a customer would deploy.",
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "object",
+              "properties": {
+                "root": {
+                  "description": "Absolute path to the root.",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "root"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "local-folder"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "address"
+          ]
+        },
+        {
+          "description": "An SMB share, addressed by UNC. Never a mapped drive letter: a letter is\nper-session state of whoever mapped it, and the broker runs as SYSTEM,\nwhere it means something different or nothing at all.",
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "object",
+              "properties": {
+                "unc": {
+                  "description": "`\\\\server\\share`, optionally with a path below it.",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "unc"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "smb"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "address"
+          ]
+        },
+        {
+          "description": "A SharePoint document library, reached with the user's own token.\nNeeds [`Authored::entra`] (M7).\n\nScope entries are paths inside the library, and are compared\ncase-insensitively: SharePoint's own paths are.",
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "object",
+              "properties": {
+                "library": {
+                  "description": "The document library's name.",
+                  "type": "string"
+                },
+                "siteUrl": {
+                  "description": "`https://tenant.sharepoint.com/sites/name`.",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "siteUrl",
+                "library"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "sharepoint"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "address"
+          ]
+        },
+        {
+          "description": "The user's own `%USERPROFILE%\\Sluse Inputs` (D-054): files the user\nputs there to be admitted. Per user, so no address: the broker finds it\nfrom the user's profile and creates it as them at start, as it does\nSluse Artifacts. Its contents are the user's choice, not the admin's,\nand its provenance is the user's device: off unless the admin adds it.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inputs"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The `Sluse` folder at the root of the signed-in user's own OneDrive\n(D-054), reached with their token as a library is. Per user, so no\naddress. The user makes the folder and decides what is in it; the\nbroker only reads. A shortcut in it is out of scope. Needs\n[`Authored::entra`].",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "onedrive"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "SourceName": {
+      "description": "A source's name in the config, which is also the first segment of every\nrequest path. Validate with [`SourceName::parse`]; `new_unchecked` is for\nvalues the loader has already accepted.",
+      "type": "string"
+    },
+    "VolumeConfig": {
+      "description": "Bulk-admission alerting.\n\nDetective, not preventive: the alert is raised and the admission proceeds\n(`docs/threat-model.md`). Semantics are provisional — count of *distinct\ncontent hashes* per session per source in a sliding window — and are one of\nthe things `docs/config.md` lists as unspecified.",
+      "type": "object",
+      "properties": {
+        "admissions": {
+          "description": "How many distinct files in the window before an alert is raised.\n\nS-2 finding 7 sets the floor on a sane value: a first `fetch` of a Rust\ncrate was 12 files in 13 seconds, and that is ordinary work rather than\nan incident. A threshold below it would alert on every session start.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "bytes": {
+          "description": "How many bytes in the same window before an alert is raised. **D-016.**\n\n`None` means bytes are not watched, which is the default and what every\nconfig written before 2026-09-22 says by omission.\n\nCounting files alone measured the wrong thing, and the first scored run\nshowed it: one `fetch` moved a 500 MB file, 582 MB crossed in the\nsession, and the single alert that was raised described a *rate of 25\nfiles* that had nothing to do with either number. Bytes are summed over\n**distinct content hashes**, the same dedupe `admissions` uses, so one\nfile read twice is one file's worth of bytes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "windowSeconds": {
+          "description": "The sliding window, in seconds.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "admissions",
+        "windowSeconds"
+      ]
+    }
+  }
+}

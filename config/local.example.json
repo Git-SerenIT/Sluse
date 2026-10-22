@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 3,
+  "sources": [
+    {
+      "name": "fixture",
+      "kind": {
+        "type": "local-folder",
+        "address": { "root": "C:\\Users\\JohannesKorsdal\\Sluse-test\\fixture" }
+      },
+      "scope": ["in-scope"],
+      "sensitivity": 2
+    },
+    {
+      "name": "share",
+      "kind": {
+        "type": "smb",
+        "address": { "unc": "\\\\FS01\\share\\sluse-test" }
+      },
+      "scope": ["in-scope"],
+      "sensitivity": 3
+    }
+  ],
+  "volume": {
+    "admissions": 25,
+    "windowSeconds": 60
+  }
+}

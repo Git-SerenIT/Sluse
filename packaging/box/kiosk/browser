@@ -1,0 +1,22 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# The kiosk's browser, once the console answers. Firefox shows an error page
+# for a port that is not open yet and never retries it, and the console only
+# starts once the box is enrolled (L1, 2026-09-30).
+# ponytail: waits for ever; the serial log (D-030) says why when it does.
+until curl -s -o /dev/null http://localhost:7582/; do sleep 1; done
+# Said on the serial console (console-log), where the host's service hears
+# it: the Sluse window keeps its wait over the box until then (Q9).
+logger -t sluse-console-up "the console answers on 7582"
+# Not --kiosk: that is fullscreen, and sway opens every other window behind a
+# fullscreen one, so each app the console launched was a tab nobody could see
+# (L1, 2026-09-30). The browser's own bars are hidden by the profile's
+# userChrome.css instead (kiosk), and sway's tabs show the apps beside it.
+# --name is its Wayland app id, which sway names the tab by (sway.conf, Q5).
+# Not exec: when the console's Firefox ends, the box's console log says so
+# and with what code (console-log forwards the tag). On L1 (2026-10-21) it
+# was missing and nothing anywhere said so.
+env MOZ_ENABLE_WAYLAND=1 firefox --new-instance --name sluse-console --profile "$SLUSE_PROFILE" http://localhost:7582/
+logger -t sluse-console-down "the console's Firefox ended (exit $?)"

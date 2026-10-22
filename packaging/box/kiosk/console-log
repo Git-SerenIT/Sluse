@@ -1,0 +1,37 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# The box's log to the host's administrators, over the serial console
+# (D-030). Output only: nothing in the box reads ttyS0, and
+# serial-getty@ttyS0 is masked, so there is no login on it.
+#
+# What goes: systemd's own lines about every unit, the Sluse units and the
+# KVP daemon at every level, and anything else at error level. Not the
+# kiosk's own output, which is where the apps run, apart from its errors and
+# the one line saying the console answers, which the host waits for (Q9).
+#
+# One stream, matches joined by "+": four overlapping ones sent a line up to
+# three times over a serial line that carries about 1 KB/s, which the host's
+# wait for the console's line shares (review, 2026-10-21).
+set -eu
+exec >/dev/ttyS0 2>&1
+journalctl -b -f -o short-iso \
+    _PID=1 + \
+    _SYSTEMD_UNIT=sluse-home.service _SYSTEMD_UNIT=sluse-firewall.service _SYSTEMD_UNIT=sluse-bootstrap.service \
+    _SYSTEMD_UNIT=sluse-vnc.service _SYSTEMD_UNIT=sluse-enrol.service _SYSTEMD_UNIT=sluse-console.service \
+    _SYSTEMD_UNIT=hv-kvp-daemon.service + \
+    PRIORITY=0 PRIORITY=1 PRIORITY=2 PRIORITY=3 + \
+    SYSLOG_IDENTIFIER=sluse-console-up SYSLOG_IDENTIFIER=sluse-console-down &
+# What the boot spent its time on, once it has finished, and later than the
+# console's line so as not to hold it up: the host's administrators read it
+# in console.log when a box was slow to show.
+(
+    systemctl is-system-running --wait >/dev/null 2>&1 || true
+    sleep 20
+    echo "sluse-boot-timing:"
+    systemd-analyze || true
+    systemd-analyze critical-chain sluse-vnc.service || true
+    systemd-analyze blame | head -n 15 || true
+) &
+wait

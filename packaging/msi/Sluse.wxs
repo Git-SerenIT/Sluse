@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: Apache-2.0
+  Copyright 2026 SerenIT ApS and Prompted EV
+
+  The Sluse MSI (slice 5, D-024 point 4): the same for every customer, and
+  unsigned for the pilots. Intune installs it as a Win32 app; the tenant's
+  own package (from `sluse admin setup`) installs after it.
+
+  What it does, and nothing more:
+  - the files, from a staged package (`-d Stage=...`);
+  - the lifecycle service, as SYSTEM, started automatically;
+  - the Start-menu shortcut to the shell;
+  - Hyper-V, enabled with a reboot if the device does not have it yet
+    (D-024 point 6). Intune restarts on the MSI's 3010.
+
+  The switch, the firewall rule and the Event Log source are the
+  service's own device init, which it runs at every start once Hyper-V is
+  up. Uninstall runs `sluse device remove`, which takes those away again,
+  with every box and the data directory: uninstall leaves nothing.
+
+  Two modes (D-037 point 1, D-039 slice 6), as the installer's own feature
+  tree: "Sluse on this computer" (Hyper-V, the service, the box, the Sluse
+  shortcut, the sluse: link its notifications use),
+  on by default and what a quiet install (Intune's) gets; and "Sluse Admin"
+  (its shortcut), off by default. An administrator who also uses Sluse
+  ticks both. Scripted: ADDLOCAL=Admin, or ADDLOCAL=Device,Admin.
+
+  Build (Windows, WiX v5, with its UI extension):
+    wix build packaging\msi\Sluse.wxs -ext WixToolset.UI.wixext -arch x64 -d Stage=<staged package> -d Version=<x.y.z> -o Sluse.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Sluse"
+           Manufacturer="SerenIT and Prompted"
+           Version="$(var.Version)"
+           UpgradeCode="9f93c5ab-0f07-44ae-9c1f-1836b075a206"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <!-- A newer build of the same version replaces the older one: the version
+         number is a claim about proven-ness and moves by hand. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer Sluse is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- The feature tree is the mode choice. -->
+    <ui:WixUI Id="WixUI_FeatureTree" />
+
+    <!-- Sluse runs here and "Sluse on this computer" would not be installed: said on
+         Next, with a way to keep it (D-045 point 5; L1, 2026-10-05, a newer
+         Sluse Admin took the device half away). A warning, not a block. On
+         an upgrade the new product has nothing installed, so unticked is no
+         action, not removal; in a change of this product it is removal. -->
+    <Property Id="DEVICEPRESENT">
+      <RegistrySearch Id="SluseService" Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\Sluse" Name="ImagePath" Type="raw" />
+    </Property>
+    <UI>
+      <Dialog Id="DeviceGoesDlg" Width="280" Height="110" Title="Sluse Setup">
+        <Control Id="Text" Type="Text" X="15" Y="15" Width="250" Height="55" NoPrefix="yes"
+                 Text="&quot;Sluse on this computer&quot; is not ticked. Going on removes Sluse and every box on this computer, for everyone who uses it, until Sluse is installed again. Each person's Sluse Artifacts folder stays." />
+        <Control Id="Keep" Type="PushButton" X="55" Y="82" Width="130" Height="17" Default="yes" Cancel="yes" Text="Keep Sluse on this computer">
+          <Publish Event="AddLocal" Value="Device" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Remove" Type="PushButton" X="190" Y="82" Width="75" Height="17" Text="Remove it">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+      </Dialog>
+      <Publish Dialog="CustomizeDlg" Control="Next" Event="SpawnDialog" Value="DeviceGoesDlg" Order="1"
+               Condition="DEVICEPRESENT AND (&amp;Device=2 OR (NOT Installed AND &amp;Device&lt;&gt;3))" />
+    </UI>
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)License.rtf" />
+
+    <!-- Installed apps' help link is the installed README (Q61), a web
+         address once one exists. -->
+    <SetProperty Id="ARPHELPLINK" Value="[INSTALLFOLDER]README.md" After="CostFinalize" />
+
+    <!-- Hyper-V is there when its management service is. -->
+    <Property Id="VMMSPRESENT">
+      <RegistrySearch Id="Vmms" Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\vmms" Name="ImagePath" Type="raw" />
+    </Property>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Sluse">
+        <Directory Id="BINFOLDER" Name="bin" />
+        <Directory Id="BOXFOLDER" Name="box" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <StandardDirectory Id="System64Folder" />
+
+    <ComponentGroup Id="Binaries" Directory="BINFOLDER">
+      <Component>
+        <File Id="SluseExe" Source="$(var.Stage)\bin\sluse.exe" KeyPath="yes" />
+        <!-- The lifecycle service (D-027): SYSTEM, automatic. -->
+        <ServiceInstall Name="Sluse"
+                        DisplayName="Sluse lifecycle service"
+                        Description="Opens each user's Sluse box and runs the broker."
+                        Type="ownProcess" Start="auto" Account="LocalSystem" ErrorControl="normal"
+                        Arguments="service" />
+        <ServiceControl Id="SluseService" Name="Sluse" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+      </Component>
+      <Component>
+        <File Source="$(var.Stage)\bin\sluse-broker.exe" KeyPath="yes" />
+      </Component>
+      <Component>
+        <File Source="$(var.Stage)\bin\sluse-endpoint.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- The shell, which is both windows: the box's, and Sluse Admin's
+         with its admin argument (the shortcut below). -->
+    <ComponentGroup Id="Shell" Directory="BINFOLDER">
+      <Component>
+        <File Id="SluseShellExe" Source="$(var.Stage)\bin\sluse-shell.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="DeviceShortcut" Directory="ProgramMenuFolder">
+      <Component>
+        <!-- The app id makes Windows' notifications Sluse's (Q11); the shell
+             sets the same on its process. -->
+        <Shortcut Id="SluseShortcut" Name="Sluse" Description="Open your Sluse box"
+                  Target="[BINFOLDER]sluse-shell.exe" WorkingDirectory="BINFOLDER">
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="SerenIT.Sluse" />
+        </Shortcut>
+        <RegistryValue Root="HKLM" Key="Software\Sluse\Shortcuts" Name="Sluse" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <!-- The sluse: link, for the notifications' buttons (jok, 2026-10-20):
+           the shell takes open, close and artifacts, and nothing else. Any
+           page or program can follow it; each verb shows Sluse's window or
+           a folder, and closing still asks. -->
+      <Component>
+        <RegistryValue Root="HKLM" Key="Software\Classes\sluse" Type="string" Value="URL:Sluse" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\sluse" Name="URL Protocol" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\sluse\shell\open\command" Type="string" Value="&quot;[BINFOLDER]sluse-shell.exe&quot; &quot;%1&quot;" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="AdminShortcut" Directory="ProgramMenuFolder">
+      <Component>
+        <Shortcut Id="SluseAdminShortcut" Name="Sluse Admin" Description="Set Sluse up for your tenant"
+                  Target="[BINFOLDER]sluse-shell.exe" Arguments="--admin" WorkingDirectory="BINFOLDER" />
+        <RegistryValue Root="HKLM" Key="Software\Sluse\Shortcuts" Name="SluseAdmin" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- The box's bundle, which the base's build carries onto its seed disk. -->
+    <ComponentGroup Id="BoxBundle" Directory="BOXFOLDER">
+      <Component>
+        <File Source="$(var.Stage)\box\sluse-box-linux.tar.gz" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- The console's files, the config schema, and what the package is. -->
+    <ComponentGroup Id="Rest" Directory="INSTALLFOLDER">
+      <Files Include="$(var.Stage)\ui\**" Subdirectory="ui" />
+      <Files Include="$(var.Stage)\config\**" Subdirectory="config" />
+      <!-- The Sluse Artifacts policy, for the admin to deploy with Intune. -->
+      <Files Include="$(var.Stage)\intune\**" Subdirectory="intune" />
+      <Component>
+        <File Source="$(var.Stage)\VERSION.txt" KeyPath="yes" />
+      </Component>
+      <Component>
+        <File Source="$(var.Stage)\README.md" KeyPath="yes" />
+      </Component>
+      <Component>
+        <File Source="$(var.Stage)\Test-Sluse.ps1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Core" Title="Sluse" Level="1" Display="expand" AllowAbsent="no"
+             Description="The shell, the configuration's schema and the egress catalog.">
+      <ComponentGroupRef Id="Shell" />
+      <ComponentGroupRef Id="Rest" />
+      <Feature Id="Device" Title="Sluse on this computer" Level="1"
+               Description="Sluse for the people who use this computer: Hyper-V, the Sluse service, the box, and the Sluse shortcut.">
+        <ComponentGroupRef Id="Binaries" />
+        <ComponentGroupRef Id="BoxBundle" />
+        <ComponentGroupRef Id="DeviceShortcut" />
+      </Feature>
+      <!-- Off by default (above INSTALLLEVEL 1), so a quiet install is a device. -->
+      <Feature Id="Admin" Title="Sluse Admin" Level="1000"
+               Description="For your tenant's administrator: Sluse's app registration, the configuration, and publishing to Intune.">
+        <ComponentGroupRef Id="AdminShortcut" />
+      </Feature>
+    </Feature>
+
+    <!-- Hyper-V, on a device without it: the one feature Sluse turns on
+         (D-024 point 6), then a reboot, which Intune performs. -->
+    <CustomAction Id="EnableHyperV" Directory="System64Folder"
+                  ExeCommand="dism.exe /online /enable-feature /featurename:Microsoft-Hyper-V-All /all /norestart /quiet"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <!-- Uninstall leaves nothing: the boxes, the switch, the NAT, the rule,
+         the Event Log source and the data directory. After the service is
+         stopped, before the files go. -->
+    <CustomAction Id="DeviceRemove" FileRef="SluseExe" ExeCommand="device remove"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <InstallExecuteSequence>
+      <!-- Only for "Sluse on this computer": Sluse Admin alone needs no Hyper-V. -->
+      <Custom Action="EnableHyperV" Before="InstallFinalize" Condition="NOT VMMSPRESENT AND &amp;Device=3" />
+      <ScheduleReboot After="InstallFinalize" Condition="NOT VMMSPRESENT AND &amp;Device=3" />
+      <Custom Action="DeviceRemove" After="StopServices" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE AND !Device=3" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>
