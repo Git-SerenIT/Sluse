@@ -74,6 +74,8 @@ packages:
   # The box's own pixels in Liberation Sans and Mono (Q4).
   - fonts-liberation
   - firefox
+  # Mistral Vibe's installer: Ubuntu's Python has no venv or pip of its own.
+  - pipx
 runcmd:
   # Hyper-V's daemons, for the flavour as well as today's kernel: without the
   # flavour package the first kernel update leaves KVP, and so enrolment,
@@ -97,6 +99,12 @@ runcmd:
   # (D-026 point 4), so they update themselves and survive a reset.
   - [su, -, sluse, -c, 'curl -fsSL https://claude.ai/install.sh | bash']
   - [su, -, sluse, -c, 'curl -fsSL https://chatgpt.com/codex/install.sh | sh']
+  # Mistral Vibe (D-070) from PyPI's wheel, through the python bundle, not
+  # its vendor's script: that fetches uv and a Python from GitHub, which is
+  # off by default. System-wide (/opt/pipx, /usr/local/bin), not in home: a
+  # reset keeps the home disk, so only the base carries a new Vibe to a box.
+  # It updates with the base; the CLI wrapper turns its own updater off.
+  - [sh, -c, '. /etc/profile.d/sluse-proxy.sh && pipx install --global mistral-vibe']
   # Sluse itself: the bundle on the seed disk (slices 1 and 2).
   - [sh, -c, 'mkdir -p /mnt/seed && mount -L CIDATA /mnt/seed && tar xzf /mnt/seed/sluse-box-linux.tar.gz -C /opt && umount /mnt/seed']
   - [bash, /opt/sluse/kiosk/install.sh, sluse]
@@ -114,8 +122,8 @@ runcmd:
   # 80 kB/s, then nothing).
   - [sh, -c, 'for i in 1 2 3; do snap list firefox >/dev/null 2>&1 && break; snap install firefox; done; apt-get install -y firefox']
   # The build's verdict, its last line on the console the service records
-  # (D-063): Sluse, the AI apps, Firefox's snap and every package in the
-  # list above, or the base is not kept. runcmd carries on past a failed
+  # (D-063): Sluse, Claude Desktop and Claude Code, Firefox's snap and every
+  # package in the list above, or the base is not kept. runcmd carries on past a failed
   # step, so this is where a failure is caught; what is missing and the end
   # of cloud-init's output go with it, for the console log.
   - |
@@ -123,9 +131,13 @@ runcmd:
     test -f /var/lib/sluse/installed || m="$m Sluse"
     test -x /usr/bin/claude-desktop || m="$m Claude-Desktop"
     su - sluse -c "command -v claude" >/dev/null 2>&1 || m="$m Claude-Code"
-    su - sluse -c "command -v codex" >/dev/null 2>&1 || m="$m Codex"
     snap list firefox >/dev/null 2>&1 || m="$m Firefox"
-    for p in chrony curl gnupg python3 nftables sway xwayland wayvnc foot fonts-liberation firefox; do
+    # Not failures (D-070): each comes through an egress bundle an admin may
+    # have off, Codex through codex, Vibe from PyPI through python. The button
+    # then says it is not in this box.
+    su - sluse -c "command -v codex" >/dev/null 2>&1 || echo "Codex was not installed: it comes through the codex bundle" > /dev/ttyS0
+    test -x /usr/local/bin/vibe || echo "Mistral Vibe was not installed: it comes from PyPI, the python bundle" > /dev/ttyS0
+    for p in chrony curl gnupg python3 nftables sway xwayland wayvnc foot fonts-liberation firefox pipx; do
       dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "ok installed" || m="$m $p"
     done
     { if [ -z "$m" ]; then echo SLUSE-BUILD-OK; else echo "SLUSE-BUILD-FAILED:$m"; tail -n 60 /var/log/cloud-init-output.log; fi; } > /dev/ttyS0 2>&1

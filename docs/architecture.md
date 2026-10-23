@@ -64,7 +64,7 @@ flowchart TB
 
 | Component | Where | Role |
 |---|---|---|
-| Agent runtime | the box | Claude Code, Claude Desktop or Codex. Assumed hostile; may run as root. Never sees a token for company data. |
+| Agent runtime | the box | Claude Code, Claude Desktop, Codex or Mistral Vibe. Assumed hostile; may run as root. Never sees a token for company data. |
 | `sluse-endpoint` | the box | The only boundary crossing for file content. An MCP server over stdio: the agent's tools, the admission journal, the envelope on reads, the sources declared on publish. Its scope checks are advice only. |
 | Console | the box | What Sluse let in, what was published and from what, the copies in the box, the sources. Shown only what the agent may see. |
 | Workspace | the box | Admitted files and the agent's output, on the box's own disk. Kept until the person clears it or wipes the box. |
@@ -169,12 +169,14 @@ carries two lists:
 - **Built on the device, not shipped.** The service downloads Canonical's
   Ubuntu image, checks its signature and checksum, converts it, and runs
   one cloud-init build in a build VM. The build's last act is a verdict:
-  a base without Sluse, the AI apps or the console is not kept. That disk,
+  a base without Sluse, Claude Desktop, Claude Code or the console is not
+  kept; Codex and Mistral Vibe are left out when their egress groups were
+  off. That disk,
   read-only, is the device's base.
 - **One box per person,** one running at a time: a system disk on the base
   and a home disk of its own. The base has sway (in tabs), Firefox for the
-  console, Claude Desktop, Claude Code, Codex, pandoc and poppler, and the
-  Sluse bundle. No SSH server; the desktop user has no password and no
+  console, Claude Desktop, Claude Code, Codex, Mistral Vibe (when PyPI is
+  reachable at its build), pandoc and poppler, and the Sluse bundle. No SSH server; the desktop user has no password and no
   sudo.
 - **Its identity, at each open:** the service writes a one-time token into
   the box's Hyper-V key-value pool; the box trades it at the broker's

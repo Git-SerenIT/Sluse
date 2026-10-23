@@ -23,9 +23,10 @@
 //! alone measured the wrong thing: one `fetch` moved a 500 MB file, 582 MB
 //! crossed in the session, and the one alert raised described a rate of 25
 //! files that had nothing to do with either. Bytes are summed over the same
-//! distinct hashes, so the dedupe argument below applies unchanged, and the
-//! threshold is absent by default — nothing measured yet says what the number
-//! should be.
+//! distinct hashes, so the dedupe argument below applies unchanged. The
+//! threshold is optional in the schema; Sluse Admin writes 50 MB beside its 25
+//! files in 60 s, and a hand-written config that leaves it out watches no
+//! bytes. Nothing measured yet says what the number should be.
 //!
 //! Four choices in that sentence, none of them settled — `docs/config.md` lists
 //! the threshold semantics as unspecified and the producer as undecided:

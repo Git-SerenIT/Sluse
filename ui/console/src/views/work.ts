@@ -44,7 +44,7 @@ export function renderWork(target: Element, d: Data): void {
   const howto = nothing && earlier === 0 ? el("section", { class: "stack", style: "--stack-gap: var(--space-3)" },
     el("h2", { class: "t-h3" }, "How work gets in and out"),
     el("ol", { class: "howto" },
-      el("li", {}, el("b", {}, "Open an AI agent"), el("span", {}, "Claude, Claude Code or Codex, with Open in the bar at the top of this page.")),
+      el("li", {}, el("b", {}, "Open an AI agent"), el("span", {}, "Claude, Claude Code, Codex or Mistral Vibe, with Open in the bar at the top of this page.")),
       el("li", {}, el("b", {}, "Ask it for files"), el("span", {}, "It asks Sluse. Sluse lets in what you may open yourself, from the sources your IT department chose, and records each one.")),
       el("li", {}, el("b", {}, "Find the results"), el("span", {}, "What the agent publishes lands in Sluse Artifacts on your computer, with the sources it declared.")))) : null;
 

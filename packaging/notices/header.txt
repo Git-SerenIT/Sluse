@@ -1,0 +1,20 @@
+Sluse: third-party notices
+
+Sluse is Apache-2.0, copyright 2026 SerenIT ApS and Prompted EV. Its
+programs include the third-party software below, each under its own
+licence, whose text follows the list of what uses it.
+
+- The Rust standard library, compiled into every program: MIT OR
+  Apache-2.0, copyright the Rust Project Developers,
+  https://github.com/rust-lang/rust
+- Rust crates, listed by licence below.
+- noVNC 1.7.0, unmodified, in the Sluse window (sluse-shell.exe): MPL-2.0,
+  with the components its own licence lists. Source:
+  https://github.com/novnc/noVNC/tree/v1.7.0
+
+The crates under MPL-2.0 are used unmodified; each one's source is at
+https://crates.io under the name and version listed.
+
+The box downloads its own software from each vendor when it is built on
+the PC (Ubuntu, Firefox, Claude Desktop, Claude Code, Codex, Mistral Vibe,
+pandoc, poppler); none of it is in this package.

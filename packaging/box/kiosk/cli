@@ -15,11 +15,48 @@
 case "$1" in
     claude) name="Claude Code" ;;
     codex) name="Codex" ;;
+    vibe) name="Mistral Vibe" ;;
     *) echo "cli: $1 is not one of the box's runtimes" >&2; exit 2 ;;
 esac
 # In the workspace, so the work and what is fetched sit where the inventory
 # looks; a default, not a fence: the runtime can write the rest of home
 # (L1, 2026-10-07). Home before the first open has made the workspace.
+# Codex and Vibe are left out of a base built with their bundle off
+# (user-data.yaml, D-070): say so, not "command not found".
+if ! bash -lc "command -v $1" >/dev/null 2>&1; then
+    printf '%s is not installed in this box. Send the details to your IT department.\nPress Enter to close this window. ' "$name"
+    read -r _
+    exit 127
+fi
+# Vibe reads its user config only, so Sluse writes it here, at launch, once:
+# a box's home outlives the base it was made from, and a later run keeps the
+# user's own. Mistral's EU endpoint, which the mistral bundle lists; the
+# global one has no location commitment. Restating the provider replaces
+# Vibe's built-in one whole, so its sign-in addresses are restated too.
+# Telemetry, updates and Mistral's hosted connectors off: their hosts are not
+# listed, and each refusal would be an Event Log record (D-070).
+if [ "$1" = vibe ] && [ ! -e "$HOME/.vibe/config.toml" ]; then
+    mkdir -p "$HOME/.vibe" && cat > "$HOME/.vibe/config.toml" <<TOML
+enable_telemetry = false
+enable_update_checks = false
+enable_auto_update = false
+enable_connectors = false
+
+[[providers]]
+name = "mistral"
+api_base = "https://api.eu.mistral.ai/v1"
+api_key_env_var = "MISTRAL_API_KEY"
+browser_auth_base_url = "https://console.mistral.ai"
+browser_auth_api_base_url = "https://console.mistral.ai/api"
+backend = "mistral"
+
+[[mcp_servers]]
+name = "sluse"
+transport = "stdio"
+command = "/usr/local/bin/sluse-endpoint"
+args = ["--config", "$HOME/Sluse/sluse.json", "--mcp"]
+TOML
+fi
 if cd "$HOME/Sluse/workspace" 2>/dev/null; then folder="~/Sluse/workspace"; else cd "$HOME"; folder="~"; fi
 seen="${XDG_CONFIG_HOME:-$HOME/.config}/sluse/$1-seen"
 dim=$(printf '\033[2m') bold=$(printf '\033[1m') off=$(printf '\033[0m')
@@ -30,6 +67,20 @@ else
     if [ "$1" = codex ]; then
         how="Microsoft's sign-in page cannot open in your box. When Codex asks you to
 sign in, choose the device code, and enter the code in your browser on Windows."
+    elif [ "$1" = vibe ]; then
+        # Vibe's browser sign-in polls Mistral from the box (D-070): the
+        # address is opened elsewhere and nothing is pasted back.
+        if [ "$(cat /run/sluse/copy-out 2>/dev/null)" = off ]; then
+            how="Microsoft's sign-in page cannot open in your box, and copying text out of it
+is turned off. When Mistral Vibe asks you to sign in, choose the browser, type
+the address it shows into your browser on Windows, and sign in there. Vibe
+carries on by itself. If that is not practical, send the details to your IT
+department."
+        else
+            how="Microsoft's sign-in page cannot open in your box. When Mistral Vibe asks you
+to sign in, choose the browser, copy the address it shows, open it in your
+browser on Windows and sign in there. Vibe carries on by itself."
+        fi
     elif [ "$(cat /run/sluse/copy-out 2>/dev/null)" = off ]; then
         how="Microsoft's sign-in page cannot open in your box, and copying text out of it
 is turned off. If Claude Code shows an address to sign in with, type it into

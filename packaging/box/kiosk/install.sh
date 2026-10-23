@@ -68,7 +68,8 @@ systemctl start sluse-bootstrap.service
 
 # The agent's runtime reaches Sluse through the endpoint, started by the
 # runtime itself (--mcp). Each of the three runtimes (D-027 point 3) that is
-# installed for this user. Best effort: a runtime's own config format is its
+# installed for this user; Mistral Vibe's is written by `cli` at its launch
+# (D-070). Best effort: a runtime's own config format is its
 # vendor's, and a failure here is a runtime without Sluse, said below.
 # Claude Code's telemetry and error reports (Datadog intake, outside the
 # catalog by D-035) switched off where every session reads them and the user's

@@ -70,6 +70,9 @@ fails. Releases are not signed yet; check the MSI against `SHA256SUMS`.
   however convenient ([SECURITY.md](SECURITY.md#invariants)).
 - **Numbers are measured, not carried.** A timing, count or threshold quoted
   in a doc or a message comes from a run, not from an older paragraph.
-- **`D-NNN` and `Q-N` in comments** cite the project's internal decision log
-  and open questions. They explain why code is the way it is; the log
-  itself is not published.
+- **`D-NNN`, `Q-N`, `S-N` and `R-NN` in comments** cite the
+  project's internal decision log, open questions, spikes and review
+  findings. They explain why code is the way it is. Those records are not
+  published, nor are the internal docs comments point to (`docs/audit.md`,
+  `docs/config.md` and others); of `docs/`, only
+  [docs/architecture.md](docs/architecture.md) is here.

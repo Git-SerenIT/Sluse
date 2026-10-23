@@ -224,6 +224,11 @@ jobs:
         with:
           node-version: '24'
 
+      # The third-party notices' generator (packaging/notices).
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.2
+
       - name: Build the package
         shell: pwsh
         run: .\packaging\build-package.ps1 -StageOnly
@@ -291,7 +296,7 @@ jobs:
           # 3010: installed, and a restart is wanted (Hyper-V). The runner has it.
           if ($p.ExitCode -notin 0, 3010) { Get-Content msi-install.log -Tail 60; throw "msiexec /i exited $($p.ExitCode)" }
           $default = Join-Path $env:ProgramFiles 'Sluse'
-          foreach ($f in 'bin\sluse.exe', 'bin\sluse-shell.exe', 'box\sluse-box-linux.tar.gz', 'ui\console\index.html', 'Test-Sluse.ps1', 'intune\sluse-artifacts-deny.xml', 'intune\{3CA83446-6F47-4A65-9891-2685B75CD7E3}.cip') {
+          foreach ($f in 'bin\sluse.exe', 'bin\sluse-shell.exe', 'box\sluse-box-linux.tar.gz', 'ui\console\index.html', 'Test-Sluse.ps1', 'THIRD-PARTY-NOTICES.txt', 'intune\sluse-artifacts-deny.xml', 'intune\{3CA83446-6F47-4A65-9891-2685B75CD7E3}.cip') {
             if (-not (Test-Path (Join-Path $default $f))) { throw "the MSI did not install $f" }
           }
           if ((Get-Service Sluse).Status -ne 'Running') { throw "the service is $((Get-Service Sluse).Status)" }

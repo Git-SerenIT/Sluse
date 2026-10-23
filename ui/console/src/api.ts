@@ -259,4 +259,4 @@ export const api = {
   },
 };
 
-export type LaunchApp = "terminal" | "claude-code" | "codex" | "claude-desktop";
+export type LaunchApp = "terminal" | "claude-code" | "codex" | "vibe" | "claude-desktop";

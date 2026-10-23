@@ -248,8 +248,8 @@ pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
 /// way to reach `AccessDenied`, and M3 decided the agent is told about that one
 /// plainly.
 /// **The byte threshold is the prototype's, not the product's** (D-016, amended
-/// 2026-09-22). `volume.bytes` is absent by default and stays absent in a
-/// customer's config; a generated run sets 50 MB in the same 60-second window so
+/// 2026-09-22). `volume.bytes` is optional in the schema; Sluse Admin writes
+/// 50 MB for a customer, and a generated run sets the same 50 MB in the 60-second window so
 /// M6 measures volume with the control switched on. The first scored run of
 /// 2026-09-22 moved 582 MB and raised a single alert about a *25-file rate*,
 /// which is the case this exists to stop repeating. Provisional, like the 25

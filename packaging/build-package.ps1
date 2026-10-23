@@ -145,6 +145,31 @@ try {
     # The egress bundles setup offers, and what posture compares with (D-038).
     Copy-Item 'config\egress-catalog.json'       (Join-Path $stage 'config') -Force
 
+    # Third-party notices, which MIT and BSD require with a binary copy: the
+    # crates compiled into both workspaces' programs, by cargo-about, which
+    # fails on a licence packaging\notices\about.toml does not accept; then
+    # noVNC's, which the shell carries.
+    if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) {
+        throw 'cargo-about is missing: cargo install cargo-about --locked --features cli'
+    }
+    $about = Join-Path $repo 'packaging\notices'
+    $notices = @(Get-Content (Join-Path $about 'header.txt') -Raw)
+    foreach ($ws in '.', 'ui\shell\src-tauri') {
+        $out = [IO.Path]::Combine($repo, $OutDir, 'notices.part.txt')
+        Push-Location $ws
+        try {
+            cargo about generate --locked -c (Join-Path $about 'about.toml') (Join-Path $about 'about.hbs') -o $out
+            if ($LASTEXITCODE -ne 0) { throw "cargo about ($ws) exited $LASTEXITCODE" }
+        } finally { Pop-Location }
+        $notices += Get-Content $out -Raw
+        Remove-Item $out
+    }
+    $novnc = 'ui\shell\node_modules\@novnc\novnc'
+    foreach ($f in 'LICENSE.txt', 'docs\LICENSE.MPL-2.0') {
+        $notices += "`n================================================================================`nnoVNC 1.7.0: $f`n`n" + (Get-Content (Join-Path $novnc $f) -Raw)
+    }
+    Set-Content (Join-Path $stage 'THIRD-PARTY-NOTICES.txt') ($notices -join "`n") -Encoding utf8
+
     # Nothing runs from Sluse Artifacts (D-039 slice 8): the App Control
     # policy, as XML and as the binary .cip Intune's custom OMA-URI takes,
     # for the admin to deploy. ConvertFrom-CIPolicy also checks the XML.

@@ -69,7 +69,10 @@ given in that session. Which ones it really used is the agent's word.
   out of compliance is not yet measured.
 
 **The AI runtimes:** company seats for the runtimes in the box (Claude
-Desktop, Claude Code, Codex). Each is signed in once inside the box. Turn
+Desktop, Claude Code, Codex, Mistral Vibe). Each is signed in once inside
+the box. Mistral Vibe needs its egress group ticked, which is off by
+default, and an organisation account whose inputs Mistral does not train
+on: check the plan, since some train by default. Turn
 **Claude in Chrome off** for those accounts in the provider's admin
 console: it would let the agent drive a browser elsewhere, outside every
 record. Turn off, too, every connector that reads company data from the
@@ -162,18 +165,18 @@ asks once each time it opens the box, and once more if a first preparation
 took long. The box shows once its console is ready.
 
 **In the box:** the Sluse console in Firefox, and the AI apps (Claude
-Desktop, Claude Code, Codex), which the console's Open buttons start. Each
-opens as a tab along the top of the box, named Sluse console, Claude,
-Claude Code, Codex or Terminal; switch tabs with the mouse, or with
+Desktop, Claude Code, Codex, Mistral Vibe), which the console's Open
+buttons start. Each opens as a tab along the top of the box, named Sluse
+console, Claude, Claude Code, Codex, Mistral Vibe or Terminal; switch tabs with the mouse, or with
 Ctrl+Alt+Right, which goes round from the last tab to the first. The box is
 drawn at the size of the window, so making the window larger gives the box
 more room.
 
 Sign each app in to your company's AI account once; it stays signed in.
-Claude Code's first run says how, since Microsoft's sign-in cannot open in
-the box. Claude Code and Codex start in the box's workspace, where the
-files Sluse lets in land; Claude Desktop opens a Code session there and
-asks you to confirm the folder.
+The first run of Claude Code, Codex and Mistral Vibe says how, since
+Microsoft's sign-in cannot open in the box. They start in the box's
+workspace, where the files Sluse lets in land; Claude Desktop opens a Code
+session there and asks you to confirm the folder.
 
 The console's pages: **Work** (what Sluse let in this session, its count
 for each source against the volume alert, and what was published), **Your
@@ -269,9 +272,9 @@ Hyper-V Manager each box's notes name the person it reads as.
   until the client was turned off, on our test PC.
 - **The first open on a PC is slow**: the box's system is built there,
   about 20 minutes or more on our test PC. Later opens take under a minute.
-- **Hosts that accept uploads.** The AI providers' groups (Claude, Codex)
-  are on by default, and they take whatever the box sends them: that is the
-  conversation. npm and GitHub serve the agent's tools and also accept
+- **Hosts that accept uploads.** The AI providers' groups (Claude, Codex,
+  and Mistral Vibe when ticked) take whatever the box sends them: that is
+  the conversation. Claude and Codex are on by default. npm and GitHub serve the agent's tools and also accept
   uploads on the same hosts; they are off by default. Turn them on in
   Egress only if your agents need them.
 - **Text can be copied into the box, and out of it** while copying out is

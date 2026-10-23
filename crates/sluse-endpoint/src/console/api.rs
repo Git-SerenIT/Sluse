@@ -169,6 +169,7 @@ async fn launch(Json(body): Json<LaunchBody>) -> Response {
         // because sway strips the quotes from an `exec` line.
         "claude-code" => "foot --app-id=sluse-claude-code /usr/local/libexec/sluse/cli claude",
         "codex" => "foot --app-id=sluse-codex /usr/local/libexec/sluse/cli codex",
+        "vibe" => "foot --app-id=sluse-vibe /usr/local/libexec/sluse/cli vibe",
         "claude-desktop" => "claude-desktop",
         _ => {
             return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "code": "UNKNOWN_APP" }))).into_response();

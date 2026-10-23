@@ -506,8 +506,9 @@ pub struct VolumeConfig {
     pub window_seconds: u32,
     /// How many bytes in the same window before an alert is raised. **D-016.**
     ///
-    /// `None` means bytes are not watched, which is the default and what every
-    /// config written before 2026-09-22 says by omission.
+    /// `None` means bytes are not watched: a hand-written config that leaves it
+    /// out, and every config written before 2026-09-22. Sluse Admin writes 50 MB
+    /// beside its 25 files in 60 s, so an authored deployment watches bytes.
     ///
     /// Counting files alone measured the wrong thing, and the first scored run
     /// showed it: one `fetch` moved a 500 MB file, 582 MB crossed in the

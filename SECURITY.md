@@ -141,8 +141,9 @@ Built, and not yet run on a device:
 - the App Control policy on Sluse Artifacts;
 - whether Conditional Access cuts off a device when the broker refreshes the
   person's token as SYSTEM;
-- Codex, which is installed and wired like the other runtimes and not
-  checked.
+- Codex and Mistral Vibe, which are installed and wired like the other
+  runtimes and not checked. Vibe uses Mistral's EU endpoint; where Mistral
+  processes and keeps what it is sent is Mistral's term, not Sluse's claim.
 
 ## Out of scope
 

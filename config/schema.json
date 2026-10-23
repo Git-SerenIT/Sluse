@@ -387,7 +387,7 @@
           "minimum": 0
         },
         "bytes": {
-          "description": "How many bytes in the same window before an alert is raised. **D-016.**\n\n`None` means bytes are not watched, which is the default and what every\nconfig written before 2026-09-22 says by omission.\n\nCounting files alone measured the wrong thing, and the first scored run\nshowed it: one `fetch` moved a 500 MB file, 582 MB crossed in the\nsession, and the single alert that was raised described a *rate of 25\nfiles* that had nothing to do with either number. Bytes are summed over\n**distinct content hashes**, the same dedupe `admissions` uses, so one\nfile read twice is one file's worth of bytes.",
+          "description": "How many bytes in the same window before an alert is raised. **D-016.**\n\n`None` means bytes are not watched: a hand-written config that leaves it\nout, and every config written before 2026-09-22. Sluse Admin writes 50 MB\nbeside its 25 files in 60 s, so an authored deployment watches bytes.\n\nCounting files alone measured the wrong thing, and the first scored run\nshowed it: one `fetch` moved a 500 MB file, 582 MB crossed in the\nsession, and the single alert that was raised described a *rate of 25\nfiles* that had nothing to do with either number. Bytes are summed over\n**distinct content hashes**, the same dedupe `admissions` uses, so one\nfile read twice is one file's worth of bytes.",
           "type": [
             "integer",
             "null"

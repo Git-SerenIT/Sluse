@@ -165,6 +165,9 @@
         <File Source="$(var.Stage)\README.md" KeyPath="yes" />
       </Component>
       <Component>
+        <File Source="$(var.Stage)\THIRD-PARTY-NOTICES.txt" KeyPath="yes" />
+      </Component>
+      <Component>
         <File Source="$(var.Stage)\Test-Sluse.ps1" KeyPath="yes" />
       </Component>
     </ComponentGroup>
