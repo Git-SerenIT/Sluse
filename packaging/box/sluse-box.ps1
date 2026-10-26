@@ -300,7 +300,10 @@ switch ($a.verb) {
                 # (review R-40): one an administrator made stays theirs.
                 if ($a.root) {
                     $mine = Join-Path $a.root 'reserved-ports.txt'
-                    if (-not (Select-String -Path $mine -Pattern "^$p$" -Quiet -ErrorAction SilentlyContinue)) { Add-Content -Path $mine -Value $p }
+                    # Not Select-String: on a file not made yet it throws, and
+                    # did on CI's first run (2026-10-26), after the first port.
+                    $recorded = if (Test-Path $mine) { @(Get-Content $mine) } else { @() }
+                    if ("$p" -notin $recorded) { Add-Content -Path $mine -Value $p }
                 }
             }
         }
