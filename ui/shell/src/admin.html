@@ -211,6 +211,14 @@
         <div id="assign-result"></div>
       </div>
     </li>
+    <li id="seq-providers">
+      <div class="seq__body">
+        <div class="seq__head"><h2 class="t-h3">The AI providers' own connectors</h2><span id="prov-pill"></span></div>
+        <p class="ad-sec__lead">Claude's Microsoft 365 connector and ChatGPT's SharePoint and Outlook apps read company data from the provider's cloud, as each user, around Sluse and its box. Sluse cannot stop them; Entra can. This reads whether they are open here. Nothing changes unless you choose it.</p>
+        <div class="btn-row"><button class="btn" type="button" id="prov-read"><i data-icon="refresh"></i>Read them</button></div>
+        <div id="prov-body"></div>
+      </div>
+    </li>
   </ol>
 </section>
 
@@ -440,6 +448,7 @@
         <button class="tab" role="tab" type="button" data-tab="sp" aria-controls="pane-sp"><i data-icon="library"></i>SharePoint site</button>
         <button class="tab" role="tab" type="button" data-tab="tm" aria-controls="pane-tm"><i data-icon="group"></i>A Team's site</button>
         <button class="tab" role="tab" type="button" data-tab="sh" aria-controls="pane-sh"><i data-icon="server"></i>File share</button>
+        <button class="tab" role="tab" type="button" data-tab="mcp" aria-controls="pane-mcp"><i data-icon="apps"></i>Tool server</button>
       </div>
       <div class="tabpanel stack" id="pane-sp" role="tabpanel" style="--stack-gap: var(--space-3)">
         <div id="sp-note"></div>
@@ -456,6 +465,13 @@
       </div>
       <div class="tabpanel stack" id="pane-sh" role="tabpanel" style="--stack-gap: var(--space-3)" hidden>
         <label class="field" id="share-field"><span class="field__label">The share's path</span><input class="input input--mono" type="text" placeholder="\\server\share" id="share-path" data-enter="add-go" aria-describedby="share-msg"><span class="field__hint" id="share-hint">A UNC path. Each user reaches it as themselves. Here, you browse it as your own Windows account on this PC.</span><span class="field__msg" id="share-msg" hidden><i data-icon="problem"></i>A share is \\server\share, never a mapped drive letter. For example <span class="mono">\\fs01\finance</span>.</span></label>
+      </div>
+      <div class="tabpanel stack" id="pane-mcp" role="tabpanel" style="--stack-gap: var(--space-3)" hidden>
+        <p class="t-small">An MCP server reached over HTTPS that takes an Entra token. Sluse calls it as each user, with Sluse's app, and only the tools you tick.</p>
+        <label class="field"><span class="field__label">The server's address</span><input class="input input--mono" type="url" placeholder="https://mcp.example.com/mcp" id="mcp-url"><span class="field__hint">Its MCP endpoint, https only. The box never reaches it; Sluse on each computer does.</span></label>
+        <label class="field"><span class="field__label">The permission Sluse asks for</span><input class="input input--mono" type="text" placeholder="api://crm-mcp/Mcp.Read" id="mcp-scope" data-enter="mcp-read"><span class="field__hint">The server's delegated scope as Entra names it: its app's ID URI or app id, then the scope. Its documentation says which.</span></label>
+        <div class="btn-row"><button class="btn" type="button" id="mcp-read"><i data-icon="search"></i>Read its tools</button></div>
+        <div id="mcp-body"></div>
       </div>
       <p class="t-small t-muted" id="add-as"></p>
     </div>

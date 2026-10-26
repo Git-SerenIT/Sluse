@@ -47,6 +47,9 @@ futures-core.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
 http-body-util.workspace = true
+# The MCP client for `mcp` sources (D-071): over HTTP with our reqwest, the
+# token handed in, the handshake chosen by the version pinned in the config.
+rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
 
 # --- M7: Entra, On-Behalf-Of and Graph -------------------------------------
 # The broker's outbound half. It talks to login.microsoftonline.com and
@@ -75,6 +78,8 @@ windows.workspace = true
 
 [dev-dependencies]
 # The tests run Core behind a real Front, in one process.
+# And a real MCP server over HTTP, for the `mcp` source's tests.
+rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest", "transport-streamable-http-server"] }
 sluse-gate-front = { path = "../sluse-gate-front" }
 tempfile.workspace = true
 tower.workspace = true

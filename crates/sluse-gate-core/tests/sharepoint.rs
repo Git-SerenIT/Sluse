@@ -456,6 +456,47 @@ async fn an_expiring_graph_token_is_renewed_without_the_user() {
     assert!(fx.faults().is_empty(), "no assertion, no secret: {:?}", fx.faults());
 }
 
+/// D-071 slice 2: another resource's token from the same sign-in, as the
+/// same person, held beside Graph's and not mistaken for it; the rotated
+/// refresh token is the one used next.
+#[tokio::test]
+async fn another_resource_gets_its_own_token_from_the_same_refresh_token() {
+    let fx = fx().await;
+    fx.sign_in(fx.alice()).await;
+    let entra = fx.core.entra.clone().unwrap();
+    let mcp = "api://crm-mcp/Mcp.Read";
+
+    let first = entra.acting_for_scope("crm", mcp).await.unwrap();
+    assert!(first.access.starts_with("for-api://crm-mcp/Mcp.Read-"), "{}", first.access);
+    assert_eq!(first.bound.identity.oid, entra.binding().unwrap().identity.oid, "as the same person");
+    // Held: a second ask does not go to Entra.
+    let again = entra.acting_for_scope("crm", mcp).await.unwrap();
+    assert_eq!(again.access, first.access);
+    assert_eq!(fx.stand_in.mock.renewals.load(Ordering::SeqCst), 1);
+    assert_eq!(*fx.stand_in.mock.renewal_scopes.lock().unwrap(), vec![format!("{mcp} offline_access")]);
+
+    // Graph's is still the sign-in's, and SharePoint reads with it.
+    let graph = entra.acting_for("spo").await.unwrap();
+    assert!(graph.access.starts_with("graph-"), "{}", graph.access);
+    let s = fx.session().await;
+    assert_eq!(fx.read(&s, "spo/in-scope/a.txt", "read").await.0, StatusCode::OK);
+
+    // Graph's renewal uses the refresh token the last renewal rotated in.
+    fx.stand_in.mock.expires_in.store(1, Ordering::SeqCst);
+    entra.acting_for_scope("other", "api://other/.default").await.unwrap();
+    fx.stand_in.mock.expires_in.store(3600, Ordering::SeqCst);
+    let before = fx.stand_in.mock.renewals.load(Ordering::SeqCst);
+    let other = entra.acting_for_scope("other", "api://other/.default").await.unwrap();
+    assert!(other.access.starts_with("for-api://other/.default-"));
+    assert_eq!(fx.stand_in.mock.renewals.load(Ordering::SeqCst), before + 1, "a stale token is renewed");
+    let sent = fx.stand_in.mock.renewal_refresh.lock().unwrap().clone();
+    let rotated = |i: usize| format!("{}-r{}", sent[i], i + 1);
+    for i in 1..sent.len() {
+        assert_eq!(sent[i], rotated(i - 1), "each renewal sends the refresh token the one before rotated in: {sent:?}");
+    }
+    assert!(fx.faults().is_empty(), "{:?}", fx.faults());
+}
+
 /// D-022: the console's process and the MCP process are two core sessions,
 /// and one sign-in on the host acts for both.
 #[tokio::test]

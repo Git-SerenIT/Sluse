@@ -49,6 +49,9 @@ pub struct Tenant {
     pub fail_commit: bool,
     /// Where the stand-in is, for the SAS URLs it hands out.
     pub base: String,
+    /// `/policies/authorizationPolicy`; none answers 403, as without
+    /// `Policy.Read.All`.
+    pub authorization_policy: Option<Value>,
 }
 
 /// Entra and Graph, just as far as setup uses them.
@@ -153,12 +156,22 @@ async fn fake(
             Value::Null
         }
         ("GET", "/v1.0/servicePrincipals") => {
-            let app = filter("appId").unwrap();
-            json!({ "value": t.sps.iter().filter(|s| s["appId"] == app.as_str()).cloned().collect::<Vec<_>>() })
+            // By app id, or by a name the app answers to (D-071).
+            let f = q.get("$filter").cloned().unwrap_or_default();
+            if let Some(prefix) = f.strip_prefix("startswith(displayName,'").and_then(|r| r.strip_suffix("')")) {
+                json!({ "value": t.sps.iter().filter(|s| s["displayName"].as_str().is_some_and(|n| n.starts_with(prefix))).cloned().collect::<Vec<_>>() })
+            } else if let Some(name) = f.strip_prefix("servicePrincipalNames/any(n:n eq '").and_then(|r| r.strip_suffix("')")) {
+                json!({ "value": t.sps.iter().filter(|s| s["servicePrincipalNames"].as_array().is_some_and(|n| n.iter().any(|x| x == name))).cloned().collect::<Vec<_>>() })
+            } else {
+                let app = filter("appId").unwrap();
+                json!({ "value": t.sps.iter().filter(|s| s["appId"] == app.as_str()).cloned().collect::<Vec<_>>() })
+            }
         }
         ("POST", "/v1.0/servicePrincipals") => {
-            let app = body.unwrap()["appId"].as_str().unwrap().to_owned();
-            let sp = json!({ "id": format!("sp-{app}"), "appId": app, "appRoleAssignmentRequired": false });
+            let b = body.unwrap();
+            let app = b["appId"].as_str().unwrap().to_owned();
+            let enabled = b["accountEnabled"].as_bool().unwrap_or(true);
+            let sp = json!({ "id": format!("sp-{app}"), "appId": app, "appRoleAssignmentRequired": false, "accountEnabled": enabled });
             t.sps.push(sp.clone());
             sp
         }
@@ -204,6 +217,10 @@ async fn fake(
                 .filter(|g| g["clientId"] == client.as_str() && (!all || g["consentType"] == "AllPrincipals"))
                 .cloned().collect::<Vec<_>>() })
         }
+        ("GET", "/v1.0/policies/authorizationPolicy") => match &t.authorization_policy {
+            Some(p) => p.clone(),
+            None => return Err(axum::http::StatusCode::FORBIDDEN),
+        },
         ("GET", "/v1.0/me") => json!({ "userPrincipalName": "admin@contoso.dk" }),
         ("GET", "/v1.0/organization") => json!({ "value": [{ "displayName": "Contoso" }] }),
         ("GET", "/v1.0/me/memberOf/microsoft.graph.directoryRole") => {

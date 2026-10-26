@@ -18,10 +18,13 @@ use sluse_proto::SignInView;
 pub const REDIRECT: &str = "http://localhost";
 
 /// What setup does as the admin: the registration, the assignment, the
-/// directory's roles, the sites for the scope picker, and Intune's apps.
+/// directory's roles, the sites for the scope picker, and Intune's apps; and
+/// the tenant's user-consent setting, for the providers' connectors (D-071
+/// slice 7), which `Directory.Read.All` does not read.
 pub const SCOPES: &str = "https://graph.microsoft.com/Application.ReadWrite.All \
 https://graph.microsoft.com/AppRoleAssignment.ReadWrite.All \
 https://graph.microsoft.com/Directory.Read.All \
+https://graph.microsoft.com/Policy.Read.All \
 https://graph.microsoft.com/Sites.Read.All \
 https://graph.microsoft.com/DeviceManagementApps.ReadWrite.All offline_access openid profile";
 

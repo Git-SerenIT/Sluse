@@ -19,7 +19,7 @@ export interface Data {
 }
 
 /** Sources read as the work account: they wait for a sign-in (Q8). */
-const CLOUD = ["sharepoint", "onedrive"];
+const CLOUD = ["sharepoint", "onedrive", "mcp"];
 export const cloud = (d: Data): string[] => d.view.sources.filter((s) => CLOUD.includes(s.kind)).map((s) => s.name);
 /** Sources read as the Windows account: file shares, Sluse Inputs. */
 export const local = (d: Data): string[] => d.view.sources.filter((s) => !CLOUD.includes(s.kind)).map((s) => s.name);
@@ -35,7 +35,7 @@ export const within = (path: string): string => path.split("/").slice(1).join("/
 
 /** Reads and fetches Sluse let in, this session, oldest first. */
 export const letIn = (d: Data): AuditRecord[] =>
-  d.journal.filter((r) => (r.op === "read" || r.op === "fetch") && r.outcome === "admitted");
+  d.journal.filter((r) => (r.op === "read" || r.op === "fetch" || r.op === "call") && r.outcome === "admitted");
 
 /** What a source is, in words: "SharePoint library, 2 folders". */
 export function kindWords(s: SourceView): string {
@@ -45,13 +45,15 @@ export function kindWords(s: SourceView): string {
     case "smb": return `File share${n ? `, ${n} folder${n === 1 ? "" : "s"}` : ""}`;
     case "onedrive": return "Your Sluse folder in OneDrive";
     case "inputs": return "Sluse Inputs on your computer";
+    // Its scopes are the tools allowed (D-071).
+    case "mcp": return `Tool server, ${n} tool${n === 1 ? "" : "s"}`;
     default: return `Folder on this device${n ? `, ${n} folder${n === 1 ? "" : "s"}` : ""}`;
   }
 }
 
 /** Its icon. */
 export const kindIcon = (kind: string): string =>
-  ({ sharepoint: "library", smb: "server", onedrive: "cloud", inputs: "inbox" })[kind] ?? "folder";
+  ({ sharepoint: "library", smb: "server", onedrive: "cloud", inputs: "inbox", mcp: "apps" })[kind] ?? "folder";
 
 /**
  * A publish's folder in Sluse Artifacts and the file's name in it, from its
@@ -107,6 +109,6 @@ export function outcomePill(r: AuditRecord): [string, string] {
   if (r.outcome === "error") return ["error", "Error"];
   if (r.outcome === "raised") return ["info", "Alert"];
   if (r.op === "publish") return ["published", "Published"];
-  if (r.op === "read" || r.op === "fetch") return ["admitted", "Let in"];
+  if (r.op === "read" || r.op === "fetch" || r.op === "call") return ["admitted", "Let in"];
   return ["done", "Done"];
 }

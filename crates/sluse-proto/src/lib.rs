@@ -82,8 +82,8 @@ pub use audit::{
 };
 pub use config::{
     AuditConfig, AuditSinkKind, Authored, BoxSettings, GateConfig, Config, ConfigError, Deployment, Device,
-    EgressConfig, EgressLog, EndpointConfig, EntraConfig, Environment, Loaded, SensitivityLevel, SourceConfig,
-    SourceKind, VolumeConfig, SCHEMA_VERSION,
+    EgressConfig, EgressLog, EndpointConfig, EntraConfig, Environment, Loaded, McpProtocol, SensitivityLevel,
+    SourceConfig, SourceKind, VolumeConfig, SCHEMA_VERSION,
 };
 pub use error::{Result, SluseError};
 pub use hash::{ContentHash, ContentHasher};
@@ -92,7 +92,8 @@ pub use wire::{
     AlertsQuery, ArtifactManifest, Audience, AuditTailQuery, AuditTailResponse, ConfigView,
     EntryKind, Health, ListEntry, ListRequest, ListResponse, Pin, PublishManifest, PublishResponse,
     PublishedArtifact, ReadHeaders, ReadRequest, ReadVerb, SourceLastSeen, SourceView, StatRequest,
-    HostSignInResult, SignInView, SignedOut, StatResponse, Status, VolumeAlert,
+    HostSignInResult, SignInView, SignedOut, StatResponse, Status, VolumeAlert, CallRequest, ToolView,
+    ToolsResponse, ToolSourceUnavailable,
 };
 
 /// This crate's version, which is the workspace's. Reported by the Gate on

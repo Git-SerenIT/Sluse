@@ -22,12 +22,16 @@ getrandom.workspace = true
 aws-lc-rs.workspace = true
 # The `.intunewin`'s zip (D-039: our own writer): deflate and CRC-32.
 flate2.workspace = true
+# An MCP server's tools and version, asked once when it is added (D-071).
+rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
 
 # The package folder's ACL (`acl.rs`), and an MSI's Property table (`msi.rs`).
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32_System_ApplicationInstallationAndServicing"] }
 
 [dev-dependencies]
+# The test MCP server Gate Core's tests use, for the probe (D-071).
+rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest", "transport-streamable-http-server"] }
 tempfile.workspace = true
 # A stand-in for Entra and Microsoft Graph.
 axum.workspace = true

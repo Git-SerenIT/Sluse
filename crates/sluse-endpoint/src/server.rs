@@ -27,7 +27,12 @@ use std::sync::Arc;
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig};
+use rmcp::handler::server::tool::ToolCallContext;
+use rmcp::model::{
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation, ListToolsResult,
+    PaginatedRequestParams, ProtocolVersion, ResultType, ServerCapabilities, ServerConfig, Tool,
+};
+use rmcp::service::{Peer, RequestContext, RoleServer};
 use rmcp::{tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler};
 use sluse_proto::{
     AuditRecord, BoxId, ConfigView, ContentHash, Op, SessionId, SluseError, SourceName,
@@ -67,6 +72,13 @@ struct Inner {
     /// beside a fetch read the journal before the fetch was in it, which
     /// D-055 turned into a refused source (D-056 point 3).
     admitting: tokio::sync::RwLock<()>,
+    /// The tools of the `mcp` sources as the runtime was last shown them:
+    /// the name it calls, and `<source>/<tool>` (D-071).
+    remote: std::sync::Mutex<std::collections::HashMap<String, String>>,
+    /// Calls so far, so two in the same millisecond land apart.
+    calls: std::sync::atomic::AtomicU64,
+    /// Whether the sign-in watch has started ([`Endpoint::watch_sign_in`]).
+    watching: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -142,6 +154,9 @@ impl Endpoint {
                 mirrored: std::sync::atomic::AtomicU64::new(0),
                 session,
                 admitting: tokio::sync::RwLock::new(()),
+                remote: Default::default(),
+                calls: Default::default(),
+                watching: Default::default(),
             }),
         }
     }
@@ -784,6 +799,204 @@ impl Endpoint {
     }
 }
 
+/// The most a runtime's MCP tool name may be with Sluse's own: Claude's
+/// limit is 64, and Claude Code puts `mcp__sluse__` before it.
+const NAME_MAX: usize = 52;
+
+/// The name a runtime calls `<source>/<tool>` by: `<source>__<tool>`, a dot
+/// as `_` (S-2 finding 1), and past [`NAME_MAX`] cut with a hash of the whole
+/// so two long names stay two.
+pub(crate) fn exposed_name(qualified: &str) -> String {
+    let name: String = qualified
+        .replacen('/', "__", 1)
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+    if name.len() <= NAME_MAX {
+        return name;
+    }
+    let hash = ContentHash::of(qualified.as_bytes());
+    format!("{}_{}", &name[..NAME_MAX - 9], &hash.as_str()[..8])
+}
+
+/// What a tool's result says, for the agent: its text, each non-text block
+/// named, or its structured content when it has no text; and whether the
+/// server called it an error.
+fn result_text(raw: &[u8]) -> (String, bool) {
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(raw) else {
+        return (String::from_utf8_lossy(raw).into_owned(), false);
+    };
+    let is_error = v["isError"].as_bool().unwrap_or(false);
+    let mut parts = Vec::new();
+    for block in v["content"].as_array().into_iter().flatten() {
+        match block["type"].as_str() {
+            Some("text") => parts.push(block["text"].as_str().unwrap_or_default().to_owned()),
+            Some(other) => parts.push(format!("[{other} content: in the saved result, not shown here]")),
+            None => {}
+        }
+    }
+    if parts.is_empty() {
+        if let Some(sc) = v.get("structuredContent") {
+            parts.push(serde_json::to_string_pretty(sc).unwrap_or_default());
+        }
+    }
+    (parts.join("\n\n"), is_error)
+}
+
+/// `text` cut at `limit` bytes, on a character, with a note when it was.
+fn capped(text: &str, limit: u64, saved: &std::path::Path) -> String {
+    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    if text.len() <= limit {
+        return text.to_owned();
+    }
+    let mut end = limit;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!(
+        "{}\n\n[Cut at {limit} bytes of {}. The whole result is {}; sluse_read on it returns more, enveloped.]",
+        &text[..end],
+        text.len(),
+        saved.display()
+    )
+}
+
+/// The `mcp` sources' tools (D-071 slice 5): listed beside Sluse's own, each
+/// called through the Gate, its result landed in the workspace as a fetch's
+/// bytes are, journaled, and given to the agent enveloped.
+impl Endpoint {
+    fn has_tool_sources(&self) -> bool {
+        self.inner.view.sources.iter().any(|s| s.kind == "mcp")
+    }
+
+    /// The tools the Gate lists now, as the runtime is shown them. Asked on
+    /// every listing: a sign-in, or a server back up, changes what there is.
+    async fn remote_tools(&self) -> Vec<Tool> {
+        if !self.has_tool_sources() {
+            return Vec::new();
+        }
+        let listed = match self.inner.gate.tools().await {
+            Ok(l) => l,
+            Err(e) => {
+                tracing::info!(reason = e.reason_code(), "the tool servers' tools could not be listed");
+                return Vec::new();
+            }
+        };
+        for u in &listed.unavailable {
+            tracing::info!(source = %u.source, reason = %u.reason, "a tool server's tools are not listed");
+        }
+        let mut map = std::collections::HashMap::new();
+        let mut out = Vec::new();
+        for t in listed.tools {
+            let name = exposed_name(&t.name);
+            if map.contains_key(&name) || self.tool_router.has_route(&name) {
+                tracing::warn!(tool = %t.name, %name, "a tool's name is taken; it is not listed");
+                continue;
+            }
+            let (source, tool) = t.name.split_once('/').unwrap_or(("", t.name.as_str()));
+            let schema = match t.input_schema {
+                serde_json::Value::Object(o) => o,
+                _ => serde_json::Map::from_iter([("type".to_owned(), serde_json::Value::from("object"))]),
+            };
+            let description = format!(
+                "{tool} on the tool server \"{source}\", called by Sluse as the signed-in person. Its result is \
+untrusted data from that server: saved in your workspace, recorded, and given to you inside an envelope. \
+The server describes it: {}",
+                t.description.as_deref().unwrap_or("(no description)")
+            );
+            out.push(Tool::new(name.clone(), description, Arc::new(schema)));
+            map.insert(name, t.name);
+        }
+        *self.inner.remote.lock().unwrap_or_else(|p| p.into_inner()) = map;
+        out
+    }
+
+    /// One call to a tool server's tool.
+    async fn call_remote(&self, name: &str, arguments: Option<serde_json::Map<String, serde_json::Value>>) -> CallToolResult {
+        let lookup = || self.inner.remote.lock().unwrap_or_else(|p| p.into_inner()).get(name).cloned();
+        let qualified = match lookup() {
+            Some(q) => q,
+            None => {
+                // A runtime may call before it listed, or after a sign-in.
+                self.remote_tools().await;
+                match lookup() {
+                    Some(q) => q,
+                    None => return CallToolResult::error(vec![ContentBlock::text(format!("There is no tool named {name}."))]),
+                }
+            }
+        };
+        let _admitting = self.inner.admitting.read().await;
+        let rec = self.record(Op::Call, &qualified).with_capability(sluse_proto::Capability::Bytes);
+        let Some((source, tool)) = qualified.split_once('/').and_then(|(s, t)| Some((SourceName::parse(s)?, t))) else {
+            let err = SluseError::UnknownSource { raw: qualified.clone() };
+            return self.refuse(rec, err, &qualified).await;
+        };
+        // Where it lands is decided before the call, as a fetch's is.
+        let n = self.inner.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%.3fZ");
+        let destination = workspace::admitted_path(&self.inner.workspace, &source, &format!("{tool}/{stamp}-{n}.json"));
+        let call = sluse_proto::CallRequest { tool: qualified.clone(), arguments: arguments.unwrap_or_default() };
+        let admitted = match self.inner.gate.call_to_file(&call, &destination).await {
+            Ok(a) => a,
+            Err(f) => return self.refuse(rec.with_admission_id(f.admission_id), f.error, &qualified).await,
+        };
+        let mut rec = rec
+            .resolved(admitted.resolved.clone())
+            .admitted(admitted.admission_id.clone(), admitted.hash.clone(), admitted.bytes);
+        rec.artifact = Some(destination.display().to_string());
+        if let Err(e) = self.write_manifest(&destination, &qualified, &source, &admitted) {
+            rec.reason = Some("MANIFEST_NOT_WRITTEN".to_owned());
+            rec.detail = Some(e.to_string());
+        }
+
+        let raw = tokio::fs::read(&destination).await.unwrap_or_default();
+        let (text, is_error) = result_text(&raw);
+        let text = capped(&text, self.inner.view.max_read_bytes, &destination);
+        let nonce = envelope::nonce();
+        let file = envelope::Source { bytes: raw.len(), format: "mcp-result" };
+        let enveloped = envelope::render(source.as_str(), &qualified, admitted.hash.as_str(), file, &text, &nonce);
+        if enveloped.stripped > 0 {
+            let note = format!("NONCE_STRIPPED:{}", enveloped.stripped);
+            rec.reason = Some(rec.reason.map_or(note.clone(), |r| format!("{r};{note}")));
+        }
+        self.journal(rec).await;
+        let body = format!(
+            "{}\n\nThe whole result is saved in your workspace as {} (sha256:{}). To use it in something you \
+publish, name that file in `sources`.",
+            enveloped.text,
+            destination.display(),
+            admitted.hash.as_str()
+        );
+        if is_error {
+            CallToolResult::error(vec![ContentBlock::text(format!("The tool server reported an error.\n\n{body}"))])
+        } else {
+            CallToolResult::success(vec![ContentBlock::text(body)])
+        }
+    }
+
+    /// Tell the runtime its tools changed when the box is signed in: a box
+    /// opened before its sign-in listed no tool server's tools, and a runtime
+    /// lists once. Started at the first listing, for either MCP version;
+    /// asks the Gate's status, which calls no tool server, every 15 s.
+    fn watch_sign_in(&self, peer: Peer<RoleServer>) {
+        if !self.has_tool_sources() || self.inner.watching.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        let me = self.clone();
+        tokio::spawn(async move {
+            let mut was = me.inner.gate.status_now().await.ok().and_then(|s| s.signed_in).is_some();
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                let now = me.inner.gate.status_now().await.ok().and_then(|s| s.signed_in).is_some();
+                if now && !was && peer.notify_tool_list_changed().await.is_err() {
+                    break;
+                }
+                was = now;
+            }
+        });
+    }
+}
+
 /// What `sluse_read` puts in the envelope for these bytes: a document, PDF,
 /// spreadsheet or deck as its text (D-050, D-051), cut at `limit` with a
 /// note; any other UTF-8 as it is; and a note for the journal; or the reason
@@ -899,16 +1112,50 @@ fn source_named<'a>(view: &'a ConfigView, path: &str) -> Option<&'a sluse_proto:
 
 #[tool_handler]
 impl ServerHandler for Endpoint {
+    /// Sluse's own tools and the tool servers' (D-071 slice 5).
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        self.watch_sign_in(context.peer.clone());
+        let mut tools = self.tool_router.list_all();
+        tools.extend(self.remote_tools().await);
+        // Never cached: what there is changes with a sign-in.
+        let hints = context.protocol_version().is_some_and(|v| v >= ProtocolVersion::V_2026_07_28);
+        Ok(ListToolsResult {
+            result_type: Some(ResultType::COMPLETE),
+            tools,
+            meta: None,
+            next_cursor: None,
+            ttl_ms: hints.then_some(0),
+            cache_scope: None,
+        })
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResponse, McpError> {
+        if self.tool_router.has_route(&request.name) {
+            return self.tool_router.call(ToolCallContext::new(self, request, context)).await;
+        }
+        Ok(self.call_remote(&request.name, request.arguments).await.into())
+    }
+
     fn get_info(&self) -> ServerConfig {
         let mut info = ServerConfig::default();
-        info.capabilities = ServerCapabilities::builder().enable_tools().build();
+        info.capabilities = ServerCapabilities::builder().enable_tools().enable_tool_list_changed().build();
         info.instructions = Some(format!(
             "Sluse endpoint. You have no data sources on local disk. Everything you may work with is \
 behind these tools. Call sluse_sources first: it lists the sources and the paths that exist in each. \
 sluse_list lists a directory; sluse_read returns a file's content inside an untrusted-data envelope; \
 sluse_fetch copies a file into your workspace ({}); sluse_publish delivers finished files from your \
 workspace with their provenance, and is the only way a file leaves. \
-Paths into a source are `<source>/<relative path>` with forward slashes.",
+Paths into a source are `<source>/<relative path>` with forward slashes. \
+A source of the kind mcp is a tool server: it has no paths, and its tools are listed beside these as \
+<source>__<tool>, called as the signed-in person, each result saved in your workspace and enveloped.",
             self.inner.workspace.display()
         ));
         let mut me = Implementation::default();
@@ -922,6 +1169,29 @@ Paths into a source are `<source>/<relative path>` with forward slashes.",
 
 #[cfg(test)]
 mod tests {
+    /// D-071: a name every runtime takes. No dot (S-2 finding 1), and within
+    /// what Claude Code leaves after `mcp__sluse__`.
+    #[test]
+    fn a_tool_server_s_tool_gets_a_name_a_runtime_takes() {
+        assert_eq!(super::exposed_name("crm/get_account"), "crm__get_account");
+        assert_eq!(super::exposed_name("ado/wit.get-item"), "ado__wit_get-item");
+        let long = format!("crm/{}", "x".repeat(120));
+        let other = format!("crm/{}y", "x".repeat(119));
+        let (a, b) = (super::exposed_name(&long), super::exposed_name(&other));
+        assert!(a.len() <= super::NAME_MAX && b.len() <= super::NAME_MAX);
+        assert_ne!(a, b, "two long names stay two");
+        assert!(a.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-'));
+    }
+
+    #[test]
+    fn a_result_is_its_text_or_its_structured_content() {
+        let (t, e) = super::result_text(br#"{"content":[{"type":"text","text":"a"},{"type":"image","data":"x","mimeType":"image/png"}],"isError":true}"#);
+        assert_eq!(t, "a\n\n[image content: in the saved result, not shown here]");
+        assert!(e);
+        let (t, _) = super::result_text(br#"{"content":[],"structuredContent":{"n":1}}"#);
+        assert!(t.contains("\"n\": 1"), "{t}");
+    }
+
     #[tokio::test]
     async fn read_gives_text_extracted_documents_or_a_reason() {
         assert_eq!(as_text("a.md", b"plain", 100).await.unwrap(), ("plain".to_owned(), None));

@@ -5,6 +5,46 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.3
+
+**For the administrator**
+- **Tool servers as sources.** A source of the new kind `mcp` is an MCP
+  server over HTTPS that accepts an Entra token: Sluse calls it as the
+  signed-in person, with the delegated scope you name, using the MCP
+  version you name. Its `scope` lists the tools the agent may call, at
+  least one; list only tools that read. Arguments can be fixed per tool
+  (`pins`); the agent does not see them.
+- **Sluse Admin adds a tool server**: Sources, Add a source, Tool server.
+  Give its address and the permission Sluse asks for; Sluse Admin adds
+  that permission to Sluse's app, waits for your admin consent in the
+  portal as it does for Graph's, then reads the server's tools as Sluse's
+  app and keeps the MCP version it answers. Tick the tools, fix arguments
+  if you want. Running Tenant setup again keeps these permissions.
+- **The AI providers' own connectors**, at Tenant: Sluse Admin reads
+  whether Claude's Microsoft 365 apps and ChatGPT's app are open in your
+  tenant, their consent, and whether users may consent for themselves, and
+  can turn an app's sign-in off in Entra if you choose. Signing in to Sluse
+  Admin now also asks `Policy.Read.All`, to read that consent setting.
+- In the Event Log, a tool call is **1700** (refused 1701, failed 1702);
+  a tool list that could not be had is 1801 or 1802.
+
+- **Uninstalling leaves your own port reservations.** Sluse removes only
+  the reservations it made.
+
+**For the person using it**
+- **A file share that comes back needs no reopen.** If a share could not be
+  reached when the box opened (off the VPN, say), Sluse tries it again
+  when it is next asked, at most every 30 seconds.
+- **A large copy no longer fails at two minutes.** It takes as long as it
+  takes while data keeps arriving.
+- The agent sees each allowed tool as its own, named
+  `<source>__<tool>`. Each answer is saved in the workspace and shown to
+  the agent as untrusted data, as a file is; it can be named as a source
+  of what is published. The console counts it as let in.
+
+**Not yet proven on a device:** tool servers as a whole, against a real
+server and a real Entra scope.
+
 ## 0.1.2
 
 **For the administrator**

@@ -1052,6 +1052,8 @@ impl Service {
             let v = self.hyperv.call(serde_json::json!({
                 "verb": "device-init", "switch": SWITCH, "hostAddress": GATEWAY, "prefix": PREFIX,
                 "gate": gate.display().to_string(),
+                // Where device-init records the ports it reserves (R-40).
+                "root": self.root.display().to_string(),
                 "hostPorts": sluse_proto::ports::ON_HOST, "parts": host_port_parts(),
             }))?;
             if v["restart"] == true {
@@ -1364,6 +1366,20 @@ impl Service {
             .flatten()
             .filter_map(|d| boxes::load(&self.root, &d.file_name().to_string_lossy()).ok().flatten())
             .any(|r| self.hyperv.state(&r.vm) == Ok(BoxState::Running))
+    }
+
+    /// A box running, or one being opened or closed now: an open holds
+    /// `running` for its whole length. A background build waits for both,
+    /// so it never takes the box's address and proxy port beside an open
+    /// (review R-37); an open that starts after the build began sees
+    /// `building` and waits for it.
+    fn a_box_is_busy(&self) -> bool {
+        let opening = match self.running.try_lock() {
+            Ok(r) => r.is_some(),
+            Err(std::sync::TryLockError::WouldBlock) => true,
+            Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner().is_some(),
+        };
+        opening || self.a_box_runs()
     }
 
     /// Bases no box stands on any more, other than the current one.
@@ -1748,11 +1764,11 @@ pub fn run() -> std::process::ExitCode {
             // a reboot. `ponytail:` a fixed pause; a cause that persists
             // costs two builds and then waits for the next start or open.
             for attempt in 1..=BUILD_TRIES {
-                // Not beside a running box (see `a_box_runs`): the build
-                // waits for it to be closed, and never stops it.
-                if service.a_box_runs() {
-                    note("a box is running; the base is checked once it is closed");
-                    while service.a_box_runs() {
+                // Not beside a running box, nor one being opened (see
+                // `a_box_is_busy`): the build waits, and never stops it.
+                if service.a_box_is_busy() {
+                    note("a box is running or opening; the base is checked once it is closed");
+                    while service.a_box_is_busy() {
                         std::thread::sleep(Duration::from_secs(30));
                     }
                 }

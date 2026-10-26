@@ -56,6 +56,8 @@ fn source(name: &str, root: &Path, scopes: &[&str]) -> CompiledSource {
         remote: None,
         unavailable: None,
         dropped: Vec::new(),
+        tools: Vec::new(),
+        retry: None,
     }
 }
 
@@ -564,6 +566,8 @@ fn library(scopes: &[&str]) -> sluse_gate_core::scope::Compiled {
             remote: Some(remote),
             unavailable: None,
             dropped: Vec::new(),
+            tools: Vec::new(),
+            retry: None,
         }],
     }
 }
@@ -698,4 +702,67 @@ fn a_link_on_a_share_is_refused_and_one_on_a_local_folder_is_resolved() {
     let err = scope::resolve_in_scope(&share, "fixture/in-scope/docs/link/deep.txt").unwrap_err();
     assert_eq!(reason(&err), "OUT_OF_SCOPE", "{err}");
     assert!(scope::resolve_in_scope(&share, "fixture/in-scope/docs/nested/deep.txt").is_ok());
+}
+
+/// D-071: an `mcp` source compiles to its tools, with no paths, and a path
+/// request to it is refused as the kind it is, never resolved.
+#[test]
+fn an_mcp_source_has_tools_and_no_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let authored = serde_json::json!({
+        "schemaVersion": sluse_proto::SCHEMA_VERSION,
+        "entra": { "tenantId": "11111111-2222-3333-4444-555555555555", "clientId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
+        "sources": [{
+            "name": "crm",
+            "kind": { "type": "mcp", "address": {
+                "url": "https://crm.example.com/mcp", "entraScope": "api://crm-mcp/Mcp.Read", "protocol": "2026-07-28"
+            } },
+            "scope": ["get_account"],
+            "sensitivity": 3
+        }],
+        "volume": { "admissions": 25, "windowSeconds": 60 }
+    });
+    let device = serde_json::json!({
+        "boxId": "box-local-test", "environment": "local",
+        "gate": {
+            "listen": "127.0.0.1:7580", "url": "https://127.0.0.1:7580",
+            "certPath": "certs/core.pem", "keyPath": "certs/core.key",
+            "clientCaPath": "certs/client-ca.pem", "certPin": "0".repeat(64)
+        },
+        "endpoint": { "clientCertPath": "certs/endpoint.pem", "clientKeyPath": "certs/endpoint.key", "consoleListen": "127.0.0.1:7582" },
+        "artifacts": "artifacts", "workspace": "workspace", "journalDir": "journal",
+        "audit": { "sink": "jsonl", "path": "audit/core.jsonl" }
+    });
+    let loaded = sluse_proto::config::load_from_bytes(
+        authored.to_string().as_bytes(),
+        device.to_string().as_bytes(),
+        &dir.path().join("local.json"),
+    )
+    .unwrap();
+
+    let compiled = scope::compile(&loaded).unwrap();
+    let crm = &compiled.sources[0];
+    assert_eq!(crm.tools, ["get_account"]);
+    assert!(crm.root.is_none() && crm.remote.is_none() && crm.scopes.is_empty());
+    assert!(scope::remote_source(&compiled, "crm/get_account").is_none(), "not a library");
+    assert_eq!(crm.scope_request_forms(), ["crm/get_account"], "what the box is shown");
+    let e = scope::resolve_in_scope(&compiled, "crm/get_account").unwrap_err();
+    assert_eq!(e.reason_code(), "UNSUPPORTED_SOURCE_KIND", "{e}");
+}
+
+/// Review R-27: outside the scope, a path that does not exist and one that
+/// does answer alike, and a request's own bad shape does not mark the source
+/// unreachable.
+#[test]
+fn outside_the_scope_what_exists_and_what_does_not_answer_alike() {
+    let dir = tempfile::tempdir().unwrap();
+    tree(dir.path());
+    let compiled = Compiled { sources: vec![source("fixture", dir.path(), &["in-scope"])] };
+
+    for out in ["fixture/elsewhere/secret.txt", "fixture/elsewhere/nope.txt", "fixture/elsewhere/secret.txt/x", "fixture/nowhere/x"] {
+        assert_eq!(reason(&scope::resolve(&compiled, out).unwrap_err()), "OUT_OF_SCOPE", "{out}");
+    }
+    // In scope: a missing file is missing, and a file used as a folder too.
+    assert_eq!(reason(&scope::resolve(&compiled, "fixture/in-scope/nope.txt").unwrap_err()), "NOT_FOUND");
+    assert_eq!(reason(&scope::resolve(&compiled, "fixture/in-scope/docs/note.txt/x").unwrap_err()), "NOT_FOUND");
 }

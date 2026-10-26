@@ -237,6 +237,73 @@ pub async fn admin_msi(path: PathBuf) -> Result<Value, String> {
 
 /// Sluse's app's API permissions in the Azure portal, in the browser. The
 /// address is made here, from an application id, never taken from the page.
+/// An MCP server as a source (D-071 slice 6), step 1: its scope on Sluse's
+/// registration beside Graph's, and whether admin consent covers it yet.
+#[tauri::command]
+pub async fn admin_mcp_require(admin: State<'_, Admin>, scope: String) -> Result<Value, String> {
+    let g = admin.graph(GRAPH)?;
+    let (resource, added) = sluse_admin::mcp::require(&g, &scope).await?;
+    let consented = sluse_admin::mcp::consented(&g, &admin.sp()?, &resource).await?;
+    Ok(serde_json::json!({ "resource": resource, "added": added, "consented": consented }))
+}
+
+/// Step 2, again after the admin granted it in the portal.
+#[tauri::command]
+pub async fn admin_mcp_consented(admin: State<'_, Admin>, scope: String) -> Result<bool, String> {
+    let g = admin.graph(GRAPH)?;
+    let resource = sluse_admin::mcp::resource(&g, &scope).await?;
+    sluse_admin::mcp::consented(&g, &admin.sp()?, &resource).await
+}
+
+/// Step 3: the server asked once, with a token Sluse's own app (`client`)
+/// gets for the scope as the admin, which is the token a box's Gate Core
+/// will ask for as each user. Its version and its tools.
+#[tauri::command]
+pub async fn admin_mcp_probe(
+    app: tauri::AppHandle,
+    admin: State<'_, Admin>,
+    url: String,
+    scope: String,
+    client: String,
+) -> Result<sluse_admin::mcp::Probe, String> {
+    let token = admin.token.lock().unwrap_or_else(|p| p.into_inner()).clone().ok_or("not signed in")?;
+    let tenant = sluse_admin::setup::tenant_of(&token)?;
+    let req = sluse_proto::pipe::SignInRequest::with_redirect(sluse_proto::wire::NATIVE_REDIRECT)?;
+    let view = sluse_proto::SignInView {
+        authority: format!("{LOGIN}/{tenant}"),
+        client_id: client,
+        scope: format!("{scope} offline_access openid profile"),
+    };
+    let code = {
+        let (req, view) = (req.clone(), view.clone());
+        tauri::async_runtime::spawn_blocking(move || crate::sign_in_code(&app, &req, &view, false))
+            .await
+            .map_err(|e| e.to_string())??
+    };
+    let server_token = sluse_admin::signin::redeem(&admin.http, &view, &req, &code).await?;
+    sluse_admin::mcp::probe(&admin.http, &url, &server_token).await
+}
+
+/// The AI providers' own connectors in the tenant (D-071 slice 7).
+#[tauri::command]
+pub async fn admin_connectors(admin: State<'_, Admin>) -> Result<sluse_admin::connectors::Report, String> {
+    sluse_admin::connectors::check(&admin.graph(GRAPH)?).await
+}
+
+/// Turn sign-in off for one provider's app, the admin's choice. Only an app
+/// the check just found: the page names it, this makes sure it is one.
+#[tauri::command]
+pub async fn admin_connector_block(admin: State<'_, Admin>, app_id: Option<String>, service_principal: Option<String>) -> Result<String, String> {
+    let g = admin.graph(GRAPH)?;
+    let report = sluse_admin::connectors::check(&g).await?;
+    let found = report
+        .findings
+        .iter()
+        .find(|f| f.can_block && f.app_id == app_id && f.service_principal == service_principal)
+        .ok_or("that is not one of the providers' apps the check found")?;
+    sluse_admin::connectors::block(&g, found.app_id.as_deref(), found.service_principal.as_deref()).await
+}
+
 #[tauri::command]
 pub fn admin_open_portal(app_id: String) -> Result<(), String> {
     if app_id.len() != 36 || !app_id.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {

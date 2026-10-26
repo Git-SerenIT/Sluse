@@ -50,12 +50,15 @@ use sluse_proto::{
 use sluse_proto::audit::Capability;
 use tokio::io::AsyncWriteExt;
 
-/// How long a request may take before the endpoint gives up.
+/// How long the Gate may send nothing before the endpoint gives up: a
+/// **read** timeout, which every byte that arrives starts again, not a limit
+/// on the whole request, which failed a large fetch or a slow link at two
+/// minutes however well it was going (review, 2026-10-15; D-071 slice 9).
 ///
-/// Generous, because an SMB open on a share that has gone away blocks until the
-/// redirector gives up and that is seconds — and a timeout shorter than the
-/// source's own is a timeout that reports the wrong thing.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+/// Longer than Gate Core's own waits (an SMB open on a share gone away, a
+/// tool server's answer: 120 s), so a stall is reported by the side that
+/// knows why.
+const READ_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// The connect timeout, which is short: the Gate is on the same machine in
 /// LOCAL and one hop away in the product. Failing to connect is not something to
@@ -227,7 +230,7 @@ pub fn build_client(loaded: &Loaded) -> Result<Client, ClientError> {
         // The Gate is on the segment, never behind the box's egress proxy
         // (M9), whatever the box's environment says.
         .no_proxy()
-        .timeout(REQUEST_TIMEOUT)
+        .read_timeout(READ_TIMEOUT)
         .connect_timeout(CONNECT_TIMEOUT)
         .build()
         .map_err(|e| ClientError::Http(e.to_string()))
@@ -248,7 +251,7 @@ pub async fn enrol(
     let client = Client::builder()
         .use_preconfigured_tls(tls)
         .no_proxy()
-        .timeout(REQUEST_TIMEOUT)
+        .read_timeout(READ_TIMEOUT)
         .connect_timeout(CONNECT_TIMEOUT)
         .build()
         .map_err(|e| SluseError::Internal { message: e.to_string() })?;
@@ -483,51 +486,88 @@ impl GateClient {
         path: &str,
         destination: &Path,
     ) -> Result<Admitted<std::path::PathBuf>, ReadFailed> {
-        let (headers, mut stream) = self.open_read(path, ReadVerb::Fetch).await?;
-        let failed = |e| ReadFailed::after(e, &headers);
-
-        if let Some(parent) = destination.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                failed(SluseError::Internal { message: format!("preparing the workspace for {path}: {e}") })
-            })?;
-        }
-        let partial = crate::workspace::partial_path(destination);
-        let guard = Partial(Some(partial.clone()));
-        let mut file = tokio::fs::File::create(&partial).await.map_err(|e| {
-            failed(SluseError::Internal { message: format!("creating {}: {e}", partial.display()) })
-        })?;
-
-        let mut hasher = ContentHasher::new();
-        let mut written: u64 = 0;
-        while let Some(chunk) = stream.chunk().await.map_err(|e| failed(transport_cause(e)))? {
-            hasher.update(&chunk);
-            written += chunk.len() as u64;
-            file.write_all(&chunk).await.map_err(|e| {
-                failed(SluseError::Internal { message: format!("writing {}: {e}", destination.display()) })
-            })?;
-        }
-        file.flush().await.map_err(|e| {
-            failed(SluseError::Internal { message: format!("flushing {}: {e}", destination.display()) })
-        })?;
-        drop(file);
-
-        // Checked before the rename: a short stream must not become the copy
-        // the agent is handed as though it were the source.
-        check_length(path, written, &headers).map_err(failed)?;
-        tokio::fs::rename(&partial, destination).await.map_err(|e| {
-            failed(SluseError::Internal { message: format!("moving {} into place: {e}", destination.display()) })
-        })?;
-        guard.keep();
-
-        Ok(Admitted {
-            value: destination.to_path_buf(),
-            hash: hasher.finish(),
-            bytes: written,
-            admission_id: headers.admission_id,
-            resolved: headers.resolved,
-            capability: headers.capability,
-        })
+        let (headers, stream) = self.open_read(path, ReadVerb::Fetch).await?;
+        land(path, headers, stream, destination).await
     }
+
+    /// The `mcp` sources' tools the agent may call (D-071).
+    pub async fn tools(&self) -> Result<sluse_proto::ToolsResponse, SluseError> {
+        let req = self.authed(self.http.get(self.url(route::TOOLS)));
+        let res = self.send(req).await?;
+        json_or_error(res).await
+    }
+
+    /// One tool call, its result landed at `destination` as a fetch's bytes
+    /// are, hashed on the way and checked against what the Gate said it sent.
+    pub async fn call_to_file(
+        &self,
+        call: &sluse_proto::CallRequest,
+        destination: &Path,
+    ) -> Result<Admitted<std::path::PathBuf>, ReadFailed> {
+        let req = self.authed(self.http.post(self.url(route::CALL))).json(call);
+        let res = self.send(req).await?;
+        if !res.status().is_success() {
+            return Err(error_from(res).await.into());
+        }
+        let headers = read_headers(&res)?;
+        land(&call.tool, headers, res, destination).await
+    }
+}
+
+/// Stream an admitted body into `destination`: through a partial file, hashed
+/// as it goes, its length checked before it takes the name.
+async fn land(
+    path: &str,
+    headers: ReadHeaders,
+    mut stream: reqwest::Response,
+    destination: &Path,
+) -> Result<Admitted<std::path::PathBuf>, ReadFailed> {
+    let failed = |e| ReadFailed::after(e, &headers);
+
+    if let Some(parent) = destination.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| {
+            failed(SluseError::Internal { message: format!("preparing the workspace for {path}: {e}") })
+        })?;
+    }
+    let partial = crate::workspace::partial_path(destination);
+    let guard = Partial(Some(partial.clone()));
+    let mut file = tokio::fs::File::create(&partial).await.map_err(|e| {
+        failed(SluseError::Internal { message: format!("creating {}: {e}", partial.display()) })
+    })?;
+
+    let mut hasher = ContentHasher::new();
+    let mut written: u64 = 0;
+    while let Some(chunk) = stream.chunk().await.map_err(|e| failed(transport_cause(e)))? {
+        hasher.update(&chunk);
+        written += chunk.len() as u64;
+        file.write_all(&chunk).await.map_err(|e| {
+            failed(SluseError::Internal { message: format!("writing {}: {e}", destination.display()) })
+        })?;
+    }
+    file.flush().await.map_err(|e| {
+        failed(SluseError::Internal { message: format!("flushing {}: {e}", destination.display()) })
+    })?;
+    drop(file);
+
+    // Checked before the rename: a short stream must not become the copy
+    // the agent is handed as though it were the source.
+    check_length(path, written, &headers).map_err(failed)?;
+    tokio::fs::rename(&partial, destination).await.map_err(|e| {
+        failed(SluseError::Internal { message: format!("moving {} into place: {e}", destination.display()) })
+    })?;
+    guard.keep();
+
+    Ok(Admitted {
+        value: destination.to_path_buf(),
+        hash: hasher.finish(),
+        bytes: written,
+        admission_id: headers.admission_id,
+        resolved: headers.resolved,
+        capability: headers.capability,
+    })
+}
+
+impl GateClient {
 
     async fn open_read(
         &self,

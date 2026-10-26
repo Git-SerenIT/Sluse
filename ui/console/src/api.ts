@@ -13,7 +13,7 @@ export type Outcome = "admitted" | "refused" | "error" | "raised";
 
 export type Op =
   | "read" | "fetch" | "reread" | "publish" | "metadata"
-  | "list" | "sources" | "alert" | "clear" | "signin" | "signout" | "scope" | "tail" | "journal";
+  | "list" | "sources" | "alert" | "clear" | "signin" | "signout" | "scope" | "tail" | "journal" | "call" | "tools";
 
 export interface UserRef {
   kind: "osProcess" | "entra";

@@ -33,6 +33,12 @@ impl SharePoint {
         Self { source_name, kind: "onedrive" }
     }
 
+    /// An `mcp` source has tools, not files (D-071): every filesystem
+    /// operation on it is unsupported, as on a library.
+    pub fn mcp(source_name: String) -> Self {
+        Self { source_name, kind: "mcp" }
+    }
+
     fn unsupported(&self) -> SluseError {
         SluseError::UnsupportedSourceKind {
             source_name: self.source_name.clone(),

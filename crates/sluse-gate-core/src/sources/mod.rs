@@ -101,6 +101,7 @@ pub fn backend_for(source: &CompiledSource) -> Box<dyn SourceBackend> {
         SourceKind::Sharepoint { .. } => Box::new(SharePoint::new(name)),
         SourceKind::Inputs => Box::new(LocalFolder::inputs(name)),
         SourceKind::Onedrive => Box::new(SharePoint::onedrive(name)),
+        SourceKind::Mcp { .. } => Box::new(SharePoint::mcp(name)),
     }
 }
 

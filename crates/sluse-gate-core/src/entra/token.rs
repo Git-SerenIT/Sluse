@@ -22,6 +22,14 @@
 //! The Graph access token beside it is not Gate Core's to validate: it is
 //! Graph's audience, and Graph checks it on every call.
 //!
+//! **One refresh token, an access token per scope** (D-071 slice 2). The
+//! sign-in yields Graph's; another resource's, an MCP server's, is asked for
+//! with the same refresh token and the resource's delegated scope, as the
+//! same person, and held beside Graph's. Entra is asked by `scope` alone,
+//! without RFC 8707's `resource`: its v2 endpoint takes the resource from the
+//! scope, and refuses a `resource` that is not exactly the app's ID URI
+//! (AADSTS9010010; `docs/research/2026-10-26-mcp-servers-entra.md`).
+//!
 //! What comes out is an [`Identity`]: the object id, which is what the box is
 //! bound on because it never changes, and a UPN for the record, which a
 //! person can read.
@@ -37,12 +45,12 @@ use sluse_proto::SluseError;
 
 use super::{unavailable, Entra};
 
-/// Renew this long before the Graph token expires.
+/// Renew this long before an access token expires.
 const RENEW_BEFORE: Duration = Duration::from_secs(300);
 
-/// What a renewal asks for: Graph with the consented delegated permissions,
-/// and a new refresh token.
-const GRAPH_SCOPE: &str = "https://graph.microsoft.com/.default offline_access";
+/// Graph with the consented delegated permissions: the scope the sign-in's
+/// access token is for, and the key it is held under.
+pub const GRAPH_SCOPE: &str = "https://graph.microsoft.com/.default";
 
 /// What a source is called on a sign-in's records and errors: there is none.
 const SIGN_IN: &str = "entra";
@@ -79,16 +87,46 @@ struct Claims {
     onprem_sid: Option<String>,
 }
 
-/// A Graph token held for the bound user.
-pub struct GraphToken {
-    pub(crate) access: String,
-    pub(crate) refresh: Option<String>,
+/// One access token, for one scope.
+pub struct Access {
+    pub(crate) token: String,
     pub(crate) expires_at: Instant,
 }
 
-impl GraphToken {
+impl Access {
     pub(crate) fn fresh(&self) -> bool {
         self.expires_at > Instant::now() + RENEW_BEFORE
+    }
+}
+
+/// What Entra answered: an access token, and a refresh token when it sent one.
+pub struct Granted {
+    pub(crate) access: Access,
+    pub(crate) refresh: Option<String>,
+}
+
+/// The tokens held for the bound user: one refresh token, and an access token
+/// for each scope asked for so far. Memory only.
+pub struct Held {
+    pub(crate) refresh: Option<String>,
+    pub(crate) access: std::collections::HashMap<String, Access>,
+}
+
+impl Held {
+    /// From a sign-in's answer, whose access token is Graph's.
+    pub(crate) fn signed_in(g: Granted) -> Self {
+        Held { refresh: g.refresh, access: [(GRAPH_SCOPE.to_owned(), g.access)].into() }
+    }
+
+    /// Keep what a renewal for `scope` answered. Entra may rotate the refresh
+    /// token; the newest is kept, and one it did not send keeps the old.
+    pub(crate) fn take(&mut self, scope: &str, g: Granted) -> String {
+        if g.refresh.is_some() {
+            self.refresh = g.refresh;
+        }
+        let token = g.access.token.clone();
+        self.access.insert(scope.to_owned(), g.access);
+        token
     }
 }
 
@@ -118,7 +156,7 @@ pub struct KeyCache {
 
 impl Entra {
     /// Redeem the host's code, and check the ID token that comes with it.
-    pub(crate) async fn redeem_code(&self, s: &HostSignIn) -> Result<(Identity, GraphToken), SluseError> {
+    pub(crate) async fn redeem_code(&self, s: &HostSignIn) -> Result<(Identity, Granted), SluseError> {
         let (t, id_token) = self
             .token_request(&[
                 ("grant_type", "authorization_code"),
@@ -136,19 +174,21 @@ impl Entra {
         Ok((who, t))
     }
 
-    /// Renew with the refresh token the sign-in returned. No user involved.
-    pub async fn renew(&self, refresh: &str, source: &str) -> Result<GraphToken, SluseError> {
+    /// An access token for `scope`, with the refresh token the sign-in
+    /// returned. No user involved.
+    pub async fn renew(&self, refresh: &str, scope: &str, source: &str) -> Result<Granted, SluseError> {
+        let scope = format!("{scope} offline_access");
         self.token_request(&[
             ("grant_type", "refresh_token"),
             ("client_id", &self.client_id),
             ("refresh_token", refresh),
-            ("scope", GRAPH_SCOPE),
+            ("scope", &scope),
         ], source)
         .await
         .map(|(t, _)| t)
     }
 
-    async fn token_request(&self, form: &[(&str, &str)], source: &str) -> Result<(GraphToken, Option<String>), SluseError> {
+    async fn token_request(&self, form: &[(&str, &str)], source: &str) -> Result<(Granted, Option<String>), SluseError> {
         let res = self
             .http
             .post(self.token_endpoint())
@@ -162,10 +202,9 @@ impl Entra {
                 .json()
                 .await
                 .map_err(|e| unavailable(source, format!("Entra's token response could not be read: {}", super::cause(&e))))?;
-            let held = GraphToken {
-                access: t.access_token,
+            let held = Granted {
+                access: Access { token: t.access_token, expires_at: Instant::now() + Duration::from_secs(t.expires_in) },
                 refresh: t.refresh_token,
-                expires_at: Instant::now() + Duration::from_secs(t.expires_in),
             };
             return Ok((held, t.id_token));
         }

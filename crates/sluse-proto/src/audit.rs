@@ -161,6 +161,12 @@ pub enum Op {
     /// when refused: a session the Gate did not issue, or a mirror over its
     /// cap (review R-01).
     Journal,
+    /// A tool call to an `mcp` source (D-071): admitted like a fetch, with
+    /// the hash of the result the box received.
+    Call,
+    /// The tools of the `mcp` sources, listed (D-071). Recorded when refused,
+    /// or when a server could not be asked.
+    Tools,
 }
 
 /// How the bytes were delivered, or would have been.

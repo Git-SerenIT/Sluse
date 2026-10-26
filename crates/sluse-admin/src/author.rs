@@ -90,6 +90,16 @@ pub fn warnings(a: &Authored, catalog: &Catalog) -> Vec<Warning> {
                 ));
                 continue;
             }
+            // The loader refuses one with no tools; what remains is the two
+            // limits D-071 states: a tool that writes is the admin's to keep
+            // out, and the person's identity reaches only as far as the server.
+            SourceKind::Mcp { .. } => {
+                say("mcp-server-trust", format!(
+                    "{} lets the agent call {} tool(s) on this server as each user. Sluse calls only the tools listed, but cannot tell whether a tool changes anything: list only tools that read. The server decides what each call returns; if it reads its own systems with a service account rather than as the user, the agent sees what that account can.",
+                    s.name, s.scope.len()
+                ));
+                continue;
+            }
         };
         if s.scope.is_empty() {
             say("whole-source", format!(

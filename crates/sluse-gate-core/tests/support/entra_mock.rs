@@ -54,6 +54,10 @@ pub struct Mock {
     pub graph_calls: AtomicUsize,
     /// What the token endpoint says a Graph token lives for.
     pub expires_in: AtomicU64,
+    /// The scope of every renewal, in order (D-071 slice 2).
+    pub renewal_scopes: Mutex<Vec<String>>,
+    /// The refresh token every renewal sent, in order.
+    pub renewal_refresh: Mutex<Vec<String>>,
     /// Every problem the stand-in found with a token request. Must stay empty.
     pub faults: Mutex<Vec<String>>,
     /// The request headers every download arrived with.
@@ -317,9 +321,29 @@ fn token_endpoint(m: &Mock, f: &HashMap<String, String>) -> Response {
                 return (StatusCode::BAD_REQUEST, axum::Json(json!({ "error": "invalid_grant", "error_description": "AADSTS50173: revoked" })))
                     .into_response();
             }
+            let scope = f.get("scope").cloned().unwrap_or_default();
+            if !scope.split(' ').any(|x| x == "offline_access") {
+                return fault(format!("a renewal without offline_access: {scope:?}"));
+            }
+            if f.contains_key("resource") {
+                return fault("a renewal sent `resource`, which Entra's v2 endpoint refuses unless exact".into());
+            }
+            m.renewal_scopes.lock().unwrap().push(scope.clone());
+            m.renewal_refresh.lock().unwrap().push(r.clone());
+            // Graph's token is the only one Graph takes; another resource's
+            // is named for it, so one sent to the wrong place fails there.
+            let first = scope.split(' ').next().unwrap_or_default();
+            let access = if first == "https://graph.microsoft.com/.default" {
+                format!("graph-renewed-{}", now())
+            } else {
+                format!("for-{first}-{}", now())
+            };
+            let n = m.renewals.load(Ordering::SeqCst);
             axum::Json(json!({
                 "token_type": "Bearer",
-                "access_token": format!("graph-renewed-{}", now()),
+                "access_token": access,
+                // Entra rotates refresh tokens; the newest must be the one used next.
+                "refresh_token": format!("{r}-r{n}"),
                 "expires_in": expires_in,
             }))
             .into_response()
@@ -360,6 +384,8 @@ pub async fn start() -> Running {
         renewals: AtomicUsize::new(0),
         graph_calls: AtomicUsize::new(0),
         expires_in: AtomicU64::new(3600),
+        renewal_scopes: Mutex::new(Vec::new()),
+        renewal_refresh: Mutex::new(Vec::new()),
         faults: Mutex::new(Vec::new()),
         download_headers: Mutex::new(Vec::new()),
     });

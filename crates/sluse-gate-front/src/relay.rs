@@ -26,7 +26,7 @@ use http_body_util::BodyExt;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sluse_proto::wire::{header, route, EnrolRequest, EnrolResponse, JournalAppend};
-use sluse_proto::{AlertsQuery, AuditTailQuery, ListRequest, ReadRequest, SluseError, StatRequest};
+use sluse_proto::{AlertsQuery, AuditTailQuery, CallRequest, ListRequest, ReadRequest, SluseError, StatRequest};
 
 use crate::ipc::Parent;
 use crate::tls::LeafPin;
@@ -50,6 +50,8 @@ pub fn router(parent: Parent) -> Router {
         .route(route::STAT, post(json::<StatRequest>))
         .route(route::JOURNAL, post(json::<JournalAppend>).layer(DefaultBodyLimit::max(JOURNAL_LIMIT)))
         .route(route::PUBLISH, post(publish).layer(DefaultBodyLimit::max(PUBLISH_LIMIT)))
+        .route(route::TOOLS, get(bare))
+        .route(route::CALL, post(json::<CallRequest>))
         .with_state(parent)
 }
 

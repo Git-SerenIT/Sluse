@@ -10,8 +10,9 @@
 //!    Gate Core's stdin; this redeems it as a **public client**, with no app
 //!    credential anywhere, and checks the ID token it gets back — signature
 //!    against Entra's published keys, tenant, audience, nonce. The user's
-//!    Graph and refresh tokens stay in this process, in memory, for as long
-//!    as the box is bound (invariant 3: no durable credential in the box).
+//!    refresh token and access tokens, Graph's and any other resource's
+//!    (D-071), stay in this process, in memory, for as long as the box is
+//!    bound (invariant 3: no durable credential in the box).
 //! 2. [`graph`]: the drive, the item, the children, the download URL.
 //!
 //! ## The box is bound to one person (D-022)
@@ -61,7 +62,7 @@ pub enum EntraError {
     Client(String),
 }
 
-/// The box's bound user, and the Graph token held for them.
+/// The box's bound user, and the tokens held for them.
 ///
 /// Lives in [`Entra`], so it goes at sign-out or when Gate Core stops.
 /// Nothing here is ever written to disk.
@@ -72,13 +73,13 @@ pub struct Bound {
     /// filesystem sources and publish act as the Windows user while the
     /// record names this one, so they are refused while it is `Some`.
     pub windows_mismatch: Option<String>,
-    pub token: tokio::sync::Mutex<token::GraphToken>,
+    pub token: tokio::sync::Mutex<token::Held>,
 }
 
 /// What [`Entra::acting_for`] hands a route.
 pub struct Acted {
     pub bound: Arc<Bound>,
-    /// The Graph access token to call with.
+    /// The access token to call with, for the scope asked.
     pub access: String,
 }
 
@@ -192,13 +193,15 @@ impl Entra {
     /// the held ones: this is how a box whose refresh token died comes back.
     /// A sign-in for anyone else is refused, and changes nothing.
     pub async fn redeem(&self, sign_in: &HostSignIn) -> Result<(Arc<Bound>, bool), SluseError> {
-        let (who, graph) = self.redeem_code(sign_in).await?;
+        let (who, granted) = self.redeem_code(sign_in).await?;
         match self.binding() {
             Some(existing) => {
                 let bound = same_user(existing, &who)?;
                 let mut held = bound.token.lock().await;
-                let refresh = graph.refresh.clone().or_else(|| held.refresh.take());
-                *held = token::GraphToken { refresh, ..graph };
+                // The new sign-in's tokens; other scopes' are asked for again
+                // with its refresh token as they are needed.
+                let refresh = granted.refresh.clone().or_else(|| held.refresh.take());
+                *held = token::Held::signed_in(token::Granted { refresh, ..granted });
                 drop(held);
                 Ok((bound, false))
             }
@@ -210,7 +213,7 @@ impl Entra {
                         Err(e) => Some(e.to_string()),
                     }),
                     identity: who.clone(),
-                    token: tokio::sync::Mutex::new(graph),
+                    token: tokio::sync::Mutex::new(token::Held::signed_in(granted)),
                 });
                 let bound = self.bind(fresh.clone());
                 let made_it = Arc::ptr_eq(&bound, &fresh);
@@ -222,22 +225,31 @@ impl Entra {
         }
     }
 
-    /// The Graph token to act with. **The one entry point the source routes
+    /// The Graph token to act with. **The entry point the source routes
     /// call.** The box must be bound: requests carry no token (D-036).
     pub async fn acting_for(&self, source: &str) -> Result<Acted, SluseError> {
+        self.acting_for_scope(source, token::GRAPH_SCOPE).await
+    }
+
+    /// An access token for `scope`, a resource's delegated scope such as an
+    /// MCP server's (D-071), as the bound person: from the held refresh
+    /// token, kept beside Graph's, renewed before it expires. A scope Sluse's
+    /// app was not granted is Entra's refusal, passed on as it says it.
+    pub async fn acting_for_scope(&self, source: &str, scope: &str) -> Result<Acted, SluseError> {
         let bound = self.binding().ok_or_else(|| SluseError::SignInRequired {
             detail: "this box has no signed-in user; sign in from the Sluse window".into(),
         })?;
         let mut held = bound.token.lock().await;
-        if !held.fresh() {
-            let refresh = held.refresh.clone().ok_or_else(|| SluseError::SignInRequired {
-                detail: "the held sign-in expired and Entra returned nothing to renew it with".into(),
-            })?;
-            let renewed = self.renew(&refresh, source).await?;
-            let refresh = renewed.refresh.clone().or_else(|| held.refresh.take());
-            *held = token::GraphToken { refresh, ..renewed };
-        }
-        let access = held.access.clone();
+        let access = match held.access.get(scope).filter(|a| a.fresh()) {
+            Some(a) => a.token.clone(),
+            None => {
+                let refresh = held.refresh.clone().ok_or_else(|| SluseError::SignInRequired {
+                    detail: "the held sign-in expired and Entra returned nothing to renew it with".into(),
+                })?;
+                let granted = self.renew(&refresh, scope, source).await?;
+                held.take(scope, granted)
+            }
+        };
         drop(held);
         Ok(Acted { bound, access })
     }

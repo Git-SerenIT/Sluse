@@ -114,6 +114,8 @@ fn the_backend_for_a_source_matches_its_kind() {
         remote: Some(Vec::new()),
         unavailable: None,
         dropped: Vec::new(),
+        tools: Vec::new(),
+        retry: None,
     };
     assert_eq!(backend_for(&sharepoint).kind(), "sharepoint");
 }

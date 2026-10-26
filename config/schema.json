@@ -215,6 +215,14 @@
         "clientId"
       ]
     },
+    "McpProtocol": {
+      "description": "The MCP versions Gate Core speaks (D-071 point 6, research\n2026-10-26-mcp-transport): the `initialize` handshake of 2025-11-25,\nwhich most servers still need, and 2026-07-28 without it.",
+      "type": "string",
+      "enum": [
+        "2025-11-25",
+        "2026-07-28"
+      ]
+    },
     "SourceConfig": {
       "description": "One source: what it is called, where it is, and how much of it is in scope.",
       "type": "object",
@@ -368,6 +376,52 @@
           "additionalProperties": false,
           "required": [
             "type"
+          ]
+        },
+        {
+          "description": "An MCP server reached over HTTP that takes an Entra token (D-071):\nGate Core calls it as the signed-in person, with the delegated scope\nSluse's app was granted. Never a server run on the host. **The\nsource's `scope` lists the tools allowed**, by the server's names, and\nmust name at least one: v0.2 is read only, and which tools are is the\nadmin's judgement, not the server's `readOnlyHint`. Needs\n[`Authored::entra`].",
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "object",
+              "properties": {
+                "entraScope": {
+                  "description": "The delegated scope Sluse's app asks Entra for, one, as Entra\nnames it: `api://<app>/<scope>` or a resource's `/.default`.",
+                  "type": "string"
+                },
+                "pins": {
+                  "description": "Arguments fixed per tool: `{\"tool\": {\"argument\": value}}`. The\nagent does not see a pinned argument, and Gate Core sets it on\nevery call. Only tools in the source's `scope`.",
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "protocol": {
+                  "description": "The MCP version the server speaks, found by Sluse Admin's probe\nwhen the server was added; a call never probes (D-071 point 6).",
+                  "$ref": "#/$defs/McpProtocol"
+                },
+                "url": {
+                  "description": "The server's MCP endpoint, `https://…`.",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "url",
+                "entraScope",
+                "protocol"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "mcp"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "address"
           ]
         }
       ]

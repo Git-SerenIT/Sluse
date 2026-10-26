@@ -196,6 +196,8 @@ pub fn event_id(op: sluse_proto::Op, outcome: sluse_proto::Outcome) -> u32 {
         // 14 is the posture snapshot's (POSTURE).
         Tail => 15,
         Journal => 16,
+        Call => 17,
+        Tools => 18,
     };
     let outcome = match outcome {
         Admitted => 0,

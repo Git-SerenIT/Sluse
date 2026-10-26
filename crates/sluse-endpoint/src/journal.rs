@@ -43,6 +43,12 @@ pub struct Journal {
     path: PathBuf,
     file: File,
     records: Vec<AuditRecord>,
+    /// Records the disk refused: kept, and put back after every [`reload`],
+    /// so an admission that happened stays in this process's lineage
+    /// (review R-33). Gone at the process's end, as the file's lines are not.
+    ///
+    /// [`reload`]: Journal::reload
+    unwritten: Vec<AuditRecord>,
 }
 
 impl Journal {
@@ -55,7 +61,7 @@ impl Journal {
         let path = session_path(dir, session);
         let records = read_records(&path)?;
         let file = OpenOptions::new().create(true).append(true).open(&path)?;
-        Ok(Self { path, file, records })
+        Ok(Self { path, file, records, unwritten: Vec::new() })
     }
 
     pub fn path(&self) -> &Path {
@@ -86,10 +92,12 @@ impl Journal {
     pub fn append(&mut self, rec: AuditRecord) -> std::io::Result<()> {
         let mut line = serde_json::to_string(&rec).map_err(std::io::Error::other)?;
         line.push('\n');
-        self.file.write_all(line.as_bytes())?;
-        self.file.flush()?;
+        let written = self.file.write_all(line.as_bytes()).and_then(|()| self.file.flush());
+        if written.is_err() {
+            self.unwritten.push(rec.clone());
+        }
         self.records.push(rec);
-        Ok(())
+        written
     }
 
     /// Append, and never fail the operation being recorded.
@@ -109,6 +117,7 @@ impl Journal {
     /// that other process.
     pub fn reload(&mut self) -> std::io::Result<()> {
         self.records = read_records(&self.path)?;
+        self.records.extend(self.unwritten.iter().cloned());
         Ok(())
     }
 
@@ -149,7 +158,7 @@ impl Journal {
     fn admissions(&self) -> impl Iterator<Item = (&AuditRecord, &ContentHash)> {
         self.records
             .iter()
-            .filter(|r| r.outcome == Outcome::Admitted && matches!(r.op, Op::Read | Op::Fetch))
+            .filter(|r| r.outcome == Outcome::Admitted && matches!(r.op, Op::Read | Op::Fetch | Op::Call))
             .filter_map(|r| r.hash.as_ref().map(|h| (r, h)))
     }
 }
@@ -158,7 +167,8 @@ fn state_of(r: &AuditRecord) -> AdmissionState {
     let reason = |code: &str| r.reason.as_deref().is_some_and(|x| x.split(';').any(|c| c == code));
     if reason("OFFICE_ENCRYPTED") {
         AdmissionState::Encrypted
-    } else if r.op == Op::Fetch {
+    // A tool's result is a copy in the workspace, as a fetch's bytes are (D-071).
+    } else if matches!(r.op, Op::Fetch | Op::Call) {
         AdmissionState::Fetched
     } else if reason("NOT_UTF8_TEXT") || reason("NOT_EXTRACTED") {
         AdmissionState::Unread
@@ -320,6 +330,22 @@ mod tests {
             ContentHash::of(body),
             body.len() as u64,
         )
+    }
+
+    /// Review R-33: a full disk loses the line, not the admission. It stays
+    /// in lineage, through a reload, so declaring it is not refused.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_admission_the_disk_refused_stays_in_lineage() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = SessionId::mint();
+        let mut j = Journal::open_session(dir.path(), &session).unwrap();
+        j.file = std::fs::OpenOptions::new().write(true).open("/dev/full").unwrap();
+        assert!(j.append(admitted(Op::Read, "fixture/a.md", b"alpha", &session)).is_err());
+        assert_eq!(j.lineage().len(), 1);
+        j.reload().unwrap();
+        assert_eq!(j.lineage().len(), 1, "a reload reads the file and keeps what it could not hold");
+        assert_eq!(j.hash_named("fixture/a.md"), Some(&ContentHash::of(b"alpha")));
     }
 
     #[test]

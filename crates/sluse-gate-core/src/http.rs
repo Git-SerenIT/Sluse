@@ -97,8 +97,31 @@ pub fn router(core: Arc<Core>) -> Router {
         .route(route::AUDIT_TAIL, get(audit_tail))
         .route(route::SIGN_OUT, post(sign_out))
         .route(route::JOURNAL, post(journal_mirror).layer(DefaultBodyLimit::max(JOURNAL_LIMIT)))
+        .route(route::TOOLS, get(tools))
+        .route(route::CALL, post(call))
         .layer(axum::middleware::map_response_with_state(core.clone(), stamp_user))
         .with_state(core)
+}
+
+// ---------------------------------------------------------------------------
+// The `mcp` sources' tools (D-071 slice 4)
+// ---------------------------------------------------------------------------
+
+/// Every `mcp` source's allowed tools. No record when listed, as a listing;
+/// a server that could not be asked is recorded (`crate::mcp::tools`).
+async fn tools(State(core): State<Arc<Core>>, headers: HeaderMap) -> ApiResult<Json<sluse_proto::ToolsResponse>> {
+    let session = session(&core, &headers, Op::Tools, "")?;
+    Ok(Json(crate::mcp::tools(&core, &session).await))
+}
+
+/// One tool call, admitted like a fetch.
+async fn call(
+    State(core): State<Arc<Core>>,
+    headers: HeaderMap,
+    Json(req): Json<sluse_proto::CallRequest>,
+) -> ApiResult<Response> {
+    let session = session(&core, &headers, Op::Call, &req.tool)?;
+    crate::mcp::call(&core, session, req).await
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +460,7 @@ async fn list(
     }
     .map_err(|e| ApiError(core.refuse(rec(), e)))?;
 
-    let source = core.source(scoped.source);
+    let source = core.compiled.live(scoped.source);
     let raw = core
         .backend(scoped.source)
         .list(&req.path, scoped.path.real())
@@ -1220,6 +1243,14 @@ fn deliver(
         Ok(())
     };
     let outcome = run();
+    // All or nothing on the host too (review R-31): a move that failed half
+    // way takes back what it moved, with the fresh folder it moved into, so
+    // the host records nothing, as the box records one refusal. Only if that
+    // fails too are the moved files kept, and recorded, so no file sits in
+    // Sluse Artifacts without its record.
+    if outcome.is_err() && !moved.is_empty() && !folder.is_empty() && std::fs::remove_dir_all(artifacts.join(&folder)).is_ok() {
+        moved.clear();
+    }
     (moved, folder, outcome)
 }
 

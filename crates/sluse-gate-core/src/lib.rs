@@ -49,6 +49,7 @@ pub mod entra;
 pub mod audit;
 pub mod http;
 pub mod identity;
+pub mod mcp;
 pub mod preflight;
 pub mod remote;
 pub mod scope;

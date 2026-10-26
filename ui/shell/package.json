@@ -1,6 +1,6 @@
 {
   "name": "sluse-shell",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "The Sluse host shell: one window on the user's box (D-025).",
   "type": "module",

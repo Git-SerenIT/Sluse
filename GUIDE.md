@@ -78,7 +78,14 @@ console: it would let the agent drive a browser elsewhere, outside every
 record. Turn off, too, every connector that reads company data from the
 provider's side: Microsoft 365, Google Drive, and any custom remote MCP
 connector. They reach files around Sluse, outside the folders you picked,
-and nothing records it.
+and nothing records it. **Sluse Admin reads whether the Microsoft 365 ones
+are open in your tenant** (Tenant, "The AI providers' own connectors"):
+Claude's two Microsoft 365 apps, and ChatGPT's app once it is in the
+tenant, with their consent and whether users may consent for themselves.
+It offers to turn an app's sign-in off in Entra, which stops that
+connector for everyone; it changes nothing unless you choose it. A
+connector a user adds to a personal account involves no app of yours, and
+it cannot see that.
 
 ## Setting it up
 

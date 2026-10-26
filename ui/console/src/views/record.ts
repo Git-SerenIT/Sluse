@@ -15,7 +15,7 @@ type Kind = "all" | "in" | "pub" | "problem" | "other";
 const KINDS: [Kind, string][] = [["all", "All"], ["in", "Let in"], ["pub", "Published"], ["problem", "Refused and errors"], ["other", "Other"]];
 const kindOf = (r: AuditRecord): Kind =>
   r.outcome === "refused" || r.outcome === "error" ? "problem"
-    : (r.op === "read" || r.op === "fetch") ? "in" : r.op === "publish" ? "pub" : "other";
+    : (r.op === "read" || r.op === "fetch" || r.op === "call") ? "in" : r.op === "publish" ? "pub" : "other";
 
 let shown: Kind = "all";
 let pages = 1;

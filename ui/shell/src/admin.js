@@ -366,6 +366,9 @@ async function signIn(pick = false) {
     S.signing = null;
     draw();
     readRoles();
+    // The providers' connectors, read once a sign-in is there (D-071).
+    if (before?.tenant !== w.tenant) { PROV.state = 'idle'; PROV.report = null; }
+    readProviders();
     return;
   } catch (e) {
     S.startError = signInError(String(e));
@@ -558,7 +561,7 @@ function load(a, path) {
   $('dep-name').value = a.deployment?.name ?? '';
   // A SharePoint source from a file has no library id to browse by until its
   // site is found again (Q48).
-  S.sources = (a.sources ?? []).map((s) => ({ ...s, scope: s.scope ?? [], mark: s.kind.type === 'sharepoint' ? 'from-file' : null }));
+  S.sources = (a.sources ?? []).map((s) => ({ ...s, scope: s.scope ?? [], mark: ['sharepoint', 'mcp'].includes(s.kind.type) ? 'from-file' : null }));
   const e = a.egress ?? { bundles: [], allow: [] };
   S.bundles = new Set(e.bundles);
   const fromCatalog = (S.catalog?.bundles ?? []).flatMap((bd) => bd.hosts);
@@ -736,7 +739,71 @@ function drawTenant() {
   $('seq-consent').dataset.seq = ready ? (S.consent.state === 'granted' ? 'done' : '') : 'waits';
   $('seq-who').dataset.seq = ready ? (S.assigned.list?.length ? 'done' : '') : 'waits';
   if (ready) { drawConsent(); drawWho(); }
+  drawProviders();
 }
+
+// ---- The providers' own connectors (D-071 slice 7) ------------------------------------------
+const PROV = { state: 'idle' };
+async function readProviders() {
+  if (!S.who) return;
+  PROV.state = 'reading'; drawProviders();
+  try {
+    PROV.report = await invoke('admin_connectors');
+    PROV.state = 'read';
+  } catch (e) {
+    PROV.state = 'error'; PROV.error = String(e);
+    sawError(e);
+  }
+  drawProviders();
+}
+const CONSENT_WORDS = {
+  Off: ['done', 'Users cannot consent to apps themselves: an admin decides each one.'],
+  VerifiedLowRisk: ['warning', "Users may consent for themselves to verified publishers' apps asking low-risk permissions. The providers' apps may be among them."],
+  On: ['warning', 'Users may consent to any app for themselves, the providers\' included.'],
+};
+function drawProviders() {
+  $('prov-read').setAttribute('aria-busy', String(PROV.state === 'reading'));
+  $('prov-read').disabled = !S.who || PROV.state === 'reading';
+  const r = PROV.report;
+  const open = r ? r.findings.filter((f) => f.open).length : 0;
+  fill($('prov-pill'), PROV.state === 'read' ? (open ? pill('warning', `${open} open`) : pill('done', 'Closed')) : pill('not-checked', 'Not read'));
+  if (!S.who) { fill($('prov-body'), note('info', 'Sign in to read them.')); return; }
+  if (PROV.state === 'error') { fill($('prov-body'), banner('problem', 'They could not be read.', 'Sign in again, then read them again.', { raw: PROV.error })); return; }
+  if (PROV.state !== 'read') { fill($('prov-body'), PROV.state === 'reading' ? status('working', 'Reading the providers\' apps…') : null); return; }
+  const uc = r.userConsent;
+  const consent = uc.state === 'Unknown' ? note('info', 'Whether users may consent for themselves could not be read: it needs Policy.Read.All, which your sign-in did not grant. Entra admin center, Enterprise applications, Consent and permissions, says.')
+    : uc.state === 'Other' ? note('info', 'Users consent under these policies: ', mono(uc.policies.join(', ')), '.')
+      : note(CONSENT_WORDS[uc.state][0], CONSENT_WORDS[uc.state][1]);
+  fill($('prov-body'),
+    consent,
+    el('ul', { class: 'rows' }, r.findings.map((f) => el('li', { class: 'row', style: 'flex-wrap: wrap' },
+      icon(f.open ? 'warning' : 'sealed'),
+      el('span', { class: 'row__main' }, b(f.name), ` (${f.provider})`, el('br'),
+        el('span', { class: 't-small t-muted' },
+          !f.servicePrincipal ? 'Not in this tenant. Anyone allowed to consent can add it; turning its sign-in off now means no one can.'
+            : f.signInEnabled === false ? 'Sign-in is off: Entra issues no token for it.'
+              : [`In this tenant, sign-in on. ${f.tenantScopes.length ? `Admin consent for everyone: ${f.tenantScopes.join(', ')}.` : 'No admin consent for everyone.'}`,
+                f.userGrants ? ` ${plural(f.userGrants, 'user')} consented for themselves.` : '',
+                f.assignmentRequired ? ' Only people assigned to it may sign in.' : ''].join(''))),
+      f.canBlock ? btn('Turn its sign-in off', () => blockProvider(f), { cls: 'btn--sm' }) : null))),
+    note('info', "OpenAI publishes no app id for its connectors' app, so it is found here by name once it is in this tenant, and cannot be turned off before. A connector a user adds to a personal Claude or ChatGPT account involves no app of yours, and nothing here sees it."));
+}
+async function blockProvider(f) {
+  const ok = await ask({ ico: 'warning', title: `Turn sign-in off for ${f.name}?`, destructive: true,
+    body: [el('p', {}, `Entra then issues no token for it: ${f.provider}'s connector stops working for everyone in this tenant, whatever anyone consented to.`),
+      el('p', { class: 't-small t-muted' }, f.servicePrincipal ? 'It is undone in Entra admin center: Enterprise applications, the app, Properties, Enabled for users to sign in.'
+        : 'Its service principal is made now, with sign-in off, before anyone consents. It is undone in Entra admin center, as any app.')],
+    actions: [['cancel', 'Cancel'], ['ok', 'Turn it off', 'btn--destructive']] }) === 'ok';
+  if (!ok) return;
+  try {
+    const done = await invoke('admin_connector_block', { appId: f.appId ?? null, servicePrincipal: f.servicePrincipal ?? null });
+    toast(`${f.name}: ${done}.`);
+  } catch (e) {
+    PROV.state = 'error'; PROV.error = String(e); sawError(e);
+  }
+  readProviders();
+}
+$('prov-read').onclick = readProviders;
 
 function appResult(r) {
   const said = r.changed.map((c) => {
@@ -856,11 +923,12 @@ function drawWho() {
 }
 
 // ---- Sources ----------------------------------------------------------------------
-const kindWord = { sharepoint: 'SharePoint', smb: 'File share', 'local-folder': 'Folder on the device' };
-const kindIcon = { sharepoint: 'library', smb: 'server', 'local-folder': 'folder' };
+const kindWord = { sharepoint: 'SharePoint', smb: 'File share', 'local-folder': 'Folder on the device', mcp: 'Tool server' };
+const kindIcon = { sharepoint: 'library', smb: 'server', 'local-folder': 'folder', mcp: 'apps' };
 const where = (s) => s.kind.type === 'sharepoint' ? [mono(s.kind.address.siteUrl), `, library ${s.kind.address.library}`]
-  : s.kind.type === 'smb' ? mono(s.kind.address.unc) : mono(s.kind.address?.root ?? '');
-const whole = (s) => s.kind.type === 'sharepoint' ? ['The whole library ', s.kind.address.library] : s.kind.type === 'smb' ? ['The whole share ', mono(s.kind.address.unc)] : ['All of ', mono(s.kind.address.root)];
+  : s.kind.type === 'smb' ? mono(s.kind.address.unc) : s.kind.type === 'mcp' ? [mono(s.kind.address.url), `, MCP ${s.kind.address.protocol}`] : mono(s.kind.address?.root ?? '');
+const whole = (s) => s.kind.type === 'sharepoint' ? ['The whole library ', s.kind.address.library] : s.kind.type === 'smb' ? ['The whole share ', mono(s.kind.address.unc)]
+  : s.kind.type === 'mcp' ? ['Every tool of ', mono(s.kind.address.url)] : ['All of ', mono(s.kind.address.root)];
 const levelSelect = (s, id) => el('select', { class: 'select', id, onchange: (e) => { s.sensitivity = Number(e.target.value); changed(); } },
   LEVELS.map(([v, t]) => el('option', { value: v, selected: v === s.sensitivity }, t)));
 function uniqueName(n, except) { let name = slug(n), i = 2; while (S.sources.some((s) => s !== except && s.name === name)) name = `${slug(n).slice(0, 29)}-${i++}`; return name; }
@@ -868,10 +936,10 @@ function uniqueName(n, except) { let name = slug(n), i = 2; while (S.sources.som
 function drawSources() {
   fill($('dep-hint'), `Intune's app is named after it, for example "Sluse: ${depName() || 'Pilot'}, revision ${nextRevision()}".`);
   const company = S.sources.filter((s) => !USER_KINDS.includes(s.kind.type));
-  const graph = S.sources.filter((s) => s.kind.type === 'sharepoint' || s.kind.type === 'onedrive');
+  const graph = S.sources.filter((s) => ['sharepoint', 'onedrive', 'mcp'].includes(s.kind.type));
   $('add-source-top').hidden = !company.length;
   fill($('sources-banner'), graph.length && !clientId() ? banner('warning', `${graph[0].name} reads through Sluse's app, which this configuration does not name yet.`,
-    "SharePoint and OneDrive sources need it. Make or repair it at Tenant, or open the saved configuration that names it. Review refuses the configuration until then.",
+    "SharePoint, OneDrive and tool server sources need it. Make or repair it at Tenant, or open the saved configuration that names it. Review refuses the configuration until then.",
     { actions: [goBtn('Go to Tenant', 'tenant'), el('button', { class: 'btn btn--sm btn--quiet', type: 'button', 'data-act': 'open-file' }, icon('folder-open'), 'Open a saved configuration…')] }) : null);
   fill($('sources'), company.length ? company.map(srcCard) : el('div', { class: 'empty' }, el('span', { class: 'empty__icon' }, icon('source')),
     el('p', { class: 'empty__title' }, 'No sources yet'),
@@ -890,6 +958,7 @@ function drawSources() {
 }
 
 function srcCard(s) {
+  if (s.kind.type === 'mcp') return mcpCard(s);
   const unbrowsable = s.kind.type === 'sharepoint' && !s.driveId;
   const n = s.scope.length;
   const local = s.kind.type === 'local-folder';
@@ -936,6 +1005,32 @@ function srcCard(s) {
       local ? note('info', 'A test folder on each device, from the opened file. Its folders are kept as written; Sluse Admin does not browse it.') : null));
 }
 
+/** A tool server's card (D-071): its tools in reach, each one's fixed
+ * arguments, and Pick tools, which reads the server again. */
+function mcpCard(s) {
+  const id = `src-${s.name}`;
+  const pins = s.kind.address.pins ?? {};
+  return el('article', { class: 'srccard', id, 'aria-labelledby': `${id}-n` },
+    el('div', { class: 'srccard__head' },
+      el('span', { class: 'srccard__kind' }, icon('apps')),
+      el('div', {},
+        el('div', { class: 'srccard__title' }, el('h3', { class: 'srccard__name', id: `${id}-n` }, s.name), pill('plain', 'Tool server'),
+          s.mark === 'from-file' ? pill('not-checked', 'From the file') : null, s.mark === 'added' ? pill('plain', 'Just added') : null),
+        el('p', { class: 'srccard__where' }, where(s))),
+      el('div', { class: 'srccard__tools' },
+        el('label', { class: 'visually-hidden', for: `${id}-sens` }, `Sensitivity of ${s.name}`), levelSelect(s, `${id}-sens`),
+        el('details', { class: 'menu' }, el('summary', { class: 'btn btn--quiet btn--icon', 'aria-label': `More for ${s.name}` }, icon('more')),
+          el('div', { class: 'menu__list' },
+            el('button', { class: 'menu__item menu__item--destructive', type: 'button', onclick: () => removeSource(s) }, icon('wipe'), `Remove ${s.name}`,
+              el('span', { class: 'menu__hint' }, 'Undo stays offered for a few seconds')))))),
+    el('div', { class: 'srccard__reach' },
+      el('div', { class: 'srccard__reachhead' }, el('span', {}, b('In reach:'), ` ${plural(s.scope.length, 'tool')}`), el('span', { class: 'spacer' }),
+        btn('Pick tools', () => editMcp(s), { cls: 'btn--sm', ico: 'apps' })),
+      el('div', { class: 'cluster' }, s.scope.map((t) => el('span', { class: 'chip' }, mono(t),
+        pins[t] ? el('span', { class: 't-muted' }, ` (${Object.entries(pins[t]).map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(', ')})`) : null))),
+      note('info', 'Sluse calls only these, as each user. It cannot tell whether a tool changes anything: keep only tools that read.')));
+}
+
 function removeSource(s) {
   const at = S.sources.indexOf(s);
   S.sources.splice(at, 1);
@@ -955,7 +1050,7 @@ for (const row of document.querySelectorAll('[data-uf]')) {
 $('dep-name').oninput = () => { fill($('dep-hint'), `Intune's app is named after it, for example "Sluse: ${depName() || 'Pilot'}, revision ${nextRevision()}".`); changed(); };
 
 // ---- Add a source -------------------------------------------------------------------
-const ADD = { tab: 'sp', sp: { state: 'idle' }, tm: { state: 'idle' }, share: '' };
+const ADD = { tab: 'sp', sp: { state: 'idle' }, tm: { state: 'idle' }, share: '', mcp: { state: 'idle' } };
 function openAdd(tab = 'sp') {
   ADD.tab = tab;
   if (tab === 'sp' && ADD.sp.state === 'libs') ADD.sp = { ...ADD.sp, state: ADD.sp.sites ? 'results' : 'idle' };
@@ -972,6 +1067,7 @@ function drawAdd() {
   $('pane-sp').hidden = ADD.tab !== 'sp';
   $('pane-tm').hidden = ADD.tab !== 'tm';
   $('pane-sh').hidden = ADD.tab !== 'sh';
+  $('pane-mcp').hidden = ADD.tab !== 'mcp';
   const t = tenantWord() ?? 'your tenant';
   fill($('add-as'), S.who ? `You browse as ${S.who.account}. Each user still reaches only what they can open themselves.` : 'Each user still reaches only what they can open themselves.');
   const go = $('add-go');
@@ -1034,6 +1130,7 @@ function drawAdd() {
   $('share-hint').hidden = invalid;
 
   if (ADD.tab === 'sh') { fill(go, 'Add the share'); go.disabled = !valid; go.className = 'btn btn--primary'; return; }
+  if (ADD.tab === 'mcp') { drawMcp(); return; }
   if (ADD.tab === 'sp' && sp.state === 'libs' && sp.lib) {
     const already = S.sources.find((s) => sameLibrary(s, sp.site, sp.lib));
     fill(go, already ? (already.driveId ? `${already.name} is already a source` : `Reattach ${already.name}`) : `Add ${sp.lib.name}`);
@@ -1087,6 +1184,7 @@ async function listTeams() {
 listen('teams-progress', (e) => { if (ADD.tm.state === 'reading') { [ADD.tm.read, ADD.tm.of] = e.payload; drawAdd(); } });
 
 $('add-go').onclick = () => {
+  if (ADD.tab === 'mcp') { addMcp(); return; }
   if (ADD.tab === 'sh') {
     const unc = $('share-path').value.trim();
     const [server, share] = unc.split('\\').filter(Boolean);
@@ -1113,7 +1211,123 @@ $('add-go').onclick = () => {
 };
 for (const t of document.querySelectorAll('#dlg-add [data-tab]')) t.onclick = () => { ADD.tab = t.dataset.tab; drawAdd(); };
 $('site-find').onclick = findSites;
+$('mcp-read').onclick = readMcp;
 $('share-path').oninput = drawAdd;
+
+// ---- A tool server (D-071) --------------------------------------------------------------
+/** The server's permission on Sluse's app, admin consent for it, then its
+ * tools as Sluse's app reads them: the version it answered is kept. */
+async function readMcp() {
+  const url = $('mcp-url').value.trim(), scope = $('mcp-scope').value.trim();
+  const m = ADD.mcp;
+  if (!S.who) { ADD.mcp = { ...m, state: 'error', error: 'not signed in' }; drawAdd(); return; }
+  if (!clientId()) { ADD.mcp = { ...m, state: 'error', error: "Sluse's app is not set up" }; drawAdd(); return; }
+  ADD.mcp = { ...m, url, scope, state: 'requiring' };
+  drawAdd();
+  try {
+    const r = await invoke('admin_mcp_require', { scope });
+    ADD.mcp = { ...ADD.mcp, resource: r.resource, added: r.added };
+    if (!r.consented) { ADD.mcp.state = 'consent'; drawAdd(); return; }
+    await probeMcp();
+  } catch (e) {
+    ADD.mcp = { ...ADD.mcp, state: 'error', error: String(e) };
+    sawError(e);
+    drawAdd();
+  }
+}
+async function consentAgain() {
+  ADD.mcp.state = 'requiring'; drawAdd();
+  try {
+    if (await invoke('admin_mcp_consented', { scope: ADD.mcp.scope })) { await probeMcp(); return; }
+    ADD.mcp.state = 'consent'; ADD.mcp.notYet = true;
+  } catch (e) { ADD.mcp = { ...ADD.mcp, state: 'error', error: String(e) }; sawError(e); }
+  drawAdd();
+}
+async function probeMcp() {
+  ADD.mcp.state = 'probing'; drawAdd();
+  try {
+    const p = await invoke('admin_mcp_probe', { url: ADD.mcp.url, scope: ADD.mcp.scope, client: clientId() });
+    const keep = ADD.mcp.editing;
+    ADD.mcp = { ...ADD.mcp, state: 'tools', probe: p,
+      picked: new Set(keep ? keep.scope.filter((t) => p.tools.some((x) => x.name === t)) : []),
+      pins: structuredClone(keep?.kind.address.pins ?? {}) };
+  } catch (e) {
+    ADD.mcp = { ...ADD.mcp, state: 'error', error: String(e) };
+    sawError(e);
+  }
+  drawAdd();
+}
+/** A pin's value as the tool's schema types the argument. */
+function pinValue(schema, raw) {
+  const t = schema?.type;
+  if (t === 'number' || t === 'integer') return Number(raw);
+  if (t === 'boolean') return raw === 'true';
+  return raw;
+}
+function drawMcp() {
+  const m = ADD.mcp;
+  const go = $('add-go');
+  $('mcp-read').setAttribute('aria-busy', String(['requiring', 'probing'].includes(m.state)));
+  fill($('mcp-body'),
+    m.state === 'requiring' ? status('working', "Adding the server's permission to Sluse's app…") : null,
+    m.state === 'probing' ? status('working', "Reading its tools as Sluse's app. Microsoft's sign-in may ask you to confirm.") : null,
+    m.state === 'consent' ? banner(m.notYet ? 'warning' : 'info', `${m.resource.name}'s ${m.resource.scope} is on Sluse's app${m.added ? ' now' : ''}, without admin consent yet.`,
+      `Grant it in the portal: API permissions, Grant admin consent for your organisation. Then check again here.${m.notYet ? ' Consent was not there yet; Entra can take a minute to show it.' : ''}`,
+      { actions: [btn('Open the portal', () => invoke('admin_open_portal', { appId: clientId() }), { cls: 'btn--sm', ico: 'external' }), btn('Check again', consentAgain, { cls: 'btn--sm btn--primary', ico: 'refresh' })] }) : null,
+    m.state === 'error' ? banner('problem', m.error === 'not signed in' ? 'Sign in first.' : m.error === "Sluse's app is not set up" ? "Sluse's app is not set up yet." : 'The tool server could not be read.',
+      m.error === 'not signed in' ? 'Reading a tool server checks its permission in your tenant as you.' : m.error === "Sluse's app is not set up" ? 'Make it at Tenant first: the server is read as that app.'
+        : 'Check the address and the permission, then read it again.', { raw: m.error }) : null,
+    m.state === 'tools' ? [
+      el('p', { class: 't-small' }, `Speaks MCP ${m.probe.protocol}, which Sluse keeps for this server. Tick the tools the agent may call; keep only tools that read.`),
+      el('ul', { class: 'rows' }, m.probe.tools.map((t) => {
+        const on = m.picked.has(t.name);
+        const props = Object.entries(t.inputSchema?.properties ?? {});
+        return el('li', { class: 'row', style: 'flex-wrap: wrap' },
+          el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: on, onchange: (e) => { e.target.checked ? m.picked.add(t.name) : m.picked.delete(t.name); drawAdd(); } }),
+            el('span', { class: 'check__box' }), mono(t.name)),
+          t.readOnly === true ? pill('plain', 'The server says it only reads') : t.readOnly === false ? pill('warning', 'The server says it changes things') : null,
+          el('span', { class: 'row__meta' }, t.description ?? ''),
+          on && props.length ? el('div', { class: 'stack', style: 'width: 100%; --stack-gap: var(--space-1)' },
+            el('span', { class: 't-small t-muted' }, 'Fix an argument, and the agent cannot set it:'),
+            props.map(([k, schema]) => el('label', { class: 'field' }, el('span', { class: 'field__label' }, mono(k)),
+              el('input', { class: 'input input--mono', type: 'text', placeholder: 'The agent sets it', value: m.pins[t.name]?.[k] ?? '',
+                onchange: (e) => {
+                  const v = e.target.value.trim();
+                  m.pins[t.name] = { ...(m.pins[t.name] ?? {}) };
+                  if (v === '') delete m.pins[t.name][k]; else m.pins[t.name][k] = pinValue(schema, v);
+                  if (!Object.keys(m.pins[t.name]).length) delete m.pins[t.name];
+                } })))) : null);
+      }))] : null);
+  fill(go, m.editing ? `Use ${plural(m.picked?.size ?? 0, 'tool')}` : 'Add the tool server');
+  go.disabled = m.state !== 'tools' || !m.picked.size;
+}
+function addMcp() {
+  const m = ADD.mcp;
+  const tools = [...m.picked];
+  const pins = Object.fromEntries(Object.entries(m.pins).filter(([t]) => m.picked.has(t)));
+  const address = { url: m.url, entraScope: m.scope, protocol: m.probe.protocol, ...(Object.keys(pins).length ? { pins } : {}) };
+  if (m.editing) {
+    m.editing.kind = { type: 'mcp', address };
+    m.editing.scope = tools;
+    m.editing.mark = null;
+    toast(`${m.editing.name}: ${plural(tools.length, 'tool')}.`);
+  } else {
+    const name = uniqueName(new URL(m.url).hostname.split('.')[0] || 'tools');
+    S.sources.push({ name, kind: { type: 'mcp', address }, scope: tools, sensitivity: 2, mark: 'added' });
+    toast(`Added ${name}.`);
+  }
+  ADD.mcp = { state: 'idle' };
+  $('mcp-url').value = ''; $('mcp-scope').value = '';
+  $('dlg-add').close();
+  drawSources(); changed();
+}
+/** Pick tools again: the server read again, what was picked kept. */
+function editMcp(s) {
+  ADD.mcp = { state: 'idle', editing: s };
+  $('mcp-url').value = s.kind.address.url; $('mcp-scope').value = s.kind.address.entraScope;
+  openAdd('mcp');
+  readMcp();
+}
 
 // ---- Pick folders -------------------------------------------------------------------
 const SCOPE = { s: null, picked: [], tree: null, error: null };
@@ -1335,7 +1549,7 @@ async function runReview() {
   return S.review;
 }
 
-const WARNING_STEP = { 'whole-source': 'sources', 'user-chosen': 'sources', uploads: 'egress', 'bundle-trimmed': 'egress', 'shared-wildcard': 'egress', 'sharepoint-host': 'egress',
+const WARNING_STEP = { 'whole-source': 'sources', 'user-chosen': 'sources', 'mcp-server-trust': 'sources', uploads: 'egress', 'bundle-trimmed': 'egress', 'shared-wildcard': 'egress', 'sharepoint-host': 'egress',
   'own-host': 'egress', 'microsoft-sign-in': 'egress', 'box-memory': 'advanced', 'egress-log': 'advanced', 'no-byte-alert': 'advanced' };
 const noGroup = () => S.assigned.state === 'read' && !S.assigned.list.length;
 const knowCount = () => (S.review.draft?.warnings.length ?? 0) + (noGroup() ? 1 : 0);
@@ -1346,6 +1560,7 @@ function sourceWords(s) {
   const what = s.kind.type === 'sharepoint' ? (n ? `${plural(n, 'folder')} of the SharePoint library ${s.kind.address.library}` : `the whole SharePoint library ${s.kind.address.library}`)
     : s.kind.type === 'smb' ? (n ? [`${plural(n, 'folder')} of the share `, mono(s.kind.address.unc)] : ['the whole share ', mono(s.kind.address.unc)])
       : s.kind.type === 'onedrive' ? "each user's own OneDrive Sluse folder" : s.kind.type === 'inputs' ? "each user's own Sluse Inputs folder on the device"
+        : s.kind.type === 'mcp' ? [`${plural(n, 'tool')} of the tool server `, mono(s.kind.address.url), `, called as each user`]
         : n ? [`${plural(n, 'folder')} of `, mono(s.kind.address.root)] : ['all of ', mono(s.kind.address.root)];
   return el('p', {}, mono(s.name), ': ', what, `. ${lvl}.`);
 }

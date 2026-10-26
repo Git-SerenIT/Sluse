@@ -66,5 +66,8 @@ tower.workspace = true
 sluse-gate-core = { path = "../sluse-gate-core" }
 sluse-gate-front = { path = "../sluse-gate-front" }
 aws-lc-rs.workspace = true
+# An MCP client to drive the endpoint, and the test MCP server Gate Core's
+# tests use, included by path (D-071).
+rmcp = { workspace = true, features = ["client", "transport-streamable-http-server"] }
 # The Entra and Graph stand-in the broker's M7 tests use, included by path.
 jsonwebtoken.workspace = true

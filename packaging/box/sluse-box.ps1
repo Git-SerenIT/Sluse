@@ -296,6 +296,12 @@ switch ($a.verb) {
             if (-not $cover) {
                 netsh int ipv4 add excludedportrange protocol=tcp startport=$p numberofports=1 store=persistent | Out-Null
                 if ($LASTEXITCODE -ne 0) { throw "port $p ($part): Windows would not reserve it (netsh exited $LASTEXITCODE)" }
+                # Recorded, so uninstall removes this reservation and no other
+                # (review R-40): one an administrator made stays theirs.
+                if ($a.root) {
+                    $mine = Join-Path $a.root 'reserved-ports.txt'
+                    if (-not (Select-String -Path $mine -Pattern "^$p$" -Quiet -ErrorAction SilentlyContinue)) { Add-Content -Path $mine -Value $p }
+                }
             }
         }
         # The box reaches Sluse Gate on the host's address, on the host's
@@ -332,7 +338,13 @@ switch ($a.verb) {
         }
         & $part 'the NAT' { Get-NetNat -ErrorAction SilentlyContinue | Where-Object InternalIPInterfaceAddressPrefix -eq $a.prefix | Remove-NetNat -Confirm:$false }
         & $part 'the port reservations' {
-            foreach ($p in @($a.hostPorts)) { netsh int ipv4 delete excludedportrange protocol=tcp startport=$p numberofports=1 | Out-Null }
+            # Only those device-init made and recorded (review R-40).
+            $mine = if ($a.root) { Join-Path $a.root 'reserved-ports.txt' }
+            if ($mine -and (Test-Path $mine)) {
+                foreach ($p in Get-Content $mine | Where-Object { $_ -match '^\d+$' }) {
+                    netsh int ipv4 delete excludedportrange protocol=tcp startport=$p numberofports=1 | Out-Null
+                }
+            }
         }
         & $part 'the firewall rule' { Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue | Remove-NetFirewallRule }
         & $part 'the Event Log' {

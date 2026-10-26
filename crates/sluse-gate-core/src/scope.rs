@@ -65,6 +65,8 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use sluse_proto::{Loaded, SluseError, SourceConfig, SourceKind, SourceName};
 
@@ -188,6 +190,16 @@ pub struct Compiled {
 }
 
 impl Compiled {
+    /// A source as it is now: the one compiled at start, or, if that was
+    /// unavailable and has come back, the one it came back as.
+    pub fn live(&self, index: usize) -> std::borrow::Cow<'_, CompiledSource> {
+        let source = &self.sources[index];
+        match source.retry.as_ref().filter(|_| source.unavailable.is_some()).and_then(|r| r.now()) {
+            Some(back) => std::borrow::Cow::Owned((*back).clone()),
+            None => std::borrow::Cow::Borrowed(source),
+        }
+    }
+
     /// Look a source up by name.
     pub fn source(&self, name: &str) -> Option<&CompiledSource> {
         self.sources.iter().find(|s| s.name.as_str() == name)
@@ -218,6 +230,64 @@ pub struct CompiledSource {
     /// Scope entries that could not be resolved at start, each with why,
     /// while others could: dropped, never widened to the root.
     pub dropped: Vec<String>,
+    /// An `mcp` source's allowed tools, its config's `scope` (D-071). Empty
+    /// for every other kind. Such a source has no root and no path scopes:
+    /// a path request to it is `UNSUPPORTED_SOURCE_KIND`.
+    pub tools: Vec<String>,
+    /// For a source [`unavailable`](Self::unavailable) at start, how to try
+    /// it again (review R-22's rest, D-071 slice 9).
+    pub retry: Option<Arc<Retry>>,
+}
+
+/// How long an unavailable source waits between tries: a request in that
+/// time is refused at once, so a source that is down is not asked for every
+/// request.
+pub const RETRY_AFTER: Duration = Duration::from_secs(30);
+
+/// An unavailable source, tried again on a request at most every
+/// [`RETRY_AFTER`]: a file server back up, or a VPN connected, needs no
+/// reopen. Compiled as at start, as the user (the routes hold their token
+/// over the resolve), and held to the same rule: none of Sluse's write paths
+/// inside it. Once it resolves it stays resolved for this Gate Core. A
+/// source whose scope entries were dropped at start, while others resolved,
+/// is not retried: it is available.
+#[derive(Debug)]
+pub struct Retry {
+    config: SourceConfig,
+    inputs: Option<PathBuf>,
+    write_paths: Vec<(&'static str, PathBuf)>,
+    state: Mutex<(Instant, Option<Arc<CompiledSource>>)>,
+}
+
+impl Retry {
+    /// The source, if it resolves now or did since.
+    pub fn now(&self) -> Option<Arc<CompiledSource>> {
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(back) = &state.1 {
+            return Some(back.clone());
+        }
+        if state.0.elapsed() < RETRY_AFTER {
+            return None;
+        }
+        state.0 = Instant::now();
+        let c = compile_source(&self.config, self.inputs.as_deref()).ok()?;
+        if c.unavailable.is_some() {
+            return None;
+        }
+        let one = Compiled { sources: vec![c.clone()] };
+        if self.write_paths.iter().any(|(field, path)| check_outside_every_source(&one, field, path).is_err()) {
+            return None;
+        }
+        tracing::info!(source = self.config.name.as_str(), "reachable again");
+        let back = Arc::new(c);
+        state.1 = Some(back.clone());
+        Some(back)
+    }
+
+    #[cfg(test)]
+    fn due_now(&self) {
+        self.state.lock().unwrap().0 = Instant::now() - RETRY_AFTER;
+    }
 }
 
 /// One scope of a remote source, compared by folded key.
@@ -243,6 +313,10 @@ pub struct CompiledScope {
 impl CompiledSource {
     /// Request form of this source's scopes, for the config view.
     pub fn scope_request_forms(&self) -> Vec<String> {
+        // An `mcp` source's scopes are its tools, `crm/get_account` (D-071).
+        if !self.tools.is_empty() {
+            return self.tools.iter().map(|t| request_form(self.name.as_str(), t)).collect();
+        }
         match &self.remote {
             Some(remote) => remote.iter().map(|s| request_form(self.name.as_str(), &s.rel)).collect(),
             None => self.scopes.iter().map(|s| request_form(self.name.as_str(), &s.rel)).collect(),
@@ -328,18 +402,31 @@ pub fn compile(loaded: &Loaded) -> Result<Compiled, CompileError> {
 
 /// [`compile`], with the user's Sluse Inputs given rather than found.
 pub fn compile_with(loaded: &Loaded, inputs: Option<&Path>) -> Result<Compiled, CompileError> {
-    let mut sources = Vec::with_capacity(loaded.config.sources.len());
-    for src in &loaded.config.sources {
-        sources.push(compile_source(src, inputs)?);
-    }
-    let compiled = Compiled { sources };
-
-    for (field, value) in [
+    let write_paths: Vec<(&'static str, PathBuf)> = [
         ("artifacts", &loaded.config.artifacts),
         ("workspace", &loaded.config.workspace),
         ("journalDir", &loaded.config.journal_dir),
-    ] {
-        check_outside_every_source(&compiled, field, &loaded.resolve(value))?;
+    ]
+    .into_iter()
+    .map(|(field, value)| (field, loaded.resolve(value)))
+    .collect();
+    let mut sources = Vec::with_capacity(loaded.config.sources.len());
+    for src in &loaded.config.sources {
+        let mut c = compile_source(src, inputs)?;
+        if c.unavailable.is_some() {
+            c.retry = Some(Arc::new(Retry {
+                config: src.clone(),
+                inputs: inputs.map(Path::to_path_buf),
+                write_paths: write_paths.clone(),
+                state: Mutex::new((Instant::now(), None)),
+            }));
+        }
+        sources.push(c);
+    }
+    let compiled = Compiled { sources };
+
+    for (field, path) in &write_paths {
+        check_outside_every_source(&compiled, field, path)?;
     }
 
     Ok(compiled)
@@ -407,6 +494,22 @@ fn compile_source(src: &SourceConfig, inputs: Option<&Path>) -> Result<CompiledS
         // user, and there is none at start. Its scopes are compiled lexically
         // and the source itself answers for existence at request time.
         SourceKind::Sharepoint { .. } | SourceKind::Onedrive => None,
+        // Tools, not paths: its scope is the tools allowed, which the loader
+        // checked, and nothing here is a path to resolve (D-071).
+        SourceKind::Mcp { .. } => {
+            return Ok(CompiledSource {
+                name,
+                kind: src.kind.clone(),
+                sensitivity: src.sensitivity,
+                root: None,
+                scopes: Vec::new(),
+                remote: None,
+                unavailable: None,
+                dropped: Vec::new(),
+                tools: src.scope.clone(),
+                retry: None,
+            });
+        }
     };
 
     let Some(root_path) = root_path else {
@@ -427,6 +530,8 @@ fn compile_source(src: &SourceConfig, inputs: Option<&Path>) -> Result<CompiledS
             remote: Some(remote),
             unavailable: None,
             dropped: Vec::new(),
+            tools: Vec::new(),
+            retry: None,
         });
     };
 
@@ -472,6 +577,8 @@ fn compile_source(src: &SourceConfig, inputs: Option<&Path>) -> Result<CompiledS
         remote: None,
         unavailable: None,
         dropped,
+        tools: Vec::new(),
+        retry: None,
     })
 }
 
@@ -509,6 +616,8 @@ fn unreachable(src: &SourceConfig, why: String) -> CompiledSource {
         remote: None,
         unavailable: Some(why),
         dropped: Vec::new(),
+        tools: Vec::new(),
+        retry: None,
     }
 }
 
@@ -634,12 +743,23 @@ fn resolve_inner(
     };
     let source = &compiled.sources[index];
 
-    if let Some(why) = &source.unavailable {
-        return Err(SluseError::SourceUnavailable {
-            source_name: source.name.as_str().to_owned(),
-            detail: format!("not reachable when Sluse started: {why}"),
-        });
-    }
+    // Unavailable at start: tried again, at most every RETRY_AFTER (R-22).
+    let back;
+    let source = match &source.unavailable {
+        None => source,
+        Some(why) => match source.retry.as_ref().and_then(|r| r.now()) {
+            Some(b) => {
+                back = b;
+                &*back
+            }
+            None => {
+                return Err(SluseError::SourceUnavailable {
+                    source_name: source.name.as_str().to_owned(),
+                    detail: format!("not reachable when Sluse started, nor when last tried: {why}"),
+                })
+            }
+        },
+    };
     let Some(root) = source.root.as_ref() else {
         return Err(SluseError::UnsupportedSourceKind {
             source_name: source.name.as_str().to_owned(),
@@ -661,7 +781,22 @@ fn resolve_inner(
             });
         }
     }
-    let path = Canonical::of(&candidate).map_err(|e| io_to_error(request, source, &e))?;
+    let path = match Canonical::of(&candidate) {
+        Ok(p) => p,
+        // Scope before the error (review R-27): a path that could not be
+        // resolved and is not in a scope or on the way to one is out of scope,
+        // as one that resolved would be, so the answer does not tell the box
+        // what exists outside its scope.
+        Err(_) if require_scope_lineage && !lexically_reachable(source, &rel_parts) => {
+            return Err(SluseError::OutOfScope {
+                raw: request.to_owned(),
+                resolved: candidate.display().to_string(),
+                source_name: source.name.as_str().to_owned(),
+                scopes: source.scope_request_forms(),
+            });
+        }
+        Err(e) => return Err(io_to_error(request, source, &e)),
+    };
 
     // Containment first, scope second. A junction that leaves the root is not
     // "out of scope", it is not part of this source at all, and the record
@@ -778,6 +913,19 @@ fn looks_like_drive(s: &str) -> bool {
 /// and then a probe of the source root, which is platform-neutral and catches
 /// the cases no code list covers (a cifs mount that has gone away answers
 /// `ENOENT`, not a Win32 code).
+/// Whether a request's path is in a scope or on the way to one, by its words
+/// alone: for a path the filesystem could not resolve (R-27). Folded as the
+/// platform folds (`fold`), so the answer matches what a resolved path gets.
+fn lexically_reachable(source: &CompiledSource, rel_parts: &[impl AsRef<str>]) -> bool {
+    let rel = fold(&rel_parts.iter().map(AsRef::as_ref).collect::<Vec<_>>().join("\\"));
+    let rel = if rel_parts.is_empty() { String::new() } else { rel };
+    source.scopes.iter().any(|s| {
+        let scope = if s.rel.is_empty() { String::new() } else { fold(&s.rel) };
+        let within = |a: &str, b: &str| b.is_empty() || a == b || a.strip_prefix(b).is_some_and(|r| r.starts_with('\\'));
+        within(&rel, &scope) || within(&scope, &rel)
+    })
+}
+
 fn io_to_error(request: &str, source: &CompiledSource, e: &io::Error) -> SluseError {
     let unavailable = |detail: String| SluseError::SourceUnavailable {
         source_name: source.name.as_str().to_owned(),
@@ -808,6 +956,12 @@ fn io_to_error(request: &str, source: &CompiledSource, e: &io::Error) -> SluseEr
         },
         io::ErrorKind::PermissionDenied => {
             SluseError::AccessDenied { raw: request.to_owned(), detail: e.to_string() }
+        }
+        // The request's fault, not the source's: a file used as a folder, a
+        // name the filesystem cannot hold. Not found, and the source is not
+        // marked unreachable for it (R-27).
+        io::ErrorKind::NotADirectory | io::ErrorKind::InvalidFilename | io::ErrorKind::InvalidInput => {
+            SluseError::NotFound { raw: request.to_owned() }
         }
         _ => unavailable(e.to_string()),
     }
@@ -914,5 +1068,59 @@ pub fn request_form(source: &str, rel: &str) -> String {
         source.to_owned()
     } else {
         format!("{source}/{rel}")
+    }
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+
+    fn loaded(dir: &Path, root: &Path, workspace: &str) -> Loaded {
+        let authored = serde_json::json!({
+            "schemaVersion": sluse_proto::SCHEMA_VERSION,
+            "sources": [{ "name": "fs", "kind": { "type": "local-folder", "address": { "root": root } }, "scope": [], "sensitivity": 2 }],
+            "volume": { "admissions": 25, "windowSeconds": 60 }
+        });
+        let device = serde_json::json!({
+            "boxId": "box-local-test", "environment": "local",
+            "gate": { "listen": "127.0.0.1:7580", "url": "https://127.0.0.1:7580", "certPath": "c.pem", "keyPath": "c.key",
+                      "clientCaPath": "ca.pem", "certPin": "0".repeat(64) },
+            "endpoint": { "clientCertPath": "e.pem", "clientKeyPath": "e.key", "consoleListen": "127.0.0.1:7582" },
+            "artifacts": dir.join("artifacts"), "workspace": workspace, "journalDir": dir.join("journal"),
+            "audit": { "sink": "jsonl", "path": "audit.jsonl" }
+        });
+        sluse_proto::config::load_from_bytes(authored.to_string().as_bytes(), device.to_string().as_bytes(), &dir.join("c.json")).unwrap()
+    }
+
+    /// Review R-22's rest: a source down at start serves once it is back,
+    /// with no reopen, and is not asked again before RETRY_AFTER.
+    #[test]
+    fn a_source_unavailable_at_start_serves_once_it_is_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("share");
+        let compiled = compile_with(&loaded(dir.path(), &root, &dir.path().join("ws").display().to_string()), None).unwrap();
+        assert!(compiled.sources[0].unavailable.is_some());
+        let e = resolve(&compiled, "fs/a.txt").unwrap_err();
+        assert_eq!(e.reason_code(), "SOURCE_UNAVAILABLE");
+
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("a.txt"), b"a").unwrap();
+        assert!(resolve(&compiled, "fs/a.txt").is_err(), "not asked again within RETRY_AFTER");
+        compiled.sources[0].retry.as_ref().unwrap().due_now();
+        let scoped = resolve_in_scope(&compiled, "fs/a.txt").expect("back");
+        assert!(scoped.in_scope);
+        assert!(compiled.live(0).root.is_some(), "the listing sees it as it came back");
+    }
+
+    /// The rule at start holds when it comes back: none of Sluse's write
+    /// paths inside it.
+    #[test]
+    fn a_source_that_comes_back_around_a_write_path_stays_unavailable() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("share");
+        let compiled = compile_with(&loaded(dir.path(), &root, &root.join("ws").display().to_string()), None).unwrap();
+        std::fs::create_dir_all(&root).unwrap();
+        compiled.sources[0].retry.as_ref().unwrap().due_now();
+        assert_eq!(resolve(&compiled, "fs/x").unwrap_err().reason_code(), "SOURCE_UNAVAILABLE");
     }
 }

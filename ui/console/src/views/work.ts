@@ -100,9 +100,9 @@ export function renderWork(target: Element, d: Data): void {
   // Let in recently, and this session's artifacts.
   const recent = el("section", { class: "card" }, el("div", { class: "card__head" }, el("h2", { class: "card__title" }, "Let in recently")),
     ins.length ? el("ul", { class: "ov-list" }, ...ins.slice(-5).reverse().map((r) =>
-      el("li", { class: "ov-item" }, icon(r.op === "read" ? "eye" : "download"),
+      el("li", { class: "ov-item" }, icon(r.op === "read" ? "eye" : r.op === "call" ? "apps" : "download"),
         el("span", { class: "ov-item__name" }, within(r.pathRequested)),
-        el("span", { class: "ov-item__meta" }, `${sourceOf(r.pathRequested)}, ${r.op === "read" ? "read" : "fetched as a copy"}${r.reason === "OFFICE_ENCRYPTED" ? "; arrived encrypted" : r.reason === "NOT_UTF8_TEXT" ? "; its text could not be shown" : ""}`),
+        el("span", { class: "ov-item__meta" }, `${sourceOf(r.pathRequested)}, ${r.op === "read" ? "read" : r.op === "call" ? "a tool's answer, saved as a copy" : "fetched as a copy"}${r.reason === "OFFICE_ENCRYPTED" ? "; arrived encrypted" : r.reason === "NOT_UTF8_TEXT" ? "; its text could not be shown" : ""}`),
         el("span", { class: "ov-item__when" }, ago(r.ts))))) : null,
     ins.length ? el("div", { class: "card__foot" }, el("a", { class: "btn btn--sm", href: "#record" }, `See all ${ins.length} in Record`)) : null,
     ins.length ? null : el("div", { class: "empty" }, el("span", { class: "empty__icon" }, icon("admit")),

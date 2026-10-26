@@ -39,6 +39,11 @@ use serde::{Deserialize, Serialize};
 /// Route paths. Versioned from the first line: the endpoint ships inside a guest
 /// image and the Gate is installed on the host, so the two are updated
 /// separately and will not always be the same age.
+/// **Responses accept fields they do not know; requests do not** (review
+/// R-48, D-071 slice 9). The Gate is updated with the MSI and a box's
+/// endpoint with its base, so a newer Gate's answer may carry a field an
+/// older box has never heard of, and refusing it would stop every box not
+/// yet reset. A request is the box's word, parsed by Gate Front: strict.
 pub mod route {
     pub const HEALTH: &str = "/v1/health";
     pub const STATUS: &str = "/v1/status";
@@ -55,6 +60,10 @@ pub mod route {
     pub const ENROL: &str = "/v1/enrol";
     /// The box's journal, mirrored to the host (D-027 point 5).
     pub const JOURNAL: &str = "/v1/journal";
+    /// The tools of the config's `mcp` sources the agent may call (D-071).
+    pub const TOOLS: &str = "/v1/tools";
+    /// One tool call, admitted like a fetch (D-071).
+    pub const CALL: &str = "/v1/call";
 }
 
 /// The enrolment listener's port, on the Gate's own host. Server TLS with the
@@ -138,7 +147,7 @@ pub mod header {
 
 /// What the Gate says about itself. The only route that needs no session.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Health {
     pub ok: bool,
     pub box_id: BoxId,
@@ -339,7 +348,7 @@ pub struct JournalAck {
 /// discover its world by trial and error, which would fill the audit trail with
 /// refusals that mean nothing.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigView {
     pub sources: Vec<SourceView>,
     pub max_read_bytes: u64,
@@ -380,7 +389,7 @@ impl SignInView {
 
 /// One source, as the guest sees it.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct SourceView {
     pub name: SourceName,
     /// `local-folder`, `smb`, `sharepoint`.
@@ -419,7 +428,7 @@ pub struct SourceView {
 /// reason lives in the audit record's `detail` (D-015 point 3), on the host side
 /// where it belongs.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct SourceLastSeen {
     /// Did it answer?
     pub reachable: bool,
@@ -475,6 +484,53 @@ pub enum Audience {
     User,
 }
 
+// ---------------------------------------------------------------------------
+// GET /v1/tools, POST /v1/call (D-071)
+// ---------------------------------------------------------------------------
+
+/// The tools the agent may call: each `mcp` source's, as its server lists
+/// them, only those the config allows, without the arguments it pins.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolsResponse {
+    pub tools: Vec<ToolView>,
+    /// Sources whose server could not be asked, each with the reason code.
+    /// Their tools are absent, not refused: a server back up lists again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unavailable: Vec<ToolSourceUnavailable>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolView {
+    /// `<source>/<tool>`, as a call names it.
+    pub name: String,
+    /// The server's description, which is the server's text and not Sluse's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The server's JSON Schema for the arguments, pinned ones removed.
+    pub input_schema: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolSourceUnavailable {
+    pub source: String,
+    pub reason: String,
+}
+
+/// One call. The answer is the tool's result as JSON, admitted like a fetch:
+/// [`header::ADMISSION_ID`], [`header::SIZE`] and [`header::RESOLVED`] as a
+/// read's, the hash in both records.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct CallRequest {
+    /// `<source>/<tool>`.
+    pub tool: String,
+    #[serde(default)]
+    pub arguments: serde_json::Map<String, serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ListRequest {
@@ -484,7 +540,7 @@ pub struct ListRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ListResponse {
     /// The path listed, echoed back.
     pub path: String,
@@ -492,7 +548,7 @@ pub struct ListResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ListEntry {
     pub name: String,
     pub kind: EntryKind,
@@ -582,7 +638,7 @@ pub struct StatRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct StatResponse {
     pub size: u64,
     pub modified: DateTime<Utc>,
@@ -642,14 +698,14 @@ pub struct ArtifactManifest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct PublishResponse {
     pub publish_id: PublishId,
     pub artifacts: Vec<PublishedArtifact>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct PublishedArtifact {
     pub name: String,
     pub hash: ContentHash,
@@ -668,7 +724,7 @@ pub struct PublishedArtifact {
 /// and happened; the alert says a person should look (`docs/threat-model.md`).
 /// Nothing about this stops an agent, and the docs must not suggest it does.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct VolumeAlert {
     pub source: SourceName,
     pub session_id: SessionId,
@@ -729,7 +785,7 @@ impl Default for AuditTailQuery {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AuditTailResponse {
     pub records: Vec<AuditRecord>,
 }
@@ -754,13 +810,25 @@ pub fn capability_for(kind: &SourceKind) -> Capability {
         | SourceKind::Smb { .. }
         | SourceKind::Sharepoint { .. }
         | SourceKind::Inputs
-        | SourceKind::Onedrive => Capability::Bytes,
+        | SourceKind::Onedrive
+        // A tool's answer passes through Gate Core too (D-071).
+        | SourceKind::Mcp { .. } => Capability::Bytes,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Review R-48: a newer Gate's answer reaches an older box; a request
+    /// with a field the Gate does not know is still refused.
+    #[test]
+    fn a_response_takes_a_field_it_does_not_know_and_a_request_does_not() {
+        let entry = serde_json::json!({ "name": "a.md", "kind": "file", "inScope": true, "addedLater": true });
+        assert!(serde_json::from_value::<ListEntry>(entry).is_ok());
+        let req = serde_json::json!({ "path": "fs/a.md", "audience": "agent", "addedLater": true });
+        assert!(serde_json::from_value::<ListRequest>(req).is_err());
+    }
 
     #[test]
     fn a_header_value_carries_any_name_and_comes_back_unchanged() {

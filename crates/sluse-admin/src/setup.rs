@@ -251,6 +251,17 @@ pub async fn register(g: &Graph) -> Result<Registered, String> {
         g.call(reqwest::Method::DELETE, format!("{at}/federatedIdentityCredentials/{id}"), None).await?;
         created.push(format!("removed: a federated credential ({id})"));
     }
+    // Graph's, first, and every other resource's the admin added since, kept:
+    // an MCP server's delegated scope (D-071). Before, this replaced the
+    // list, and running setup again would have dropped them.
+    let mut required: Vec<Value> = gate["requiredResourceAccess"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r["resourceAppId"] != GRAPH_APP)
+        .cloned()
+        .collect();
+    required.insert(0, json!({ "resourceAppId": GRAPH_APP, "resourceAccess": access(&GATE_GRAPH_SCOPES)? }));
     patch(&gate_id, json!({
         "signInAudience": "AzureADMyOrg",
         "web": { "redirectUris": [], "implicitGrantSettings": { "enableIdTokenIssuance": false, "enableAccessTokenIssuance": false } },
@@ -260,7 +271,7 @@ pub async fn register(g: &Graph) -> Result<Registered, String> {
         "isFallbackPublicClient": true,
         "publicClient": { "redirectUris": [sluse_proto::wire::NATIVE_REDIRECT] },
         "keyCredentials": [],
-        "requiredResourceAccess": [{ "resourceAppId": GRAPH_APP, "resourceAccess": access(&GATE_GRAPH_SCOPES)? }],
+        "requiredResourceAccess": required,
         // D-057: a synced user's AD SID in the ID token, which a domain
         // account's Windows logon is compared with.
         "optionalClaims": { "idToken": [{ "name": "onprem_sid", "essential": false }], "accessToken": [], "saml2Token": [] },

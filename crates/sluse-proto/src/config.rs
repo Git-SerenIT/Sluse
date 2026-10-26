@@ -447,6 +447,54 @@ pub enum SourceKind {
     /// Gate only reads. A shortcut in it is out of scope. Needs
     /// [`Authored::entra`].
     Onedrive,
+    /// An MCP server reached over HTTP that takes an Entra token (D-071):
+    /// Gate Core calls it as the signed-in person, with the delegated scope
+    /// Sluse's app was granted. Never a server run on the host. **The
+    /// source's `scope` lists the tools allowed**, by the server's names, and
+    /// must name at least one: v0.2 is read only, and which tools are is the
+    /// admin's judgement, not the server's `readOnlyHint`. Needs
+    /// [`Authored::entra`].
+    Mcp {
+        /// The server's MCP endpoint, `https://…`.
+        url: String,
+        /// The delegated scope Sluse's app asks Entra for, one, as Entra
+        /// names it: `api://<app>/<scope>` or a resource's `/.default`.
+        entra_scope: String,
+        /// The MCP version the server speaks, found by Sluse Admin's probe
+        /// when the server was added; a call never probes (D-071 point 6).
+        protocol: McpProtocol,
+        /// Arguments fixed per tool: `{"tool": {"argument": value}}`. The
+        /// agent does not see a pinned argument, and Gate Core sets it on
+        /// every call. Only tools in the source's `scope`.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        pins: std::collections::BTreeMap<String, serde_json::Map<String, serde_json::Value>>,
+    },
+}
+
+/// The MCP versions Gate Core speaks (D-071 point 6, research
+/// 2026-10-26-mcp-transport): the `initialize` handshake of 2025-11-25,
+/// which most servers still need, and 2026-07-28 without it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum McpProtocol {
+    #[serde(rename = "2025-11-25")]
+    V2025_11_25,
+    #[serde(rename = "2026-07-28")]
+    V2026_07_28,
+}
+
+impl McpProtocol {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::V2025_11_25 => "2025-11-25",
+            Self::V2026_07_28 => "2026-07-28",
+        }
+    }
+}
+
+/// An MCP tool name as the spec allows it: 1 to 128 of ASCII letters, digits,
+/// `_`, `-` and `.`.
+pub fn valid_tool_name(name: &str) -> bool {
+    (1..=128).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
 }
 
 /// The OneDrive folder an `onedrive` source reads (D-054).
@@ -461,6 +509,7 @@ impl SourceKind {
             Self::Sharepoint { .. } => "sharepoint",
             Self::Inputs => "inputs",
             Self::Onedrive => "onedrive",
+            Self::Mcp { .. } => "mcp",
         }
     }
 
@@ -472,6 +521,7 @@ impl SourceKind {
             Self::Sharepoint { site_url, library } => format!("{site_url}/{library}"),
             Self::Inputs => r"%USERPROFILE%\Sluse Inputs".to_owned(),
             Self::Onedrive => format!("OneDrive/{ONEDRIVE_FOLDER}"),
+            Self::Mcp { url, .. } => url.clone(),
         }
     }
 }
@@ -723,11 +773,15 @@ pub enum ConfigError {
     /// the signed-in user, which needs Sluse's registration; without it every
     /// request would fail at the first read rather than at start, where a
     /// person can be told why.
-    #[error("source \"{source_name}\" reads through Microsoft Graph (sharepoint or onedrive), which needs an \"entra\" block naming Sluse's registration")]
+    #[error("source \"{source_name}\" is reached as the signed-in person (sharepoint, onedrive or mcp), which needs an \"entra\" block naming Sluse's registration")]
     EntraMissing { source_name: String },
 
     #[error("entra.{field} \"{value}\" is not a GUID")]
     NotAGuid { field: &'static str, value: String },
+
+    /// An `mcp` source that would not work, or not as written (D-071).
+    #[error("source \"{source_name}\": {reason}")]
+    BadMcp { source_name: String, reason: String },
 }
 
 fn superseded(found: u64) -> String {
@@ -857,8 +911,10 @@ fn validate(c: &Authored) -> Result<(), ConfigError> {
             return Err(ConfigError::DuplicateSource(s.name.to_string()));
         }
         validate_address(s)?;
-        for entry in &s.scope {
-            validate_scope_entry(s.name.as_str(), entry)?;
+        if !matches!(s.kind, SourceKind::Mcp { .. }) {
+            for entry in &s.scope {
+                validate_scope_entry(s.name.as_str(), entry)?;
+            }
         }
         if !SENSITIVITY_LEVELS.iter().any(|&(l, _)| l == s.sensitivity) {
             return Err(ConfigError::UnknownSensitivity {
@@ -875,7 +931,7 @@ fn validate(c: &Authored) -> Result<(), ConfigError> {
             }
         }
     } else if let Some(s) =
-        c.sources.iter().find(|s| matches!(s.kind, SourceKind::Sharepoint { .. } | SourceKind::Onedrive))
+        c.sources.iter().find(|s| matches!(s.kind, SourceKind::Sharepoint { .. } | SourceKind::Onedrive | SourceKind::Mcp { .. }))
     {
         return Err(ConfigError::EntraMissing { source_name: s.name.to_string() });
     }
@@ -947,6 +1003,34 @@ fn validate_address(s: &SourceConfig) -> Result<(), ConfigError> {
             }
         }
         SourceKind::Inputs | SourceKind::Onedrive => {}
+        SourceKind::Mcp { url, entra_scope, pins, .. } => {
+            let bad = |reason: String| Err(ConfigError::BadMcp { source_name: name.clone(), reason });
+            if !url.starts_with("https://") || url.len() <= "https://".len() || url.chars().any(char::is_whitespace) {
+                return bad(format!("url \"{url}\" must be an https:// URL"));
+            }
+            if entra_scope.is_empty() || entra_scope.chars().any(char::is_whitespace) || entra_scope == "offline_access" {
+                return bad(format!(
+                    "entraScope \"{entra_scope}\" must be one delegated scope, such as api://<app>/<scope>"
+                ));
+            }
+            // Read only is the admin's list (D-071 point 5): an empty scope
+            // would mean every tool the server has, writing ones included.
+            if s.scope.is_empty() {
+                return bad("scope must list the tools the agent may call; an empty list would allow every tool".into());
+            }
+            let mut seen = BTreeSet::new();
+            for tool in &s.scope {
+                if !valid_tool_name(tool) {
+                    return bad(format!("\"{tool}\" is not an MCP tool name (1 to 128 letters, digits, _ - .)"));
+                }
+                if !seen.insert(tool.as_str()) {
+                    return bad(format!("the tool \"{tool}\" is listed twice"));
+                }
+            }
+            if let Some(t) = pins.keys().find(|t| !seen.contains(t.as_str())) {
+                return bad(format!("pins name \"{t}\", which is not a tool in scope"));
+            }
+        }
     }
     Ok(())
 }
@@ -1484,6 +1568,74 @@ mod tests {
             "address": { "siteUrl": "http://contoso.sharepoint.com/sites/x", "library": "Documents" }
         });
         assert!(matches!(load_value(v), Err(ConfigError::SiteUrlNotHttps { .. })));
+    }
+
+    /// D-071: an MCP server, its tools in `scope`.
+    fn mcp_source(v: &mut serde_json::Value) {
+        v["entra"] = entra_json();
+        v["sources"][0]["kind"] = serde_json::json!({
+            "type": "mcp",
+            "address": {
+                "url": "https://crm.example.com/mcp",
+                "entraScope": "api://crm-mcp/Mcp.Read",
+                "protocol": "2025-11-25",
+                "pins": { "search_accounts": { "region": "EU" } }
+            }
+        });
+        v["sources"][0]["scope"] = serde_json::json!(["get_account", "search_accounts"]);
+    }
+
+    #[test]
+    fn an_mcp_source_loads_with_its_tools_and_pins() {
+        let mut v = valid_json();
+        mcp_source(&mut v);
+        let loaded = load_value(v).expect("the loader accepts it");
+        let s = &loaded.config.sources[0];
+        assert_eq!(s.kind.type_name(), "mcp");
+        assert_eq!(s.kind.address(), "https://crm.example.com/mcp");
+        assert_eq!(s.scope, ["get_account", "search_accounts"]);
+        let SourceKind::Mcp { protocol, pins, .. } = &s.kind else { panic!() };
+        assert_eq!(*protocol, McpProtocol::V2025_11_25);
+        assert_eq!(pins["search_accounts"]["region"], "EU");
+        // The other version, and no pins at all.
+        let mut v = valid_json();
+        mcp_source(&mut v);
+        v["sources"][0]["kind"]["address"]["protocol"] = serde_json::json!("2026-07-28");
+        v["sources"][0]["kind"]["address"].as_object_mut().unwrap().remove("pins");
+        load_value(v).expect("2026-07-28 without pins");
+    }
+
+    #[test]
+    fn an_mcp_source_that_would_not_work_as_written_is_refused() {
+        type Change = fn(&mut serde_json::Value);
+        let cases: [(&str, Change); 8] = [
+            ("no entra block", |v| { v.as_object_mut().unwrap().remove("entra"); }),
+            ("http", |v| v["sources"][0]["kind"]["address"]["url"] = "http://crm.example.com/mcp".into()),
+            ("two scopes", |v| v["sources"][0]["kind"]["address"]["entraScope"] = "api://a/x api://b/y".into()),
+            ("offline_access", |v| v["sources"][0]["kind"]["address"]["entraScope"] = "offline_access".into()),
+            ("no tools: every tool", |v| v["sources"][0]["scope"] = serde_json::json!([])),
+            ("a path, not a tool", |v| v["sources"][0]["scope"] = serde_json::json!(["in-scope/docs"])),
+            ("a tool twice", |v| v["sources"][0]["scope"] = serde_json::json!(["get_account", "get_account"])),
+            ("a pin on a tool not allowed", |v| {
+                v["sources"][0]["kind"]["address"]["pins"] = serde_json::json!({ "delete_account": { "id": 1 } })
+            }),
+        ];
+        for (what, change) in cases {
+            let mut v = valid_json();
+            mcp_source(&mut v);
+            change(&mut v);
+            let r = load_value(v);
+            assert!(
+                matches!(r, Err(ConfigError::BadMcp { .. } | ConfigError::EntraMissing { .. })),
+                "{what}: {:?}",
+                r.map(|_| ())
+            );
+        }
+        // A version Gate Core does not speak is not half-understood.
+        let mut v = valid_json();
+        mcp_source(&mut v);
+        v["sources"][0]["kind"]["address"]["protocol"] = serde_json::json!("2025-06-18");
+        assert!(matches!(load_value(v), Err(ConfigError::Invalid(_))));
     }
 
     /// D-038 point 3: four fixed levels, so the file names none.
