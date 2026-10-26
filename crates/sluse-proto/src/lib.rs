@@ -4,8 +4,8 @@
 //! # sluse-proto — the Sluse shared contract
 //!
 //! The single definition of everything two Sluse components have to agree
-//! about: the config file's schema, the endpoint-to-broker wire types, the
-//! exhaustive error enum, the audit record, and the content hash. The broker,
+//! about: the config file's schema, the endpoint-to-gate wire types, the
+//! exhaustive error enum, the audit record, and the content hash. The Gate,
 //! the endpoint and the lifecycle CLI all import it, so a change one side does
 //! not honour is a compile error rather than a scope disagreement discovered in
 //! a log.
@@ -30,11 +30,11 @@
 //!   canonicalisation, no existence checks, no certificates. See that module for
 //!   why that line is drawn there.
 //! - [`ids`] mints identifiers, which needs the clock and the OS random source.
-//!   The broker and the endpoint each mint some, and one grammar implemented
+//!   The Gate and the endpoint each mint some, and one grammar implemented
 //!   twice is a grammar that drifts.
 //!
 //! Path canonicalisation — UNC resolution, junctions, `\\?\` prefixes,
-//! case-insensitive comparison — needs the platform and is the **broker's**, not
+//! case-insensitive comparison — needs the platform and is the **Gate's**, not
 //! this crate's. It is the enforcing check and it belongs on the host
 //! (`docs/config.md`, What enforces what).
 //!
@@ -43,7 +43,7 @@
 //! From `CLAUDE.md`:
 //!
 //! 2. *The box cannot assert its own scope.* Nothing in [`wire`] lets the guest
-//!    send a scope, a root or a resolved host path to the broker. It sends a
+//!    send a scope, a root or a resolved host path to the Gate. It sends a
 //!    request-form path and is told what happened.
 //! 3. *No durable credential exists inside the box.* The one token-shaped thing
 //!    on the wire is a header the guest forwards and never stores.
@@ -67,6 +67,7 @@
 pub mod audit;
 pub mod config;
 pub mod error;
+pub mod gate;
 pub mod hash;
 pub mod ids;
 pub mod pipe;
@@ -80,7 +81,7 @@ pub use audit::{
     PostureSnapshot, UserKind, UserRef, Writer,
 };
 pub use config::{
-    AuditConfig, AuditSinkKind, Authored, BoxSettings, BrokerConfig, Config, ConfigError, Deployment, Device,
+    AuditConfig, AuditSinkKind, Authored, BoxSettings, GateConfig, Config, ConfigError, Deployment, Device,
     EgressConfig, EgressLog, EndpointConfig, EntraConfig, Environment, Loaded, SensitivityLevel, SourceConfig,
     SourceKind, VolumeConfig, SCHEMA_VERSION,
 };
@@ -94,6 +95,6 @@ pub use wire::{
     HostSignInResult, SignInView, SignedOut, StatResponse, Status, VolumeAlert,
 };
 
-/// This crate's version, which is the workspace's. Reported by the broker on
+/// This crate's version, which is the workspace's. Reported by the Gate on
 /// `/v1/health` so a guest and a host of different ages are visible as such.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

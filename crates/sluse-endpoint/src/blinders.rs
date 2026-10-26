@@ -8,16 +8,16 @@
 //! of scope" from "that does not exist" can enumerate what exists by asking, and
 //! a refusal that distinguishes them is an oracle with a polite tone.
 //!
-//! So three of the broker's refusals collapse into one indistinguishable "no
+//! So three of the Gate's refusals collapse into one indistinguishable "no
 //! such path":
 //!
-//! | The broker decided | The agent is told |
+//! | The Gate decided | The agent is told |
 //! |---|---|
 //! | `UnknownSource` — no source of that name | no such path |
 //! | `OutOfScope` — a real path, outside every scope | no such path |
 //! | `NotFound` — inside scope, nothing there | no such path |
 //!
-//! The broker's own record keeps all three, with the resolved host path and the
+//! The Gate's own record keeps all three, with the resolved host path and the
 //! enforcing scope list. **Nothing is hidden from the user; the agent is the one
 //! wearing the blinders.**
 //!
@@ -60,7 +60,7 @@ pub struct Told {
 /// them apart by string comparison.
 const NO_SUCH_PATH: &str = "No such path";
 
-/// Translate a broker refusal into what the agent is told.
+/// Translate a Gate refusal into what the agent is told.
 pub fn tell(err: &SluseError, raw: &str) -> Told {
     let refused = err.is_refusal();
     let message = match err {
@@ -76,7 +76,7 @@ pub fn tell(err: &SluseError, raw: &str) -> Told {
         // whatever the verb, so that it says nothing about the target — and
         // "file" was the one word that did, wrongly. The prober run addressed a
         // directory, got told about a file, and reported that it could conclude
-        // nothing from the message: "either the broker's message is generic
+        // nothing from the message: "either the Gate's message is generic
         // boilerplate, or sealed is not a directory at all" (jok, 2026-09-22,
         // `prototype/results/2026-09-22-prober/`).
         SluseError::AccessDenied { .. } => format!(
@@ -125,7 +125,7 @@ pub fn tell(err: &SluseError, raw: &str) -> Told {
         // Only the box's own enrolment service meets this, never a tool call;
         // mapped so the match stays total.
         SluseError::EnrolmentRefused { .. } => format!(
-            "This box could not get its identity from the broker, so {raw} was not admitted. \
+            "This box could not get its identity from the Gate, so {raw} was not admitted. \
              Ask the user to close the box and open it again."
         ),
 
@@ -151,12 +151,12 @@ pub fn tell(err: &SluseError, raw: &str) -> Told {
         ),
 
         // --- the transport ----------------------------------------------------
-        SluseError::BrokerUnreachable { detail } => format!(
-            "The broker could not be reached, so nothing was admitted: {detail}. \
+        SluseError::GateUnreachable { detail } => format!(
+            "The Gate could not be reached, so nothing was admitted: {detail}. \
              This fails closed by design; there is no local copy to fall back to."
         ),
         SluseError::CertificatePinMismatch { .. } => {
-            "The broker did not present the expected certificate; nothing was admitted.".to_owned()
+            "The Gate did not present the expected certificate; nothing was admitted.".to_owned()
         }
 
         // The agent gets no detail here on purpose: an internal message can
@@ -213,11 +213,11 @@ mod tests {
     }
 
     #[test]
-    fn nothing_the_broker_knew_survives_into_the_blinded_message() {
+    fn nothing_the_gate_knew_survives_into_the_blinded_message() {
         let raw = "fixture/elsewhere/secret.txt";
         let message = tell(&out_of_scope(raw), raw).message;
 
-        // The broker's record keeps the host path and the enforcing scope list.
+        // The Gate's record keeps the host path and the enforcing scope list.
         // Neither may cross the boundary in a refusal the agent can read.
         assert!(!message.contains("C:\\"), "{message}");
         assert!(!message.contains("in-scope"), "{message}");
@@ -297,7 +297,7 @@ mod tests {
                 actual: sluse_proto::ContentHash::of(b"b"),
             },
             SluseError::SourceNotAdmitted { name: "s.md".into(), source_path: "f/x.md".into() },
-            SluseError::BrokerUnreachable { detail: "connection refused".into() },
+            SluseError::GateUnreachable { detail: "connection refused".into() },
             SluseError::CertificatePinMismatch {
                 expected: sluse_proto::ContentHash::of(b"a"),
                 presented: sluse_proto::ContentHash::of(b"b"),

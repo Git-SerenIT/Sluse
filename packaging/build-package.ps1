@@ -105,10 +105,10 @@ try {
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'config') -Force
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'ui\console') -Force
 
-    # Three binaries, and the names are the ones the docs use. `sluse.exe` is
+    # Four binaries, and the names are the ones the docs use. `sluse.exe` is
     # the lifecycle crate's binary; the crate name and the command differ and
     # that is deliberate (docs/sluse_prototype.md).
-    foreach ($exe in 'sluse.exe', 'sluse-broker.exe', 'sluse-endpoint.exe') {
+    foreach ($exe in 'sluse.exe', 'sluse-gate-core.exe', 'sluse-gate-front.exe', 'sluse-endpoint.exe') {
         $src = Join-Path 'target\release' $exe
         if (-not (Test-Path $src)) { throw "missing $src - was the release build run?" }
         Copy-Item $src (Join-Path $stage 'bin') -Force

@@ -3,7 +3,7 @@
 
 //! The audit record: one shape, written by two writers.
 //!
-//! The broker writes to the host's sink (`docs/audit.md`: the Windows Event Log
+//! The Gate writes to the host's sink (`docs/audit.md`: the Windows Event Log
 //! in v1, JSONL in the prototype). The endpoint writes to a per-session journal
 //! in the guest. **They use the same type**, and that is the design, not a
 //! convenience: invariant 7 says audit is uniform even when transport is not,
@@ -11,14 +11,14 @@
 //! between them stopped meaning anything.
 //!
 //! The comparison is the point. Each admission carries an [`AdmissionId`] minted
-//! by the broker and echoed by the endpoint, so the two records join 1:1 and the
+//! by the Gate and echoed by the endpoint, so the two records join 1:1 and the
 //! hashes on either side of the boundary can be checked against each other
 //! rather than assumed equal.
 //!
 //! ## Weight
 //!
 //! The two writers are not equally trustworthy and the design says so. The
-//! broker runs outside the guest, so its record is evidence. The endpoint's
+//! Gate runs outside the guest, so its record is evidence. The endpoint's
 //! journal runs inside the untrusted zone: it is **functional, not a trust
 //! anchor** (`docs/audit.md`). It exists so lineage can be computed and so the
 //! console has something to show — not so a claim can rest on it. The [`writer`]
@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum Writer {
     /// On the host, outside the guest. Evidence.
-    Broker,
+    Core,
     /// In the guest. Functional, not a trust anchor.
     Endpoint,
 }
@@ -60,7 +60,7 @@ pub struct UserRef {
 }
 
 impl UserRef {
-    /// The LOCAL identity: the OS account the broker process runs as.
+    /// The LOCAL identity: the OS account the Gate process runs as.
     pub fn os_process(name: impl Into<String>) -> Self {
         Self { kind: UserKind::OsProcess, name: name.into() }
     }
@@ -93,7 +93,7 @@ impl UserRef {
 ///
 /// The distinction is load-bearing and is why this is not a bare string.
 /// `docs/audit.md` claims an **authenticated user**, meaning the subject of a
-/// token the broker validated — a claim that only holds once the entry surface
+/// token the Gate validated — a claim that only holds once the entry surface
 /// performs Entra sign-in and S-3 has passed. In LOCAL there is no token and no
 /// sign-in, so the field carries the OS account and says so. Recording that as
 /// if it were the same thing would make the audit design's central claim a
@@ -117,7 +117,7 @@ pub enum Op {
     Fetch,
     /// A local file in the workspace, read back through the endpoint. **D-019.**
     ///
-    /// **Not an admission**: nothing crossed the boundary, the broker was never
+    /// **Not an admission**: nothing crossed the boundary, the Gate was never
     /// asked, and there is no record of it on the host — so it carries no
     /// `admission_id` and the scorer's 1:1 join is untouched. What it carries is
     /// [`lineage`](AuditRecord::lineage): the admission the copy came from, when
@@ -137,7 +137,7 @@ pub enum Op {
     List,
     /// The config view: which sources exist and what is in scope.
     Sources,
-    /// A volume alert opening. Not an operation a caller asked for; the broker
+    /// A volume alert opening. Not an operation a caller asked for; the Gate
     /// raises it.
     Alert,
     /// The user cleared the workspace inventory. User-initiated only, never
@@ -147,7 +147,7 @@ pub enum Op {
     /// or by the first token on a read. As important as the sign-out, and
     /// written for the same reason: the trail shows where authority began.
     Signin,
-    /// The user signed the box out: the broker dropped its binding and the
+    /// The user signed the box out: the Gate dropped its binding and the
     /// tokens it held (D-022). User-initiated only, never on a timer.
     Signout,
     /// A scope root checked at sign-in, as the user, was not there
@@ -158,7 +158,7 @@ pub enum Op {
     /// only; elsewhere its refusal is the record (D-045 point 2).
     Tail,
     /// The box's journal mirrored to the host (D-027 point 5). Recorded only
-    /// when refused: a session the broker did not issue, or a mirror over its
+    /// when refused: a session the Gate did not issue, or a mirror over its
     /// cap (review R-01).
     Journal,
 }
@@ -166,7 +166,7 @@ pub enum Op {
 /// How the bytes were delivered, or would have been.
 ///
 /// The asymmetry this field records is in `docs/audit.md`: in bytes mode the
-/// broker authorises **and delivers**, so its record covers both. In URL mode it
+/// Gate authorises **and delivers**, so its record covers both. In URL mode it
 /// hands over a per-item capability and records **a decision, not a delivery** —
 /// what arrived is known only to the endpoint's journal, inside the untrusted
 /// zone. A reader who cannot see which mode was in play cannot know which of
@@ -174,9 +174,9 @@ pub enum Op {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Capability {
-    /// The broker was on the data path.
+    /// The Gate was on the data path.
     Bytes,
-    /// The broker issued a pre-authenticated URL. M7.
+    /// The Gate issued a pre-authenticated URL. M7.
     Url,
 }
 
@@ -226,7 +226,7 @@ pub struct LineageItem {
     /// bytes read twice under two names are one lineage entry.
     pub hash: ContentHash,
     /// The admission this came from, so a lineage entry can be traced back to
-    /// the broker record that authorised it.
+    /// the Gate record that authorised it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admission_id: Option<AdmissionId>,
     /// What became of it in the box; on a publish's `lineage` only.
@@ -255,7 +255,7 @@ pub struct AuditRecord {
     pub op: Op,
     /// The path as the caller wrote it.
     pub path_requested: String,
-    /// What it resolved to, when that differs. Present on the broker's records
+    /// What it resolved to, when that differs. Present on the Gate's records
     /// for anything it resolved; absent on the endpoint's, which never resolves.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path_resolved: Option<String>,
@@ -285,7 +285,7 @@ pub struct AuditRecord {
     /// How many bytes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bytes: Option<u64>,
-    /// The join key between the broker's record and the endpoint's.
+    /// The join key between the Gate's record and the endpoint's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admission_id: Option<AdmissionId>,
     /// Which publish call, on a publish record.
@@ -310,7 +310,7 @@ pub struct AuditRecord {
     /// rather than inventing a label it cannot honour.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    /// Which preflight snapshot was in force. Broker records only.
+    /// Which preflight snapshot was in force. Gate records only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub posture_id: Option<PostureId>,
 }
@@ -423,8 +423,8 @@ impl AuditRecord {
         self
     }
 
-    /// Record an admission the broker **authorised and did not deliver**: URL
-    /// mode (M7). No hash and no byte count, because the broker never saw the
+    /// Record an admission the Gate **authorised and did not deliver**: URL
+    /// mode (M7). No hash and no byte count, because the Gate never saw the
     /// bytes, and a number here would read as a measurement it did not make.
     /// The endpoint's record, joined on the admission id, carries both.
     pub fn authorised(mut self, id: AdmissionId) -> Self {
@@ -445,7 +445,7 @@ impl AuditRecord {
     }
 
     /// The admission a failure happened after, when there was one: a URL-mode
-    /// download that failed, after the broker had authorised it.
+    /// download that failed, after the Gate had authorised it.
     pub fn with_admission_id(mut self, admission_id: Option<AdmissionId>) -> Self {
         self.admission_id = admission_id;
         self
@@ -469,15 +469,16 @@ impl AuditRecord {
 /// Which list a check belongs to.
 ///
 /// The split is provisional and is the open question behind it: whether "the
-/// user is not a local administrator" is a **gate** (the box refuses to start)
+/// user is not a local administrator" is **required** (the box refuses to start)
 /// or **posture** (recorded, and someone decides what it means) is under
 /// discussion and is not settled by writing this type
 /// (`docs/sluse_prototype.md`, Provisional design points).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CheckList {
-    /// A `Fail` here stops the box. No override.
-    Gate,
+    /// A `Fail` here stops the box. No override. The preflight's required
+    /// checks; "the gate" before D-071 named the Gate.
+    Required,
     /// Recorded on every audit record via the snapshot id. Never blocks.
     Posture,
 }
@@ -512,9 +513,9 @@ pub struct Check {
     pub detail: Option<String>,
 }
 
-/// The preflight result as it was at broker start.
+/// The preflight result as it was at Gate start.
 ///
-/// Written once, as its own record; every audit record the broker writes then
+/// Written once, as its own record; every audit record the Gate writes then
 /// carries [`PostureSnapshot::id`]. That is what makes "what was this machine
 /// like when that file was admitted" answerable months later, without storing
 /// the same twenty fields on every line.
@@ -532,24 +533,24 @@ pub struct PostureSnapshot {
 }
 
 impl PostureSnapshot {
-    /// Whether the box may start: no gate check failed.
+    /// Whether the box may start: no required check failed.
     ///
     /// `NotApplicable` and `Unknown` pass. That is a deliberate looseness in
-    /// the gate and it is the reason the posture list exists beside it: the
+    /// the Gate and it is the reason the posture list exists beside it: the
     /// things LOCAL cannot answer are recorded as unanswered rather than
     /// waved through silently.
-    pub fn gate_passed(&self) -> bool {
+    pub fn required_passed(&self) -> bool {
         !self
             .checks
             .iter()
-            .any(|c| c.list == CheckList::Gate && c.outcome == CheckOutcome::Fail)
+            .any(|c| c.list == CheckList::Required && c.outcome == CheckOutcome::Fail)
     }
 
-    /// The gate checks that failed, for the message that refuses to start.
+    /// The required checks that failed, for the message that refuses to start.
     pub fn gate_failures(&self) -> impl Iterator<Item = &Check> {
         self.checks
             .iter()
-            .filter(|c| c.list == CheckList::Gate && c.outcome == CheckOutcome::Fail)
+            .filter(|c| c.list == CheckList::Required && c.outcome == CheckOutcome::Fail)
     }
 }
 
@@ -559,7 +560,7 @@ mod tests {
 
     fn record(op: Op) -> AuditRecord {
         AuditRecord::new(
-            Writer::Broker,
+            Writer::Core,
             BoxId::new_unchecked("box-local-01"),
             UserRef::os_process(r"SERENIT\jok"),
             ContentHash::of(b"config"),
@@ -586,7 +587,7 @@ mod tests {
         assert!(json.get("label").is_none());
         assert!(json.get("pathResolved").is_none());
         // And the mandatory ones are there.
-        assert_eq!(json["writer"], "broker");
+        assert_eq!(json["writer"], "core");
         assert_eq!(json["op"], "list");
         assert_eq!(json["capability"], "bytes");
     }
@@ -698,18 +699,18 @@ mod tests {
             config_version: ContentHash::of(b"c"),
             environment: crate::config::Environment::Local,
             checks: vec![
-                check("config-valid", CheckList::Gate, CheckOutcome::Pass),
-                check("hypervisor-guest", CheckList::Gate, CheckOutcome::NotApplicable),
+                check("config-valid", CheckList::Required, CheckOutcome::Pass),
+                check("hypervisor-guest", CheckList::Required, CheckOutcome::NotApplicable),
                 check("enhanced-session-disabled", CheckList::Posture, CheckOutcome::Unknown),
                 // Posture never blocks, even failing.
                 check("user-not-local-admin", CheckList::Posture, CheckOutcome::Fail),
             ],
         };
-        assert!(snap.gate_passed(), "posture must not block");
+        assert!(snap.required_passed(), "posture must not block");
         assert_eq!(snap.gate_failures().count(), 0);
 
-        snap.checks.push(check("certs-present", CheckList::Gate, CheckOutcome::Fail));
-        assert!(!snap.gate_passed());
+        snap.checks.push(check("certs-present", CheckList::Required, CheckOutcome::Fail));
+        assert!(!snap.required_passed());
         assert_eq!(snap.gate_failures().count(), 1);
     }
 
@@ -721,7 +722,7 @@ mod tests {
             box_id: BoxId::new_unchecked("b"),
             config_version: ContentHash::of(b"c"),
             environment: crate::config::Environment::Local,
-            checks: vec![check("config-valid", CheckList::Gate, CheckOutcome::Pass)],
+            checks: vec![check("config-valid", CheckList::Required, CheckOutcome::Pass)],
         };
         let json = serde_json::to_string(&snap).unwrap();
         assert_eq!(serde_json::from_str::<PostureSnapshot>(&json).unwrap(), snap);

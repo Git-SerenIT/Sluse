@@ -12,12 +12,12 @@ use sluse_proto::ContentHash;
 pub struct Certs {
     pub ca_pem: String,
     pub ca_key_pem: String,
-    pub broker_cert_pem: String,
-    pub broker_key_pem: String,
+    pub gate_cert_pem: String,
+    pub gate_key_pem: String,
     pub endpoint_cert_pem: String,
     pub endpoint_key_pem: String,
     /// A second client leaf from the same CA: one copied out of another
-    /// user's box, to an open's broker (D-058).
+    /// user's box, to an open's Gate (D-058).
     pub other_cert_pem: String,
     pub other_key_pem: String,
     pub pin: ContentHash,
@@ -32,22 +32,22 @@ pub fn make() -> Certs {
         d
     };
 
-    // The broker's own CA parameters, so the enrolment test's leaves chain
+    // The Gate's own CA parameters, so the enrolment test's leaves chain
     // exactly as a real run's do.
     let ca_key = KeyPair::generate().unwrap();
-    let ca_params = sluse_broker::enrol::ca_params();
+    let ca_params = sluse_gate_core::enrol::ca_params();
     let ca_cert = ca_params.self_signed(&ca_key).unwrap();
     let ca_pem = ca_cert.pem();
     let ca_key_pem = ca_key.serialize_pem();
     let issuer = Issuer::new(ca_params, ca_key);
 
-    let broker_key = KeyPair::generate().unwrap();
-    let mut broker_params =
+    let gate_key = KeyPair::generate().unwrap();
+    let mut gate_params =
         CertificateParams::new(vec!["localhost".to_owned(), "127.0.0.1".to_owned()]).unwrap();
-    broker_params.distinguished_name = dn("sluse-broker");
-    broker_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
-    let broker_cert = broker_params.signed_by(&broker_key, &issuer).unwrap();
-    let pin = ContentHash::of(broker_cert.der());
+    gate_params.distinguished_name = dn("sluse-gate-core");
+    gate_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    let gate_cert = gate_params.signed_by(&gate_key, &issuer).unwrap();
+    let pin = ContentHash::of(gate_cert.der());
 
     let endpoint_key = KeyPair::generate().unwrap();
     let mut endpoint_params = CertificateParams::new(vec!["sluse-endpoint".to_owned()]).unwrap();
@@ -60,8 +60,8 @@ pub fn make() -> Certs {
     Certs {
         ca_pem,
         ca_key_pem,
-        broker_cert_pem: broker_cert.pem(),
-        broker_key_pem: broker_key.serialize_pem(),
+        gate_cert_pem: gate_cert.pem(),
+        gate_key_pem: gate_key.serialize_pem(),
         endpoint_cert_pem: endpoint_cert.pem(),
         endpoint_key_pem: endpoint_key.serialize_pem(),
         other_cert_pem: other_cert.pem(),
@@ -75,8 +75,8 @@ pub fn write(dir: &std::path::Path, c: &Certs) {
     for (name, body) in [
         ("client-ca.pem", &c.ca_pem),
         ("client-ca.key", &c.ca_key_pem),
-        ("broker.pem", &c.broker_cert_pem),
-        ("broker.key", &c.broker_key_pem),
+        ("gate.pem", &c.gate_cert_pem),
+        ("gate.key", &c.gate_key_pem),
         ("endpoint.pem", &c.endpoint_cert_pem),
         ("endpoint.key", &c.endpoint_key_pem),
         ("other.pem", &c.other_cert_pem),
@@ -116,11 +116,11 @@ pub fn config_json(root: &std::path::Path, pin: &ContentHash) -> (String, String
           "boxId": "box-local-test",
           "environment": "local",
           "maxReadBytes": 4096,
-          "broker": {{
+          "gate": {{
             "listen": "127.0.0.1:7580",
             "url": "https://127.0.0.1:7580",
-            "certPath": "certs/broker.pem",
-            "keyPath": "certs/broker.key",
+            "certPath": "certs/gate.pem",
+            "keyPath": "certs/gate.key",
             "clientCaPath": "certs/client-ca.pem",
             "certPin": "{pin}"
           }},
@@ -132,7 +132,7 @@ pub fn config_json(root: &std::path::Path, pin: &ContentHash) -> (String, String
           "artifacts": "artifacts",
           "workspace": "workspace",
           "journalDir": "journal",
-          "audit": {{ "sink": "jsonl", "path": "audit/broker.jsonl" }}
+          "audit": {{ "sink": "jsonl", "path": "audit/gate.jsonl" }}
         }}"#,
         pin = pin.as_str(),
     );

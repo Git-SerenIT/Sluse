@@ -9,7 +9,7 @@
 //! 2. **`config_version`**, the hash of the config file as loaded, so an audit
 //!    record can always be tied to the exact scope in force (`docs/config.md`,
 //!    Rules).
-//! 3. **The certificate pin**, the hash of the broker's leaf in DER form
+//! 3. **The certificate pin**, the hash of the Gate's leaf in DER form
 //!    (`docs/sluse_prototype.md`, Preflight).
 //!
 //! SHA-256 rather than Chaperone's BLAKE3. Chaperone's hash is an internal change

@@ -2,7 +2,7 @@
 // Copyright 2026 SerenIT ApS and Prompted EV
 
 //! The Win32 half of the service: the pipe, who is on the other end of it,
-//! the broker's job object, and the data directory's ACL.
+//! the Gate's job object, and the data directory's ACL.
 //!
 //! Every `unsafe` block here is a plain Win32 call with its handles owned by
 //! this module. None of it runs on the development guest (D-011), and none of
@@ -190,8 +190,8 @@ fn token_sid(token: HANDLE) -> io::Result<String> {
     sid_string(user.User.Sid)
 }
 
-/// The signed-in user's own token, for the broker to write Sluse Artifacts as
-/// them (D-031), and **inheritable**, because that is how it reaches the broker.
+/// The signed-in user's own token, for the Gate to write Sluse Artifacts as
+/// them (D-031), and **inheritable**, because that is how it reaches the Gate.
 ///
 /// From the caller's logon session, because the pipe cannot give it: the shell
 /// opens the pipe at identification level, so the service learns who is asking
@@ -227,7 +227,7 @@ fn sid_string(sid: PSID) -> io::Result<String> {
 }
 
 /// A job that kills everything in it when the service's last handle to it
-/// closes, which is when the service exits for any reason. So a broker never
+/// closes, which is when the service exits for any reason. So a Gate never
 /// outlives the service that started it and holds the port against the next.
 pub struct KillOnClose(HANDLE);
 

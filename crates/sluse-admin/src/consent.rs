@@ -8,16 +8,16 @@
 use std::time::Duration;
 
 use crate::graph::Graph;
-use crate::setup::BROKER_GRAPH_SCOPES;
+use crate::setup::GATE_GRAPH_SCOPES;
 
-/// The scopes of [`BROKER_GRAPH_SCOPES`] that no tenant-wide grant to the
+/// The scopes of [`GATE_GRAPH_SCOPES`] that no tenant-wide grant to the
 /// service principal `sp` covers yet. Empty is consented.
 pub async fn missing(g: &Graph, sp: &str) -> Result<Vec<String>, String> {
     let grants = g
         .list(format!("/oauth2PermissionGrants?$filter=clientId eq '{sp}' and consentType eq 'AllPrincipals'"))
         .await?;
     let granted: Vec<&str> = grants.iter().filter_map(|g| g["scope"].as_str()).flat_map(|s| s.split(' ')).collect();
-    Ok(BROKER_GRAPH_SCOPES.iter().filter(|s| !granted.contains(s)).map(|s| s.to_string()).collect())
+    Ok(GATE_GRAPH_SCOPES.iter().filter(|s| !granted.contains(s)).map(|s| s.to_string()).collect())
 }
 
 /// Ask every `every` until consent covers everything, at most `tries` times.

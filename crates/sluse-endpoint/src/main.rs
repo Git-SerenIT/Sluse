@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use sluse_endpoint::broker_client::BrokerClient;
+use sluse_endpoint::gate_client::GateClient;
 use sluse_endpoint::journal::Journal;
 use sluse_endpoint::server::Endpoint;
 use sluse_endpoint::session;
@@ -28,7 +28,7 @@ const EX_CONFIG: u8 = 78;
     about = "Sluse endpoint — the guest's only way to reach a source"
 )]
 struct Cli {
-    /// The config file. The guest's copy; the broker enforces from its own.
+    /// The config file. The guest's copy; the Gate enforces from its own.
     #[arg(long, value_name = "PATH")]
     config: PathBuf,
 
@@ -41,7 +41,7 @@ struct Cli {
     console: bool,
 
     /// Enrol this box (slice 2): read the host's bootstrap from KVP, get an
-    /// identity from the broker, and write it and the broker's config to
+    /// identity from the Gate, and write it and the Gate's config to
     /// `--config`. Run as root, by `sluse-enrol.service`.
     #[arg(long, conflicts_with_all = ["mcp", "console"])]
     enrol: bool,
@@ -65,7 +65,7 @@ struct Cli {
 }
 
 fn main() -> ExitCode {
-    // First statement, as in the broker: with two crypto providers linked,
+    // First statement, as in the Gate: with two crypto providers linked,
     // rustls refuses to guess which is the default and panics on the first
     // handshake.
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
@@ -152,7 +152,7 @@ async fn run_enrol(cli: &Cli) -> ExitCode {
 /// an empty file and show a person nothing while their agent worked. It takes
 /// the session the workspace remembers, and only falls back to a fresh one when
 /// there is no run to join yet — which is still worth serving, because the
-/// sources and the gate are worth looking at before anything has been admitted.
+/// sources and the Gate are worth looking at before anything has been admitted.
 ///
 /// It does **not** call [`session::attach`]. Recording a session is the running
 /// endpoint's business; a console that wrote there would claim a run it is only
@@ -168,7 +168,7 @@ async fn run_console(config_path: &std::path::Path, ui_dir: &std::path::Path) ->
             eprintln!("endpoint.consoleListen {}: {e}", loaded.config.endpoint.console_listen);
             EX_CONFIG
         })?;
-    // Checked before the broker is contacted, so a config that could not have
+    // Checked before the Gate is contacted, so a config that could not have
     // been served says so immediately rather than after a handshake.
     sluse_endpoint::console::api::require_loopback(addr).map_err(|e| {
         eprintln!("{e}");
@@ -186,14 +186,14 @@ async fn run_console(config_path: &std::path::Path, ui_dir: &std::path::Path) ->
     }
 
     let view = client.config_view().await.map_err(|e| {
-        eprintln!("the broker refused the config view: {e}");
+        eprintln!("the Gate refused the config view: {e}");
         EX_CONFIG
     })?;
 
     let local = client.status_now().await.ok().and_then(|s| s.environment) == Some(sluse_proto::Environment::Local);
     let state = std::sync::Arc::new(sluse_endpoint::console::Console {
         session: client.session().clone(),
-        broker: client,
+        gate: client,
         view,
         workspace,
         journal_dir: loaded.resolve(&loaded.config.journal_dir),
@@ -223,9 +223,9 @@ async fn run_console(config_path: &std::path::Path, ui_dir: &std::path::Path) ->
 }
 
 async fn run(config_path: &std::path::Path) -> Result<(), u8> {
-    // Invariant 6 on the guest's side too. The broker enforces from its own
+    // Invariant 6 on the guest's side too. The Gate enforces from its own
     // copy; this one only has to be loadable for the endpoint to know where the
-    // broker is and which certificate to expect.
+    // Gate is and which certificate to expect.
     let loaded = sluse_proto::config::load(config_path).map_err(|e| {
         eprintln!("config: {e}");
         EX_CONFIG
@@ -238,7 +238,7 @@ async fn run(config_path: &std::path::Path) -> Result<(), u8> {
     })?;
 
     // A session belongs to the run, not to this process. If one is remembered
-    // and the broker still holds it, the journal and the lineage continue
+    // and the Gate still holds it, the journal and the lineage continue
     // across the restart.
     let remembered = session::remembered(&workspace);
     let (client, health, rejoined) = connect(&loaded, remembered).await?;
@@ -252,7 +252,7 @@ async fn run(config_path: &std::path::Path) -> Result<(), u8> {
     tracing::info!("{}", resumed.describe());
 
     let view = client.config_view().await.map_err(|e| {
-        eprintln!("the broker refused the config view: {e}");
+        eprintln!("the Gate refused the config view: {e}");
         EX_CONFIG
     })?;
 
@@ -264,7 +264,7 @@ async fn run(config_path: &std::path::Path) -> Result<(), u8> {
 
     tracing::info!(
         box_id = %health.box_id,
-        broker = %health.broker_version,
+        gate = %health.gate_version,
         user = %health.user.display(),
         sources = view.sources.len(),
         journal = %journal.path().display(),
@@ -293,19 +293,19 @@ async fn run(config_path: &std::path::Path) -> Result<(), u8> {
     Ok(())
 }
 
-/// Connect, resuming the run's session when the broker still has it.
+/// Connect, resuming the run's session when the Gate still has it.
 ///
-/// A remembered session the broker has forgotten — it holds them for twelve
+/// A remembered session the Gate has forgotten — it holds them for twelve
 /// hours idle — is not carried on with silently: a new one is taken, and the
 /// journal and lineage start fresh, which is visible in the log rather than
 /// discovered later in a provenance record.
 async fn connect(
     loaded: &sluse_proto::Loaded,
     remembered: Option<sluse_proto::SessionId>,
-) -> Result<(BrokerClient, sluse_proto::Health, bool), u8> {
-    let (client, health) = BrokerClient::connect(loaded).await.map_err(|e| {
-        eprintln!("broker: {e}");
-        eprintln!("Nothing is admitted when the broker cannot be reached; this fails closed.");
+) -> Result<(GateClient, sluse_proto::Health, bool), u8> {
+    let (client, health) = GateClient::connect(loaded).await.map_err(|e| {
+        eprintln!("gate: {e}");
+        eprintln!("Nothing is admitted when the Gate cannot be reached; this fails closed.");
         EX_CONFIG
     })?;
 
@@ -313,7 +313,7 @@ async fn connect(
         return Ok((client, health, false));
     };
 
-    // The broker is the authority on whether that session still exists, so it is
+    // The Gate is the authority on whether that session still exists, so it is
     // asked rather than assumed: on the status route, which answers without a
     // refusal in the Sluse log for a session that aged out.
     let resumed = client.with_session(previous);
@@ -322,16 +322,16 @@ async fn connect(
         Ok(false) => {
             tracing::info!(
                 session_id = %resumed.session(),
-                "the broker no longer holds the previous session; starting a new run"
+                "the Gate no longer holds the previous session; starting a new run"
             );
-            let (client, health) = BrokerClient::connect(loaded).await.map_err(|e| {
-                eprintln!("broker: {e}");
+            let (client, health) = GateClient::connect(loaded).await.map_err(|e| {
+                eprintln!("gate: {e}");
                 EX_CONFIG
             })?;
             Ok((client, health, false))
         }
         Err(e) => {
-            eprintln!("broker: {e}");
+            eprintln!("gate: {e}");
             Err(EX_CONFIG)
         }
     }

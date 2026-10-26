@@ -25,7 +25,7 @@
 //! - **Publish lineage does not read it.** Lineage comes from the admissions the
 //!   journal recorded in this process. A forged sidecar cannot put a source
 //!   file's provenance on an artifact.
-//! - **The broker never sees it.** No admission, no scope decision and no audit
+//! - **The Gate never sees it.** No admission, no scope decision and no audit
 //!   record on the host depends on a byte of it (invariant 2).
 //! - **The worst a forged one achieves** is telling the model that a file the
 //!   agent wrote itself is untrusted source material. That is the safe
@@ -53,10 +53,10 @@ pub struct Manifest {
     /// The path an agent would name to read it from the source again.
     pub admitted_from: String,
     pub source: SourceName,
-    /// The host path the broker resolved it to. For a person reading the
+    /// The host path the Gate resolved it to. For a person reading the
     /// workspace later; the agent has no use for it.
     pub resolved: String,
-    /// The broker's admission id. The join key, carried here so a file on disk
+    /// The Gate's admission id. The join key, carried here so a file on disk
     /// can be traced to the host record that authorised it.
     pub admission_id: AdmissionId,
     /// The hash of the bytes as admitted. Re-hashing the file says whether it is

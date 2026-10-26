@@ -20,7 +20,7 @@ export interface UserRef {
   name: string;
 }
 
-export interface BrokerServing {
+export interface GateServing {
   status: "serving";
   postureId: string;
   configVersion: string;
@@ -39,7 +39,7 @@ export interface SourceCount {
   bytes: number;
 }
 
-export interface BrokerUnreachable {
+export interface GateUnreachable {
   status: "unreachable";
   detail: string;
 }
@@ -51,7 +51,7 @@ export interface RunState {
   user: UserRef;
   maxReadBytes: number;
   sources: number;
-  broker: BrokerServing | BrokerUnreachable;
+  gate: GateServing | GateUnreachable;
   /** A development device: out-of-scope entries and the host's record. */
   local: boolean;
   deployment?: { id: string; name: string; revision: number };
@@ -108,7 +108,7 @@ export interface LineageItem {
 }
 
 export interface AuditRecord {
-  writer: "broker" | "endpoint";
+  writer: "core" | "endpoint";
   boxId: string;
   user: UserRef;
   configVersion: string;
@@ -181,14 +181,14 @@ export interface VolumeAlert {
   /**
    * **Distinct content hashes** admitted inside the window, not a count of
    * admissions. Re-reading one file does not move it, which is the measure the
-   * broker raises an alert on — so it is the measure the gate draws.
+   * Gate Core raises an alert on — so it is the measure the meter draws.
    */
   count: number;
   windowSeconds: number;
   openedAt: string;
   /** Absent while the alert is open. */
   closedAt?: string;
-  /** The broker's own summary, e.g. `tender/ (27 files, 60 s)`. */
+  /** Gate Core's own summary, e.g. `tender/ (27 files, 60 s)`. */
   summary: string;
 }
 
@@ -202,7 +202,7 @@ export interface Cleared {
   failed: string[];
 }
 
-/** A refusal from the endpoint or the broker, passed through unblinded. */
+/** A refusal from the endpoint or Gate Core, passed through unblinded. */
 export interface ApiFailure {
   code: string;
   [field: string]: unknown;

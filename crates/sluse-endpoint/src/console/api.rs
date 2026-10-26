@@ -4,7 +4,7 @@
 //! The console's loopback API.
 //!
 //! Every route here answers one question a person has about a run in progress.
-//! None of them decides anything: the broker decides, this relays, and where it
+//! None of them decides anything: the Gate decides, this relays, and where it
 //! computes — the inventory's comparison — it is careful about what it will not
 //! claim ([`super::inventory`]).
 //!
@@ -24,7 +24,7 @@
 //! ## What the console never has
 //!
 //! No credential, no scope opinion, no host path it was not given. It shows
-//! `SourceView::address`, which the broker puts there for exactly this purpose
+//! `SourceView::address`, which the Gate puts there for exactly this purpose
 //! and which is the one host path the guest is told (M1's choice, and still on
 //! the Known Issues list in `prototype/README.md`).
 
@@ -42,12 +42,12 @@ use sluse_proto::audit::{AuditRecord, Capability, Op, Outcome, UserRef};
 use sluse_proto::{Audience, BoxId, ConfigView, ContentHash, SessionId, SluseError};
 
 use super::inventory::{self, InventoryItem, InventoryState};
-use crate::broker_client::BrokerClient;
+use crate::gate_client::GateClient;
 use crate::journal;
 
 /// Everything the console needs to answer, and nothing it could decide with.
 pub struct Console {
-    pub broker: BrokerClient,
+    pub gate: GateClient,
     pub view: ConfigView,
     pub workspace: PathBuf,
     pub journal_dir: PathBuf,
@@ -70,7 +70,7 @@ pub struct Console {
 /// The run's session: the one the workspace records now, else the console's own.
 ///
 /// Asked on every call, because the run can change session under a running
-/// console: after a broker restart the console, started first, found the
+/// console: after a Gate restart the console, started first, found the
 /// remembered session gone and took a fresh one, while the MCP process took
 /// another and recorded it (S-3 run 2, 2026-09-28). The console's views then
 /// read an empty journal for the whole run.
@@ -225,7 +225,7 @@ pub async fn serve(state: Arc<Console>, addr: SocketAddr) -> Result<(), String> 
 
 /// Refuse a console address that anything but this machine could reach.
 ///
-/// Its own function so it can be tested without a broker: the rule is the
+/// Its own function so it can be tested without a Gate: the rule is the
 /// interesting part, not the socket.
 pub fn require_loopback(addr: SocketAddr) -> Result<(), String> {
     if addr.ip().is_loopback() {
@@ -273,10 +273,10 @@ pub struct RunState {
     pub user: UserRef,
     pub max_read_bytes: u64,
     pub sources: usize,
-    /// What the broker says right now, or why it could not be asked. The console
+    /// What the Gate says right now, or why it could not be asked. The console
     /// says "not reachable" rather than showing nothing, because a blank panel
     /// reads as "nothing is happening".
-    pub broker: BrokerState,
+    pub gate: GateState,
     /// A development device: the console lists what the agents cannot see
     /// and shows the host's record beside the box's (D-033, D-045 point 2).
     pub local: bool,
@@ -288,16 +288,16 @@ pub struct RunState {
 // in snake_case while every other field on the wire is camelCase.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "status")]
-pub enum BrokerState {
+pub enum GateState {
     Serving {
         posture_id: sluse_proto::PostureId,
-        /// The config the **broker** is enforcing from. Shown beside the
+        /// The config the **Gate** is enforcing from. Shown beside the
         /// endpoint's own so a mismatch is visible rather than inferred: only
-        /// the broker's copy decides anything, and a guest running against a
+        /// the Gate's copy decides anything, and a guest running against a
         /// different one is worth seeing immediately.
         config_version: ContentHash,
         sessions: usize,
-        /// Who the box is signed in as (D-022). The broker's answer, asked on
+        /// Who the box is signed in as (D-022). The Gate's answer, asked on
         /// every refresh: the page never remembers a sign-in of its own.
         signed_in: Option<UserRef>,
         /// The person signed out in the box (Q7), and nobody since.
@@ -314,8 +314,8 @@ async fn state_(State(c): State<Arc<Console>>) -> Json<RunState> {
     // `status`, not `health`: `/v1/health` mints a session on every call, and a
     // console panel that refreshes would evict a live run's session out of a
     // bounded registry. That is why `/v1/status` exists at all.
-    let broker = match c.broker.status_now().await {
-        Ok(s) => BrokerState::Serving {
+    let gate = match c.gate.status_now().await {
+        Ok(s) => GateState::Serving {
             posture_id: s.posture_id,
             config_version: s.config_version,
             sessions: s.sessions,
@@ -323,19 +323,19 @@ async fn state_(State(c): State<Arc<Console>>) -> Json<RunState> {
             signed_out: s.signed_out,
             volume: s.volume,
         },
-        Err(e) => BrokerState::Unreachable { detail: e.to_string() },
+        Err(e) => GateState::Unreachable { detail: e.to_string() },
     };
 
     Json(RunState {
         box_id: c.box_id.clone(),
         session: c.session_now(),
         config_version: c.config_version.clone(),
-        // Who the broker is acting as, as its answer just now said: after a
+        // Who the Gate is acting as, as its answer just now said: after a
         // sign-in this is the signed-in person, not the start-up identity.
-        user: c.broker.acting_as(),
+        user: c.gate.acting_as(),
         max_read_bytes: c.view.max_read_bytes,
         sources: c.view.sources.len(),
-        broker,
+        gate,
         local: c.local,
         deployment: c.deployment.clone(),
     })
@@ -351,7 +351,7 @@ async fn sources(State(c): State<Arc<Console>>) -> Json<ConfigView> {
 
 /// The console's sign-out button. User-initiated only (D-022).
 async fn sign_out(State(c): State<Arc<Console>>) -> ApiResult<Json<sluse_proto::SignedOut>> {
-    c.broker.sign_out().await.map(Json).map_err(ApiError)
+    c.gate.sign_out().await.map(Json).map_err(ApiError)
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ pub struct ListQuery {
 ///
 /// The console runs in the box, and anything in the box can call this route,
 /// the agent included, so the greyed [`Audience::User`] listing handed it the
-/// names D-008 withholds. The broker now serves `User` in LOCAL only, where
+/// names D-008 withholds. The Gate now serves `User` in LOCAL only, where
 /// there is no box: there the greyed view stays, and everywhere else this
 /// asks as [`Audience::Agent`]. A greyed view for a person waits for a
 /// surface outside the box.
@@ -377,7 +377,7 @@ async fn list(
     Query(q): Query<ListQuery>,
 ) -> ApiResult<Json<sluse_proto::ListResponse>> {
     let audience = if c.local { Audience::User } else { Audience::Agent };
-    c.broker.list_as(&q.path, audience).await
+    c.gate.list_as(&q.path, audience).await
     .map(Json)
     .map_err(ApiError)
 }
@@ -486,13 +486,13 @@ async fn inventory_(State(c): State<Arc<Console>>) -> ApiResult<Json<Vec<Invento
 /// nobody asked; the volume is bounded by what a person clicks
 /// (`docs/sluse_prototype.md`, the M2 review). One at a time on purpose:
 /// concurrency would turn a click into a burst against the source and into
-/// the volume window the broker is counting.
+/// the volume window the Gate is counting.
 async fn check(State(c): State<Arc<Console>>, Json(q): Json<CheckQuery>) -> ApiResult<Json<InventoryRow>> {
     let item = inventory::items_from_journal(&c.all_records()?, &c.workspace)
         .into_iter()
         .find(|i| i.path == q.path)
         .ok_or_else(|| ApiError(SluseError::NotFound { raw: q.path.clone() }))?;
-    let stat = c.broker.stat(&item.path, None).await;
+    let stat = c.gate.stat(&item.path, None).await;
     let state = inventory::classify(&item, stat);
     let checked_at = state.is_answered().then(Utc::now);
     Ok(Json(InventoryRow { item, state, checked_at }))
@@ -537,7 +537,7 @@ async fn clear(State(c): State<Arc<Console>>) -> ApiResult<Json<Cleared>> {
     j.record(AuditRecord {
         writer: sluse_proto::audit::Writer::Endpoint,
         box_id: c.box_id.clone(),
-        user: c.broker.acting_as(),
+        user: c.gate.acting_as(),
         config_version: c.config_version.clone(),
         session_id: session.clone(),
         ts: Utc::now(),
@@ -562,14 +562,14 @@ async fn clear(State(c): State<Arc<Console>>) -> ApiResult<Json<Cleared>> {
         posture_id: None,
     });
     drop(j);
-    journal::mirror(&c.broker, &path, &session, &c.mirrored).await;
+    journal::mirror(&c.gate, &path, &session, &c.mirrored).await;
 
     Ok(Json(cleared))
 }
 
 /// Delete the admitted copies, and say exactly what happened to each.
 ///
-/// Split out from the route so it can be tested without a broker: deleting
+/// Split out from the route so it can be tested without a Gate: deleting
 /// files is the part with consequences, and the part a test should hold still.
 fn remove_admitted(items: &[InventoryItem]) -> Cleared {
     let mut cleared = Cleared { files: 0, bytes: 0, failed: Vec::new() };
@@ -613,7 +613,7 @@ async fn alerts(
     State(c): State<Arc<Console>>,
     Query(q): Query<SinceQuery>,
 ) -> ApiResult<Json<Vec<sluse_proto::VolumeAlert>>> {
-    c.broker.alerts(q.since).await.map(Json).map_err(ApiError)
+    c.gate.alerts(q.since).await.map(Json).map_err(ApiError)
 }
 
 #[derive(serde::Deserialize)]
@@ -621,7 +621,7 @@ pub struct LimitQuery {
     pub limit: Option<usize>,
 }
 
-/// The **host's** trail, as the broker will show it.
+/// The **host's** trail, as the Gate will show it.
 ///
 /// Deliberately not the guest's journal, which `/api/journal` serves: the two
 /// records of one admission are written on opposite sides of the boundary and
@@ -634,7 +634,7 @@ async fn audit(
     if !c.local {
         return Err(ApiError(SluseError::AudienceNotServed { audience: "audit tail".into() }));
     }
-    c.broker.audit_tail(q.limit.unwrap_or(50)).await.map(Json).map_err(ApiError)
+    c.gate.audit_tail(q.limit.unwrap_or(50)).await.map(Json).map_err(ApiError)
 }
 
 #[cfg(test)]

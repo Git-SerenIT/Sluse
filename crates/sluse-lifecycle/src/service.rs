@@ -8,14 +8,14 @@
 //! the other end, whom it learns from the pipe itself (`winsys::client_identity`).
 //! Opening a box means:
 //! 1. start the VM;
-//! 2. start the egress proxy and the broker as children, in a job that dies
+//! 2. start the egress proxy and the Gate as children, in a job that dies
 //!    with the service (M9, D-035: the proxy is the box's only way out);
 //! 3. hand the box a fresh bootstrap over KVP, with its VNC secret;
 //! 4. wait for the box's VNC port;
 //! 5. give the shell the address and the secret.
 //!
-//! The broker runs its own preflight gate at start and refuses to serve if
-//! it fails, so the gate is step 2's, not a second copy here.
+//! The Gate runs its own preflight checks at start and refuses to serve if
+//! it fails, so the required checks are step 2's, not a second copy here.
 //!
 //! Blocking, one thread per connection. An open holds the lock for its whole
 //! length, which is what serialises two opens.
@@ -82,7 +82,7 @@ const START_LIMIT: Duration = Duration::from_secs(5 * 60);
 /// How long the shell waits for the box's console once its screen is up
 /// before it says the console did not start (Q9). A **stand-in** too.
 const CONSOLE_LIMIT: Duration = Duration::from_secs(5 * 60);
-/// A sign-in caught longer ago than this is not handed to the broker at the
+/// A sign-in caught longer ago than this is not handed to the Gate at the
 /// open (Q22): Microsoft documents about ten minutes for an authorization
 /// code, and this is half of it, not a measurement. The shell signs in again
 /// silently once the box is up.
@@ -114,7 +114,7 @@ fn name(phase: Phase) -> &'static str {
         Phase::Install => "Installing your box's system",
         Phase::Make => "Making your box",
         Phase::Start => "Starting your box",
-        Phase::Broker => "Connecting Sluse to your files",
+        Phase::Gate => "Connecting Sluse to your files",
         Phase::Wait => "Waiting for your box's screen",
         Phase::Reset => "Resetting the box's system",
         Phase::Wipe => "Wiping the box",
@@ -150,7 +150,7 @@ fn sha256_file(p: &std::path::Path) -> Result<String, String> {
     Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
-/// `{"7580": "broker", ...}`, so the Hyper-V script names the part in what
+/// `{"7580": "Sluse Gate", ...}`, so the Hyper-V script names the part in what
 /// it says about a port (D-029 point 5).
 fn host_port_parts() -> serde_json::Value {
     sluse_proto::ports::ON_HOST
@@ -183,6 +183,19 @@ fn network_config() -> String {
 
 /// How long the proxy has to listen, and to write its counts when stopped.
 const PROXY_WAIT: Duration = Duration::from_secs(10);
+
+/// Stop Gate Core. Its stdin closed first, which under the service is its
+/// stop: it writes the egress refusals' counts and stops its Front (D-071).
+/// Then killed, if it has not gone.
+fn stop_gate(gate: &mut Child) {
+    drop(gate.stdin.take());
+    let deadline = Instant::now() + PROXY_WAIT;
+    while matches!(gate.try_wait(), Ok(None)) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let _ = gate.kill();
+    let _ = gate.wait();
+}
 
 /// The egress proxy, a child of the service (M9, D-035). Dropped, it is asked
 /// to stop by closing its stdin, so it can write its counts; then killed.
@@ -244,20 +257,18 @@ struct Running {
     sid: String,
     vm: String,
     /// Its stdin is the control channel (D-036): sign-ins from the host.
-    broker: Child,
-    /// The config the broker was started with, to ask it for its status.
+    gate: Child,
+    /// The config the Gate was started with, to ask it for its status.
     loaded: sluse_proto::Loaded,
     /// The last sign-in handed over, so its answer is known by its number.
     sign_ins: u64,
-    /// The broker held a sign-in during this open. Only the person's
+    /// The Gate held a sign-in during this open. Only the person's
     /// sign-out in the box takes it away (D-022), so a bound box that is not
     /// signed in was signed out in, which holds until the next open (Q7).
     bound: bool,
     /// When this open booted the box and said Ready, until the console's
     /// time is kept (Q9).
     shown: Option<Instant>,
-    /// Dropped with the rest, which stops it.
-    proxy: ProxyChild,
     vnc: String,
     password: sluse_proto::pipe::Secret,
 }
@@ -269,7 +280,7 @@ pub struct Caller {
     /// Administrators enabled in the token, which means elevated.
     pub admin: bool,
     /// The logon session the caller is in, where the service takes the token
-    /// the broker writes Sluse Artifacts with (D-031).
+    /// the Gate writes Sluse Artifacts with (D-031).
     pub session: u32,
 }
 
@@ -434,7 +445,7 @@ impl Service {
                     Ok(Some(_)) => self.base_plan(true),
                     _ => [self.base_plan(false), vec![step(Phase::Make)]].concat(),
                 };
-                plan.extend([Phase::Check, Phase::Start, Phase::Broker, Phase::Wait].map(step));
+                plan.extend([Phase::Check, Phase::Start, Phase::Gate, Phase::Wait].map(step));
                 plan
             }
             PipeRequest::Reset { .. } => [vec![step(Phase::Reset)], self.base_plan(false), vec![remake]].concat(),
@@ -556,8 +567,8 @@ impl Service {
         authored.entra.as_ref().map(sluse_proto::SignInView::for_entra)
     }
 
-    /// Whether the caller's running broker holds a sign-in, `None` when no
-    /// broker runs for them; and whether they signed out in the box since it
+    /// Whether the caller's running Gate holds a sign-in, `None` when no
+    /// Gate runs for them; and whether they signed out in the box since it
     /// was signed in (Q7); and who it is signed in as.
     fn sign_in_state(&self, sid: &str) -> (Option<bool>, bool, Option<String>) {
         let mut running = self.running.lock().unwrap_or_else(|p| p.into_inner());
@@ -580,7 +591,7 @@ impl Service {
             return failed(PipeFailure::NoBox, "Your box is not open.");
         };
         r.sign_ins += 1;
-        match hand_sign_in(&mut r.broker, &r.loaded, r.sign_ins, sign_in) {
+        match hand_sign_in(&mut r.gate, &r.loaded, r.sign_ins, sign_in) {
             Ok(user) => {
                 r.bound = true;
                 self.name_box(sid, &user);
@@ -591,7 +602,7 @@ impl Service {
     }
 
     /// [`PipeRequest::SignOut`]: the caller's own running box (D-064), over
-    /// the broker's own route, with the device's leaf (D-058 point 4). The
+    /// the Gate's own route, with the device's leaf (D-058 point 4). The
     /// box then counts as signed out until the next open, as one signed out
     /// from its console did (Q7).
     fn sign_out(&self, sid: &str) -> PipeEvent {
@@ -601,7 +612,7 @@ impl Service {
         };
         let out = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| e.to_string()).and_then(|rt| {
             rt.block_on(async {
-                let (client, _) = sluse_endpoint::broker_client::BrokerClient::connect(&r.loaded).await?;
+                let (client, _) = sluse_endpoint::gate_client::GateClient::connect(&r.loaded).await?;
                 client.sign_out().await
             })
             .map_err(|e| e.to_string())
@@ -611,7 +622,7 @@ impl Service {
                 r.bound = true;
                 PipeEvent::Done
             }
-            Err(e) => failed(PipeFailure::Broker, format!("signing out: {e}")),
+            Err(e) => failed(PipeFailure::Gate, format!("signing out: {e}")),
         }
     }
 
@@ -670,8 +681,7 @@ impl Service {
             }
             // Already open: the same address and secret, if both halves are
             // still up. Otherwise start over.
-            if matches!(r.broker.try_wait(), Ok(None))
-                && matches!(r.proxy.0.try_wait(), Ok(None))
+            if matches!(r.gate.try_wait(), Ok(None))
                 && self.hyperv.state(&r.vm) == Ok(BoxState::Running)
             {
                 // The theme in use now, which may have changed meanwhile (Q70).
@@ -685,7 +695,7 @@ impl Service {
                 // and the shell sends none for it.
                 if let Some(s) = sign_in.filter(|_| !r.bound) {
                     r.sign_ins += 1;
-                    match hand_sign_in(&mut r.broker, &r.loaded, r.sign_ins, s) {
+                    match hand_sign_in(&mut r.gate, &r.loaded, r.sign_ins, s) {
                         Ok(_) => r.bound = true,
                         Err(e) => self.log_device("sign-in", &format!("at a reopen: {e}")),
                     }
@@ -703,8 +713,7 @@ impl Service {
                     shares: has_kind(&r.loaded, |k| matches!(k, SourceKind::Smb { .. })),
                 };
             }
-            let _ = r.broker.kill();
-            let _ = r.broker.wait();
+            stop_gate(&mut r.gate);
             *running = None;
         }
 
@@ -725,8 +734,8 @@ impl Service {
             self.log_device("open", "the window quit before the start; the box is left closed");
             return failed(PipeFailure::Box, "the window quit before the box started");
         }
-        // Preflight's guest checks, asked of Hyper-V and handed to the broker,
-        // whose gate decides on them (slice 5). Before the start: they read
+        // Preflight's guest checks, asked of Hyper-V and handed to the Gate,
+        // whose Gate decides on them (slice 5). Before the start: they read
         // the VM's settings and the other VMs' states, nothing that needs this
         // one running, and a refusal here leaves nothing to stop.
         let guest = match self.hyperv.call_within(serde_json::json!({ "verb": "guest-checks", "vm": rec.vm, "switch": SWITCH }), steps.left()) {
@@ -756,20 +765,20 @@ impl Service {
         }
         self.follow_console(sid, &rec.vm);
 
-        steps.next(self, send, Phase::Broker, name(Phase::Broker));
+        steps.next(self, send, Phase::Gate, name(Phase::Gate));
         let config = self.root.join("sluse.json");
         let loaded = match sluse_proto::config::load(&config) {
             Ok(l) => l,
-            Err(e) => return undo(failed(PipeFailure::Broker, format!("{}: {e}", config.display()))),
+            Err(e) => return undo(failed(PipeFailure::Gate, format!("{}: {e}", config.display()))),
         };
         // A box opened under another config keeps what it admitted then
         // (invariant 4); the shell says so once, naming what changed (D-038
         // point 4, D-045 point 3).
         let config_changes = self.config_changes(sid, &std::fs::read(&config).unwrap_or_default(), &loaded.version);
-        // This open's bootstrap first: the broker is started with its token's
+        // This open's bootstrap first: the Gate is started with its token's
         // hash, and the box gets the token itself.
-        let boot = match enrol_url(&loaded.config.broker.listen)
-            .and_then(|url| Bootstrap::new(keyboard, url, loaded.config.broker.cert_pin.clone()))
+        let boot = match enrol_url(&loaded.config.gate.listen)
+            .and_then(|url| Bootstrap::new(keyboard, url, loaded.config.gate.cert_pin.clone()))
         {
             // A timezone that is not a name is dropped, not refused: the box
             // keeps its clock as it was rather than not opening.
@@ -781,14 +790,9 @@ impl Service {
             },
             Err(e) => return undo(failed(PipeFailure::BadRequest, e)),
         };
-        // The box's way out, before the box asks for it.
-        let proxy = match self.start_proxy(&loaded, Some(sid)) {
-            Ok(p) => p,
-            Err(e) => return undo(failed(PipeFailure::Broker, e)),
-        };
-        let mut broker = match self.start_broker(&loaded, &boot.token_hash(), caller, &guest) {
+        let mut gate = match self.start_gate(&loaded, &boot.token_hash(), caller, &guest) {
             Ok(b) => b,
-            Err(e) => return undo(failed(PipeFailure::Broker, e)),
+            Err(e) => return undo(failed(PipeFailure::Gate, e)),
         };
         // The host's sign-in, before the box's screen (D-036, D-022). One that
         // fails does not stop the open: the box opens unbound, and the shell
@@ -800,7 +804,7 @@ impl Service {
             if received.elapsed() > CODE_FRESH {
                 self.log_device("sign-in", &format!("at open: caught {} s ago, too old to redeem", received.elapsed().as_secs()));
             } else {
-                match hand_sign_in(&mut broker, &loaded, 1, s) {
+                match hand_sign_in(&mut gate, &loaded, 1, s) {
                     Ok(user) => {
                         bound = true;
                         self.name_box(sid, &user);
@@ -814,8 +818,7 @@ impl Service {
             // box this open started is stopped (Q75). One running from before
             // runs on, as the window said it would.
             Ok(_) if gone() => {
-                let _ = broker.kill();
-                let _ = broker.wait();
+                stop_gate(&mut gate);
                 self.log_device("open", "the window quit while the box started; it is left closed");
                 undo(failed(PipeFailure::Box, "the window quit while the box started"))
             }
@@ -827,12 +830,11 @@ impl Service {
                 *running = Some(Running {
                     sid: sid.to_owned(),
                     vm: rec.vm.clone(),
-                    broker,
+                    gate,
                     loaded,
                     sign_ins: 1,
                     bound,
                     shown: was_off.then(Instant::now),
-                    proxy,
                     vnc: vnc.clone(),
                     password: boot.vnc_password.clone(),
                 });
@@ -850,9 +852,8 @@ impl Service {
                 }
             }
             Err(e) => {
-                // No broker without a box the service knows it is serving.
-                let _ = broker.kill();
-                let _ = broker.wait();
+                // No Gate without a box the service knows it is serving.
+                stop_gate(&mut gate);
                 undo(e)
             }
         }
@@ -912,7 +913,7 @@ impl Service {
         Ok(format!("ws://{}:{VNC_PORT}", rec.address))
     }
 
-    fn start_broker(
+    fn start_gate(
         &self,
         loaded: &sluse_proto::Loaded,
         token: &sluse_proto::ContentHash,
@@ -920,10 +921,10 @@ impl Service {
         guest_checks: &str,
     ) -> Result<Child, String> {
         let sid = caller.sid.as_str();
-        let exe = crate::run::broker_binary().map_err(|e| e.to_string())?;
+        let exe = crate::run::gate_binary().map_err(|e| e.to_string())?;
         let logs = self.root.join("logs");
         std::fs::create_dir_all(&logs).map_err(|e| format!("{}: {e}", logs.display()))?;
-        let log = logs.join("broker.log");
+        let log = logs.join("gate.log");
         // The box's journal mirror sits beside its disks, not on them, so a
         // wipe keeps it (D-027 point 5).
         let mirror = self.box_dir(sid).join("journal").display().to_string();
@@ -932,8 +933,18 @@ impl Service {
             ("SLUSE_ENROL_TOKEN_SHA256", token.as_str().to_owned()),
             ("SLUSE_JOURNAL_MIRROR", mirror),
             ("SLUSE_GUEST_CHECKS", guest_checks.to_owned()),
+            // Gate Front, which Core starts: the box's way out with the rest
+            // (M9, D-071), its log, and the account the box is opened for.
+            ("SLUSE_FRONT_LOG", logs.join("front.log").display().to_string()),
+            ("SLUSE_OPENED_BY", sid.to_owned()),
+            // The control channel's end is Core's stop, so it writes the
+            // refusals' counts ([`stop_gate`]).
+            ("SLUSE_STOP_ON_EOF", "1".to_owned()),
         ];
-        // The user's token, inherited by the broker, which writes Sluse
+        if loaded.config.egress.as_ref().and_then(|e| e.log.as_ref()).is_some_and(|l| l.enabled) {
+            env.push(("SLUSE_EGRESS_LOG", logs.join("egress.jsonl").display().to_string()));
+        }
+        // The user's token, inherited by the Gate, which writes Sluse
         // Artifacts as them (D-031). Ours closes when this returns.
         #[cfg(windows)]
         let user_token = {
@@ -945,23 +956,23 @@ impl Service {
         };
         let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
         let mut child =
-            crate::spawn_broker(&exe, &loaded.file, &log, &env).map_err(|e| format!("{}: {e}", exe.display()))?;
+            crate::spawn_gate(&exe, &loaded.file, &log, &env).map_err(|e| format!("{}: {e}", exe.display()))?;
         #[cfg(windows)]
         drop(user_token);
         #[cfg(windows)]
         if let Err(e) = self.job.assign(&child) {
             let _ = child.kill();
-            return Err(format!("the broker's job: {e}"));
+            return Err(format!("the Gate's job: {e}"));
         }
-        // Alive and listening, not `/v1/status`: its own gate has checked its
-        // leaf against the pin, and a broker whose gate refuses exits. (Until
-        // D-058 point 4 no client of ours passed an open's broker; L1,
+        // Alive and listening, not `/v1/status`: its own Gate has checked its
+        // leaf against the pin, and a Gate whose Gate refuses exits. (Until
+        // D-058 point 4 no client of ours passed an open's Gate; L1,
         // 2026-10-20, every open stopped here.)
-        let listen = loaded.config.broker.listen.clone();
+        let listen = loaded.config.gate.listen.clone();
         let alive = || match child.try_wait() {
             Ok(None) => None,
-            Ok(Some(code)) => Some(format!("the broker exited before it began serving ({code}); its log says why")),
-            Err(e) => Some(format!("the broker: {e}")),
+            Ok(Some(code)) => Some(format!("the Gate exited before it began serving ({code}); its log says why")),
+            Err(e) => Some(format!("the Gate: {e}")),
         };
         if let Err(e) = wait_until_listening(&listen, Duration::from_secs(crate::START_TIMEOUT_SECONDS), alive) {
             let _ = child.kill();
@@ -971,15 +982,15 @@ impl Service {
         Ok(child)
     }
 
-    /// The egress proxy for this config (M9, D-035): the broker's binary in
-    /// its `--proxy` mode, a process of its own, without the user's token.
-    /// Every connection goes to `logs\egress.jsonl` when the config turns that
-    /// log on (D-038), what it says to
-    /// `logs\proxy.log`, its refusals to the Event Log. `opened_by` is the
-    /// Windows account the box was opened for; none for a base build.
-    fn start_proxy(&self, loaded: &sluse_proto::Loaded, opened_by: Option<&str>) -> Result<ProxyChild, String> {
+    /// The egress proxy for a base build (M9, D-035): Gate Core in its
+    /// `--proxy` mode, which starts a Gate Front that is only the proxy, as
+    /// LocalService, and keeps what it claims (D-071): every connection to
+    /// `logs\egress.jsonl` when the config turns that log on (D-038), its
+    /// refusals to the Event Log. No user, no token, no box to serve. An open's
+    /// proxy is its Core's Front ([`Self::start_gate`]).
+    fn start_proxy(&self, loaded: &sluse_proto::Loaded) -> Result<ProxyChild, String> {
         use std::process::{Command, Stdio};
-        let exe = crate::run::broker_binary().map_err(|e| e.to_string())?;
+        let exe = crate::run::gate_binary().map_err(|e| e.to_string())?;
         let logs = self.root.join("logs");
         std::fs::create_dir_all(&logs).map_err(|e| format!("{}: {e}", logs.display()))?;
         let append = |name: &str| {
@@ -995,9 +1006,7 @@ impl Service {
             cmd.env("SLUSE_EGRESS_LOG", logs.join("egress.jsonl"));
         }
         cmd.env_remove("SLUSE_OPENED_BY");
-        if let Some(sid) = opened_by {
-            cmd.env("SLUSE_OPENED_BY", sid);
-        }
+        cmd.env("SLUSE_FRONT_LOG", logs.join("front.log"));
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -1008,8 +1017,8 @@ impl Service {
         let mut child = ProxyChild(cmd.spawn().map_err(|e| format!("the egress proxy, {}: {e}", exe.display()))?);
         #[cfg(windows)]
         self.job.assign(&child.0).map_err(|e| format!("the egress proxy's job: {e}"))?;
-        let host = loaded.config.broker.listen.rsplit_once(':').map_or(GATEWAY, |(h, _)| h);
-        let addr: Ipv4Addr = host.parse().map_err(|_| format!("broker.listen {host:?} is not an IPv4 address"))?;
+        let host = loaded.config.gate.listen.rsplit_once(':').map_or(GATEWAY, |(h, _)| h);
+        let addr: Ipv4Addr = host.parse().map_err(|_| format!("gate.listen {host:?} is not an IPv4 address"))?;
         if let Err(e) = wait_for_port(addr, sluse_proto::ports::PROXY, PROXY_WAIT, || None) {
             let exited = child.0.try_wait().ok().flatten();
             return Err(match exited {
@@ -1021,9 +1030,9 @@ impl Service {
     }
 
     /// The device's own part of the install (slice 5), idempotent:
-    /// - the host-only switch, the host's address on it, the broker's
+    /// - the host-only switch, the host's address on it, the Gate's
     ///   firewall rule, and the Event Log source; and no NAT (M9, D-035);
-    /// - this device's broker certificate and client CA, made here, and their
+    /// - this device's Gate certificate and client CA, made here, and their
     ///   fingerprint written into this device's copy of the config
     ///   (jok, 2026-09-29: per device, so a stolen CA key is good for one).
     ///
@@ -1038,10 +1047,11 @@ impl Service {
     pub fn device_network(&self) -> Result<(), String> {
         let mut ready = self.device_ready.lock().unwrap_or_else(|p| p.into_inner());
         if !*ready {
-            let broker = crate::run::broker_binary().map_err(|e| e.to_string())?;
+            // Front listens for the box, so the rule names Front (D-071).
+            let gate = crate::run::front_binary().map_err(|e| e.to_string())?;
             let v = self.hyperv.call(serde_json::json!({
                 "verb": "device-init", "switch": SWITCH, "hostAddress": GATEWAY, "prefix": PREFIX,
-                "broker": broker.display().to_string(),
+                "gate": gate.display().to_string(),
                 "hostPorts": sluse_proto::ports::ON_HOST, "parts": host_port_parts(),
             }))?;
             if v["restart"] == true {
@@ -1082,7 +1092,7 @@ impl Service {
             return Err(format!("{} is missing; the tenant package installs it", config.display()));
         }
         let dir = self.root.join("certs");
-        let cert = dir.join(crate::devcert::BROKER_CERT_FILE);
+        let cert = dir.join(crate::devcert::GATE_CERT_FILE);
         if !cert.is_file() {
             let certs = crate::devcert::generate(&[GATEWAY.to_owned()]).map_err(|e| e.to_string())?;
             crate::devcert::write(&dir, &certs).map_err(|e| e.to_string())?;
@@ -1219,7 +1229,7 @@ impl Service {
                 }
                 // Warned, not refused (D-038): a box over half the device's
                 // memory leaves Windows little. ponytail: in the log only;
-                // into posture when the broker is told the box's size.
+                // into posture when the Gate is told the box's size.
                 if let Some(host) = v["hostGB"].as_u64().filter(|h| u64::from(b.memory_gb) * 2 > *h) {
                     self.log_device("box-size", &format!("{vm}: warning: the box takes {} of this device's {host} GB", b.memory_gb));
                 }
@@ -1284,8 +1294,7 @@ impl Service {
             );
         }
         if let Some(r) = running.as_mut().filter(|r| r.sid == target) {
-            let _ = r.broker.kill();
-            let _ = r.broker.wait();
+            stop_gate(&mut r.gate);
             *running = None;
         }
         self.log_action(what, target, caller);
@@ -1523,7 +1532,7 @@ impl Service {
         self.ensure_certs()?;
         let config = self.root.join("sluse.json");
         let loaded = sluse_proto::config::load(&config).map_err(|e| format!("{}: {e}", config.display()))?;
-        let _proxy = self.start_proxy(&loaded, None)?;
+        let _proxy = self.start_proxy(&loaded)?;
         step(self.progress(Phase::Convert, "Starting the build".into(), None));
         // The build's console, read from before it starts (D-063): what it
         // says of itself decides whether its disk becomes the base.
@@ -1593,7 +1602,7 @@ impl Service {
         }
     }
 
-    /// Stop the broker if it is this user's, which ends the sign-in (D-022),
+    /// Stop the Gate if it is this user's, which ends the sign-in (D-022),
     /// then shut the box down. Both disks stay (D-026 point 1).
     fn close(&self, sid: &str, rec: &boxes::BoxRecord, send: &mut dyn FnMut(PipeEvent)) -> PipeEvent {
         let mut running = match self.running_or_busy() {
@@ -1603,8 +1612,7 @@ impl Service {
         let mut steps = Steps::default();
         steps.next(self, send, Phase::Close, name(Phase::Close));
         if let Some(r) = running.as_mut().filter(|r| r.sid == sid) {
-            let _ = r.broker.kill();
-            let _ = r.broker.wait();
+            stop_gate(&mut r.gate);
             *running = None;
         }
         match self.hyperv.stop(&rec.vm, CLOSE_TIMEOUT) {
@@ -1626,20 +1634,19 @@ impl Service {
         }
     }
 
-    /// The SCM is stopping the service. The broker goes; the box is left as
+    /// The SCM is stopping the service. The Gate goes; the box is left as
     /// it is, and Hyper-V's own stop action covers the host shutting down.
     pub fn shutdown(&self) {
         let mut running = self.running.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(mut r) = running.take() {
-            let _ = r.broker.kill();
-            let _ = r.broker.wait();
+            stop_gate(&mut r.gate);
         }
     }
 }
 
-/// Where the box enrols: the broker's own host, on the enrolment port.
+/// Where the box enrols: the Gate's own host, on the enrolment port.
 fn enrol_url(listen: &str) -> Result<String, String> {
-    let host = listen.rsplit_once(':').map(|(h, _)| h).ok_or_else(|| format!("broker.listen {listen:?} has no port"))?;
+    let host = listen.rsplit_once(':').map(|(h, _)| h).ok_or_else(|| format!("gate.listen {listen:?} has no port"))?;
     Ok(format!("https://{host}:{ENROL_PORT}"))
 }
 
@@ -1666,9 +1673,9 @@ fn send_line(conn: &mut impl Write, e: &PipeEvent) -> io::Result<()> {
 }
 
 /// Until `listen` accepts a connection, while `gone` says nothing: the
-/// broker's process is alive, and what it says if it is not.
+/// Gate's process is alive, and what it says if it is not.
 fn wait_until_listening(listen: &str, within: Duration, mut gone: impl FnMut() -> Option<String>) -> Result<(), String> {
-    let to: SocketAddr = listen.parse().map_err(|_| format!("broker.listen {listen:?} is not an address"))?;
+    let to: SocketAddr = listen.parse().map_err(|_| format!("gate.listen {listen:?} is not an address"))?;
     let deadline = Instant::now() + within;
     loop {
         if let Some(why) = gone() {
@@ -1678,7 +1685,7 @@ fn wait_until_listening(listen: &str, within: Duration, mut gone: impl FnMut() -
             return Ok(());
         }
         if Instant::now() >= deadline {
-            return Err(format!("the broker did not listen on {listen} within {} s", within.as_secs()));
+            return Err(format!("the Gate did not listen on {listen} within {} s", within.as_secs()));
         }
         std::thread::sleep(Duration::from_millis(250));
     }
@@ -1780,7 +1787,7 @@ pub fn run() -> std::process::ExitCode {
         .can_fallback(|_| {
             // Start has already been delivered and the pipe is being served;
             // this only keeps the process up. Ctrl+C ends it, and the job
-            // takes the broker with it.
+            // takes the Gate with it.
             println!("sluse service: in the foreground on {}. Ctrl+C stops it.", sluse_proto::pipe::PIPE_NAME);
             loop {
                 std::thread::park();
@@ -1802,17 +1809,17 @@ pub fn run() -> std::process::ExitCode {
     }
 }
 
-/// How long the broker has to redeem a sign-in and say so. Entra answers in
+/// How long the Gate has to redeem a sign-in and say so. Entra answers in
 /// a second or two; a code is good for minutes.
 const SIGN_IN_WAIT: Duration = Duration::from_secs(30);
 
-/// Hand a sign-in to the broker on its stdin, numbered `seq`, and wait for
+/// Hand a sign-in to the Gate on its stdin, numbered `seq`, and wait for
 /// its answer in `/v1/status` (D-036). The user it bound, or why not.
-fn hand_sign_in(broker: &mut Child, loaded: &sluse_proto::Loaded, seq: u64, mut s: HostSignIn) -> Result<String, String> {
+fn hand_sign_in(gate: &mut Child, loaded: &sluse_proto::Loaded, seq: u64, mut s: HostSignIn) -> Result<String, String> {
     s.seq = seq;
     let line = serde_json::to_string(&s).map_err(|e| e.to_string())?;
-    let stdin = broker.stdin.as_mut().ok_or("the broker has no control channel")?;
-    writeln!(stdin, "{line}").and_then(|()| stdin.flush()).map_err(|e| format!("the broker's control channel: {e}"))?;
+    let stdin = gate.stdin.as_mut().ok_or("the Gate has no control channel")?;
+    writeln!(stdin, "{line}").and_then(|()| stdin.flush()).map_err(|e| format!("the Gate's control channel: {e}"))?;
     let deadline = Instant::now() + SIGN_IN_WAIT;
     loop {
         if let Ok(status) = crate::probe(loaded) {
@@ -1827,7 +1834,7 @@ fn hand_sign_in(broker: &mut Child, loaded: &sluse_proto::Loaded, seq: u64, mut 
             }
         }
         if Instant::now() >= deadline {
-            return Err(format!("the broker did not answer the sign-in within {} s", SIGN_IN_WAIT.as_secs()));
+            return Err(format!("the Gate did not answer the sign-in within {} s", SIGN_IN_WAIT.as_secs()));
         }
         std::thread::sleep(Duration::from_millis(250));
     }
@@ -1840,9 +1847,9 @@ fn device_half(box_id: &str, pin: &ContentHash) -> String {
     let v = serde_json::json!({
         "boxId": box_id,
         "environment": "demo",
-        "broker": {
-            "listen": format!("{GATEWAY}:{}", ports::BROKER), "url": format!("https://{GATEWAY}:{}", ports::BROKER),
-            "certPath": "certs/broker.pem", "keyPath": "certs/broker.key", "clientCaPath": "certs/client-ca.pem",
+        "gate": {
+            "listen": format!("{GATEWAY}:{}", ports::GATE), "url": format!("https://{GATEWAY}:{}", ports::GATE),
+            "certPath": "certs/gate.pem", "keyPath": "certs/gate.key", "clientCaPath": "certs/client-ca.pem",
             "certPin": pin.as_str(),
         },
         "endpoint": { "clientCertPath": "certs/endpoint.pem", "clientKeyPath": "certs/endpoint.key", "consoleListen": format!("127.0.0.1:{}", ports::CONSOLE) },
@@ -1897,13 +1904,13 @@ fn changed_parts(before: Option<&str>, now: &std::collections::BTreeMap<String, 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn the_brokers_wait_is_for_its_listener_and_its_life_not_for_mtls() {
+    fn the_gates_wait_is_for_its_listener_and_its_life_not_for_mtls() {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let at = l.local_addr().unwrap().to_string();
         assert_eq!(wait_until_listening(&at, Duration::from_secs(2), || None), Ok(()));
         drop(l);
         let e = wait_until_listening(&at, Duration::from_secs(2), || Some("exited".into())).unwrap_err();
-        assert_eq!(e, "exited", "a broker that died is said at once, not waited out");
+        assert_eq!(e, "exited", "a Gate that died is said at once, not waited out");
         let e = wait_until_listening(&at, Duration::from_millis(300), || None).unwrap_err();
         assert!(e.contains("did not listen"), "{e}");
     }
@@ -2002,7 +2009,7 @@ mod tests {
         assert_eq!(last_s, Some(42), "kept in phases.json");
         // A phase with no limit in code carries none; a first-time step its
         // stand-in (Q21).
-        let PipeEvent::Progress { limit_s, .. } = again.progress(Phase::Broker, "s".into(), None) else { unreachable!() };
+        let PipeEvent::Progress { limit_s, .. } = again.progress(Phase::Gate, "s".into(), None) else { unreachable!() };
         assert_eq!(limit_s, None);
         let PipeEvent::Progress { limit_s, .. } = again.progress(Phase::Make, "s".into(), None) else { unreachable!() };
         assert_eq!(limit_s, Some(MAKE_LIMIT.as_secs()));
@@ -2012,7 +2019,7 @@ mod tests {
     fn a_step_past_its_limit_says_so_and_one_within_it_says_what_it_was_told() {
         let (_d, s) = service();
         let mut steps = Steps::default();
-        steps.next(&s, &mut |_| {}, Phase::Broker, "b");
+        steps.next(&s, &mut |_| {}, Phase::Gate, "b");
         assert_eq!(steps.left(), None, "no limit, nothing to stop");
         steps.next(&s, &mut |_| {}, Phase::Start, "s");
         assert!(steps.left().is_some_and(|l| l <= START_LIMIT && l > START_LIMIT - Duration::from_secs(60)));
@@ -2030,17 +2037,17 @@ mod tests {
         // No box and no base: the build, the box, then the open (Q19, Q20:
         // the check late in the list). No bundle here, so no base is current.
         use Phase::*;
-        assert_eq!(phases(s.plan(SID, &open)), [Download, Convert, Install, Make, Check, Start, Broker, Wait]);
+        assert_eq!(phases(s.plan(SID, &open)), [Download, Convert, Install, Make, Check, Start, Gate, Wait]);
         assert_eq!(phases(s.plan(SID, &PipeRequest::Wipe { sid: None })), [Wipe, Download, Convert, Install, Make]);
         assert_eq!(s.plan(SID, &PipeRequest::Reset { sid: None }).last().unwrap().step, "Making the box again");
         boxes::save(d.path(), SID, &boxes::BoxRecord { vm: "sluse-box".into(), address: Ipv4Addr::LOCALHOST, base: Some("base-1.vhdx".into()), named: None }).unwrap();
         // A box that exists: the open's own steps, unless a build is under way,
         // which it joins where the build is.
-        assert_eq!(phases(s.plan(SID, &open)), [Check, Start, Broker, Wait]);
+        assert_eq!(phases(s.plan(SID, &open)), [Check, Start, Gate, Wait]);
         {
             let _building = s.building.lock().unwrap();
             *s.build_step.lock().unwrap() = Some(s.progress(Convert, "Converting".into(), Some(12)));
-            assert_eq!(phases(s.plan(SID, &open)), [Convert, Install, Check, Start, Broker, Wait]);
+            assert_eq!(phases(s.plan(SID, &open)), [Convert, Install, Check, Start, Gate, Wait]);
         }
         assert!(s.plan(SID, &PipeRequest::Status).is_empty() && s.plan(SID, &PipeRequest::Console).is_empty());
         // Close: its plan with its first progress, and none after it. Hyper-V
@@ -2173,7 +2180,7 @@ mod tests {
     }
 
     #[test]
-    fn the_box_enrols_on_the_brokers_own_host() {
+    fn the_box_enrols_on_the_gates_own_host() {
         assert_eq!(enrol_url("192.168.77.1:7580").unwrap(), "https://192.168.77.1:7581");
         assert!(enrol_url("no-port").is_err());
     }

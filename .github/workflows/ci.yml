@@ -437,7 +437,7 @@ jobs:
 
       # A fixture with a **real NTFS deny ACE**. A runner is a Windows machine,
       # so the one assertion that was thought to need a provisioned host — the
-      # source refusing a read because of permissions, which the broker turns
+      # source refusing a read because of permissions, which Gate Core turns
       # into the one refusal it tells the agent plainly (M3, D-008) — can be
       # made here after all. What still needs the host is the *share* case:
       # this is a local ACL, and a UNC path reached as a cached credential is
@@ -453,7 +453,7 @@ jobs:
           'board material'           | Set-Content "$src\elsewhere\board.txt"
           # **Below the scope, not on it.** `restricted` is a configured scope,
           # and `scope::compile` canonicalises every scope at start-up — so a
-          # deny ACE here fails the gate and the broker never starts, which is
+          # deny ACE here fails a required check and Sluse Gate never starts, which is
           # what the first run of this job found. Under the scope, the same ACE
           # is the refusal M3 designed: AccessDenied, told plainly.
           #
@@ -478,7 +478,7 @@ jobs:
       # **The acceptance script itself**, the one that ships in the package and
       # that a person runs on the host. Running it here means it is exercised
       # every push rather than read for the first time on the machine that
-      # matters. It starts the broker and the console from the installed
+      # matters. It starts Sluse Gate and the console from the installed
       # binaries, so this is also the only place `sluse-endpoint` runs on
       # Windows at all.
       - name: Run the acceptance script against it
@@ -515,7 +515,7 @@ jobs:
           if (Get-WinEvent -ListLog Sluse -ErrorAction SilentlyContinue) { $left += 'the Sluse log' }
           if (Get-VMSwitch -Name 'Sluse boxes' -ErrorAction SilentlyContinue) { $left += 'the switch' }
           # By name, and by its group, which catches a rule left under an older name.
-          if (Get-NetFirewallRule -DisplayName 'Sluse boxes: broker and proxy (host-only)' -ErrorAction SilentlyContinue) { $left += 'the firewall rule' }
+          if (Get-NetFirewallRule -DisplayName 'Sluse boxes: Sluse Gate (host-only)' -ErrorAction SilentlyContinue) { $left += 'the firewall rule' }
           if (Get-NetFirewallRule -Group 'Sluse' -ErrorAction SilentlyContinue) { $left += "a firewall rule in the group Sluse" }
           if (Get-NetNat -ErrorAction SilentlyContinue | Where-Object InternalIPInterfaceAddressPrefix -eq '192.168.77.0/24') { $left += 'the NAT' }
           # Only the single-port reservations the device init makes (D-029).

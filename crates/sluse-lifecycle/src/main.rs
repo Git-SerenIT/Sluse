@@ -2,17 +2,17 @@
 // Copyright 2026 SerenIT ApS and Prompted EV
 
 //! `sluse` — the lifecycle CLI: `check`, `start`, `stop`, `status`, `devcert`.
-//! A CLI first and a Windows service later (D-010); the preflight gate it runs
+//! A CLI first and a Windows service later (D-010); the preflight checks it runs
 //! is the same either way.
 //!
 //! ## Where the work actually lives
 //!
 //! Almost nothing here is new logic, which is the point. The preflight checks
-//! are `sluse_broker::preflight`, and they are there rather than here because
+//! are `sluse_gate_core::preflight`, and they are there rather than here because
 //! `/v1/health` reports the `posture_id` every audit record cites — two runners
 //! would eventually describe one machine two ways. The probe behind `status` and
-//! the "broker reachable" gate is the guest's own pinned client,
-//! `sluse_endpoint::broker_client::status`, for the same reason in the other
+//! the "gate reachable" Gate is the guest's own pinned client,
+//! `sluse_endpoint::gate_client::status`, for the same reason in the other
 //! direction: a host-side probe that trusted anything the guest does not would
 //! answer a different question from the one the endpoint asks a moment later.
 //!
@@ -22,8 +22,8 @@
 //!
 //! ## `start` generates the run's config
 //!
-//! It writes the file and lets the broker load it, rather than handing the
-//! broker settings on a command line. `config_version` is the hash of the config
+//! It writes the file and lets the Gate load it, rather than handing the
+//! Gate settings on a command line. `config_version` is the hash of the config
 //! file and every audit record cites it; a runtime override would leave every
 //! record in the run pointing at a file that says something else. **D-019 took
 //! `--fetch on|off` out**: there is one read-path shape now, so there is nothing
@@ -32,7 +32,7 @@
 //! ## `stop` does not clear the session
 //!
 //! M3 decided the run owns the session and a rejoin reports its age. So `stop`
-//! stops the broker and leaves `.sluse-session.json` where it is: starting again
+//! stops the Gate and leaves `.sluse-session.json` where it is: starting again
 //! in the same workspace rejoins the same session, appends to the same journal
 //! file, and keeps accumulating lineage. `stop --reset` is how a person says
 //! they meant a new run, and it says so out loud when it does it.
@@ -60,14 +60,14 @@ mod state;
 #[cfg(windows)]
 mod winsys;
 
-/// `EX_CONFIG`. The same code the broker uses for a config it will not run on.
+/// `EX_CONFIG`. The same code the Gate uses for a config it will not run on.
 const EX_CONFIG: u8 = 78;
 
-/// How long `start` waits for the broker to answer `/v1/status`.
+/// How long `start` waits for the Gate to answer `/v1/status`.
 ///
-/// Generous: the broker canonicalises every source root and probes the artifacts
+/// Generous: the Gate canonicalises every source root and probes the artifacts
 /// directory before it binds, and a cold `Z:` has been slower than this deserves
-/// to suggest. A broker that has not answered by now has not started, and the
+/// to suggest. A Gate that has not answered by now has not started, and the
 /// log says why.
 const START_TIMEOUT_SECONDS: u64 = 20;
 
@@ -87,10 +87,10 @@ enum Command {
         config: PathBuf,
     },
 
-    /// Lay out a run workspace and start a broker for it.
+    /// Lay out a run workspace and start a Gate for it.
     ///
     /// Writes the config, the development certificates, `.mcp.json`, `launch.ps1`
-    /// and the task, then starts the broker and waits until it answers.
+    /// and the task, then starts the Gate and waits until it answers.
     Start {
         /// The run workspace. Created if it is not there.
         #[arg(long, value_name = "DIR")]
@@ -101,7 +101,7 @@ enum Command {
         #[arg(long, value_name = "PATH")]
         fixture: PathBuf,
 
-        /// What the broker binds. Change it to run two modes at once.
+        /// What the Gate binds. Change it to run two modes at once.
         #[arg(long, value_name = "ADDR", default_value = "127.0.0.1:7580")]
         listen: String,
 
@@ -110,7 +110,7 @@ enum Command {
         box_id: Option<String>,
     },
 
-    /// Stop the broker for a run.
+    /// Stop the Gate for a run.
     Stop {
         /// The run workspace. Defaults to the current directory.
         #[arg(long, value_name = "DIR", default_value = ".")]
@@ -119,7 +119,7 @@ enum Command {
         /// Also forget the session, so the next `start` is a new run.
         ///
         /// Without it the session survives and the next run rejoins it, which is
-        /// what a broker restart in the middle of a task should do.
+        /// what a Gate restart in the middle of a task should do.
         #[arg(long)]
         reset: bool,
     },
@@ -131,7 +131,7 @@ enum Command {
         workspace: Option<PathBuf>,
     },
 
-    /// Generate development certificates: a CA, a broker leaf and an endpoint
+    /// Generate development certificates: a CA, a Gate leaf and an endpoint
     /// leaf, and print the pin.
     Devcert {
         /// Where the six files go. Usually the `certs` directory beside the
@@ -139,12 +139,12 @@ enum Command {
         #[arg(long, value_name = "DIR")]
         out: PathBuf,
 
-        /// An extra DNS name or address the broker should answer to, beyond
+        /// An extra DNS name or address the Gate should answer to, beyond
         /// `localhost` and `127.0.0.1`. Repeatable.
         #[arg(long = "hostname", value_name = "NAME")]
         hostnames: Vec<String>,
 
-        /// Write the pin into `broker.certPin` in this config's device half
+        /// Write the pin into `gate.certPin` in this config's device half
         /// (`<name>.device.json` beside it).
         ///
         /// Without it, `devcert` prints the pin and edits nothing. The device
@@ -239,7 +239,7 @@ enum AdminCommand {
 
 #[derive(Subcommand)]
 enum DeviceCommand {
-    /// The host-only switch, the host's address, the broker's firewall
+    /// The host-only switch, the host's address, the Gate's firewall
     /// rule, the Event Log source, and no NAT (M9); then the device's
     /// certificates, once `sluse.json` is there. What the service does at every start.
     Init,
@@ -516,7 +516,7 @@ fn cmd_admin_setup(o: admin::Options) -> ExitCode {
         Ok(done) => {
             println!();
             println!("tenant      {}", done.tenant);
-            println!("app         {} ({}, a public client)", done.broker_app, admin::BROKER_NAME);
+            println!("app         {} ({}, a public client)", done.gate_app, admin::GATE_NAME);
             if done.created.is_empty() {
                 println!("changed     nothing new; the registrations were repaired to match");
             }
@@ -528,9 +528,9 @@ fn cmd_admin_setup(o: admin::Options) -> ExitCode {
             // already had consent (2026-09-30), and the portal shows each
             // permission's state, which a link does not.
             println!("Grant admin consent as a tenant admin:");
-            println!("  portal.azure.com > Microsoft Entra ID > App registrations > {} > API permissions", admin::BROKER_NAME);
+            println!("  portal.azure.com > Microsoft Entra ID > App registrations > {} > API permissions", admin::GATE_NAME);
             println!("  > \"Grant admin consent for <tenant>\". Every row should then say Granted.");
-            println!("  https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/CallAnAPI/appId/{}", done.broker_app);
+            println!("  https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/CallAnAPI/appId/{}", done.gate_app);
             println!("A rerun that adds a permission needs the grant again; one that changes nothing does not.");
             println!();
             println!("The package is {}: Sluse.msi, the config and the script. It holds no", done.package.display());
@@ -589,12 +589,12 @@ fn cmd_service() -> ExitCode {
 
 /// Run the preflight without starting anything.
 ///
-/// The same code the broker runs at start, so a `check` that passes and a broker
+/// The same code the Gate runs at start, so a `check` that passes and a Gate
 /// that refuses to start would be a bug rather than a difference of opinion. The
-/// one check this cannot answer is "broker reachable", which is a call from
-/// outside the broker; it is probed separately below and reported as its own
+/// one check this cannot answer is "gate reachable", which is a call from
+/// outside the Gate; it is probed separately below and reported as its own
 /// line rather than written into the snapshot, because the snapshot belongs to
-/// whichever broker is serving and this command is not one.
+/// whichever Gate is serving and this command is not one.
 fn cmd_check(config: &Path) -> ExitCode {
     let loaded = match sluse_proto::config::load(config) {
         Ok(l) => l,
@@ -604,7 +604,7 @@ fn cmd_check(config: &Path) -> ExitCode {
         }
     };
 
-    let compiled = match sluse_broker::scope::compile(&loaded) {
+    let compiled = match sluse_gate_core::scope::compile(&loaded) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("config: {e}");
@@ -612,11 +612,11 @@ fn cmd_check(config: &Path) -> ExitCode {
         }
     };
 
-    let cert_check = match sluse_broker::tls::server_config(&loaded) {
+    let cert_check = match sluse_gate_core::tls::server_config(&loaded) {
         Ok(t) => t.check,
-        Err(e) => sluse_broker::tls::missing(&e),
+        Err(e) => sluse_gate_core::tls::missing(&e),
     };
-    let posture = sluse_broker::preflight::run(&loaded, cert_check);
+    let posture = sluse_gate_core::preflight::run(&loaded, cert_check);
 
     println!("box            {}", loaded.config.box_id);
     println!("environment    {:?}", loaded.config.environment);
@@ -641,33 +641,33 @@ fn cmd_check(config: &Path) -> ExitCode {
             None => println!("  library {} (read as the signed-in user)", source.kind.address()),
         }
         for rel in source.remote.iter().flatten().map(|s| &s.rel) {
-            println!("  scope  {}", sluse_broker::scope::request_form(source.name.as_str(), rel));
+            println!("  scope  {}", sluse_gate_core::scope::request_form(source.name.as_str(), rel));
         }
         for scope in &source.scopes {
             println!(
                 "  scope  {}",
-                sluse_broker::scope::request_form(source.name.as_str(), &scope.rel)
+                sluse_gate_core::scope::request_form(source.name.as_str(), &scope.rel)
             );
         }
     }
     println!();
 
-    sluse_broker::preflight::print(&posture);
+    sluse_gate_core::preflight::print(&posture);
 
-    // The gate check the snapshot leaves unanswered. Reported here, outside the
+    // The required check the snapshot leaves unanswered. Reported here, outside the
     // two lists, so it cannot be mistaken for something this process decided.
     println!();
     match probe(&loaded) {
         Ok(status) => println!(
-            "broker         reachable at {} — {}, up {}",
-            loaded.config.broker.url,
+            "gate         reachable at {} — {}, up {}",
+            loaded.config.gate.url,
             status.box_id,
             human(status.uptime_seconds)
         ),
-        Err(e) => println!("broker         not reachable at {}: {e}", loaded.config.broker.url),
+        Err(e) => println!("gate         not reachable at {}: {e}", loaded.config.gate.url),
     }
 
-    if posture.gate_passed() {
+    if posture.required_passed() {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(EX_CONFIG)
@@ -701,14 +701,14 @@ fn cmd_start(workspace: &Path, fixture: &Path, listen: &str, box_id: Option<&str
         }
     };
 
-    // Refuse to start a second broker over a live one. Not because two would
+    // Refuse to start a second Gate over a live one. Not because two would
     // fail — the second would lose the port and say so — but because the state
     // record would then name whichever process wrote it last, and `stop` would
     // kill the wrong one.
     if let Some(existing) = state::load(&workspace) {
         if existing.alive() {
             eprintln!(
-                "sluse start: a broker is already running for this workspace (pid {}, up {}).",
+                "sluse start: a Gate is already running for this workspace (pid {}, up {}).",
                 existing.pid,
                 human(existing.started.signed_duration_since(chrono::Utc::now()).num_seconds().abs())
             );
@@ -755,7 +755,7 @@ fn cmd_start(workspace: &Path, fixture: &Path, listen: &str, box_id: Option<&str
     println!("config      {} ({})", written.config.display(), loaded.version);
     println!("mcp         {}", written.mcp_json.display());
 
-    let broker = match run::broker_binary() {
+    let gate = match run::gate_binary() {
         Ok(b) => b,
         Err(e) => {
             eprintln!("sluse start: {e}");
@@ -771,16 +771,16 @@ fn cmd_start(workspace: &Path, fixture: &Path, listen: &str, box_id: Option<&str
         }
     }
 
-    let mut child = match spawn_broker(&broker, &written.config, &log, &[]) {
+    let mut child = match spawn_gate(&gate, &written.config, &log, &[]) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("sluse start: {} : {e}", broker.display());
+            eprintln!("sluse start: {} : {e}", gate.display());
             return ExitCode::from(1);
         }
     };
 
     let pid = child.id();
-    println!("broker      pid {pid}, log {}", log.display());
+    println!("gate      pid {pid}, log {}", log.display());
     print!("waiting     ");
     let _ = std::io::Write::flush(&mut std::io::stdout());
 
@@ -800,10 +800,10 @@ fn cmd_start(workspace: &Path, fixture: &Path, listen: &str, box_id: Option<&str
                 log,
             };
             if let Err(e) = state::save(&record) {
-                // The broker is up. Saying so and warning is better than
+                // The Gate is up. Saying so and warning is better than
                 // stopping it over a file in the state directory.
                 eprintln!();
-                eprintln!("sluse start: the broker is running but its record could not be");
+                eprintln!("sluse start: the Gate is running but its record could not be");
                 eprintln!("written ({e}). `sluse stop` will not find it; kill pid {pid} by hand.");
             }
             println!();
@@ -820,7 +820,7 @@ fn cmd_start(workspace: &Path, fixture: &Path, listen: &str, box_id: Option<&str
         Err(why) => {
             println!();
             eprintln!("sluse start: {why}");
-            eprintln!("The broker's own output is in {}.", state::log_path(&workspace).display());
+            eprintln!("The Gate's own output is in {}.", state::log_path(&workspace).display());
             // Leave nothing half-started behind.
             let _ = child.kill();
             let _ = child.wait();
@@ -829,15 +829,15 @@ fn cmd_start(workspace: &Path, fixture: &Path, listen: &str, box_id: Option<&str
     }
 }
 
-/// Start the broker detached, with its stderr in the log.
+/// Start the Gate detached, with its stderr in the log.
 ///
-/// Detached on purpose: the broker outlives the terminal `sluse start` was typed
+/// Detached on purpose: the Gate outlives the terminal `sluse start` was typed
 /// in, because the next thing a person does is open another one and run Claude
 /// Code. `CREATE_NEW_PROCESS_GROUP` keeps a Ctrl-C in that first terminal from
 /// reaching it for the same reason.
 #[cfg(windows)]
-fn spawn_broker(
-    broker: &Path,
+fn spawn_gate(
+    gate: &Path,
     config: &Path,
     log: &Path,
     env: &[(&str, &str)],
@@ -850,7 +850,7 @@ fn spawn_broker(
     let out = std::fs::OpenOptions::new().create(true).append(true).open(log)?;
     let err = out.try_clone()?;
 
-    std::process::Command::new(broker)
+    std::process::Command::new(gate)
         .arg("--config")
         .arg(config)
         .arg("--serve")
@@ -864,15 +864,15 @@ fn spawn_broker(
 }
 
 #[cfg(not(windows))]
-fn spawn_broker(
-    broker: &Path,
+fn spawn_gate(
+    gate: &Path,
     config: &Path,
     log: &Path,
     env: &[(&str, &str)],
 ) -> std::io::Result<std::process::Child> {
     let out = std::fs::OpenOptions::new().create(true).append(true).open(log)?;
     let err = out.try_clone()?;
-    std::process::Command::new(broker)
+    std::process::Command::new(gate)
         .arg("--config")
         .arg(config)
         .arg("--serve")
@@ -884,11 +884,11 @@ fn spawn_broker(
         .spawn()
 }
 
-/// Poll `/v1/status` until the broker answers, it exits, or the wait runs out.
+/// Poll `/v1/status` until the Gate answers, it exits, or the wait runs out.
 ///
-/// This is the "broker reachable" gate check, run from outside the broker, which
+/// This is the "gate reachable" required check, run from outside the Gate, which
 /// is the only place it can be run from. It uses the same pinned client the
-/// guest uses, so a broker that answers here is a broker the endpoint can reach
+/// guest uses, so a Gate that answers here is a Gate the endpoint can reach
 /// — and a pin that does not match fails here rather than at the agent's first
 /// tool call.
 fn wait_until_serving(
@@ -902,11 +902,11 @@ fn wait_until_serving(
     let mut last;
 
     loop {
-        // A broker that has exited will never answer, and the reason is in the
+        // A Gate that has exited will never answer, and the reason is in the
         // log rather than in the next timeout.
         if let Ok(Some(code)) = child.try_wait() {
             return Err(format!(
-                "the broker exited before it began serving ({code}); its log says why"
+                "the Gate exited before it began serving ({code}); its log says why"
             ));
         }
 
@@ -917,8 +917,8 @@ fn wait_until_serving(
 
         if std::time::Instant::now() >= deadline {
             return Err(format!(
-                "the broker did not answer {} within {START_TIMEOUT_SECONDS} s: {last}",
-                loaded.config.broker.url
+                "the Gate did not answer {} within {START_TIMEOUT_SECONDS} s: {last}",
+                loaded.config.gate.url
             ));
         }
         print!(".");
@@ -954,10 +954,10 @@ fn cmd_stop(workspace: &Path, reset: bool) -> ExitCode {
     }
 
     if let Err(e) = state::forget(&workspace) {
-        eprintln!("sluse stop: the broker is stopped but its record remains ({e}).");
+        eprintln!("sluse stop: the Gate is stopped but its record remains ({e}).");
     }
 
-    // The session outlives the broker unless a person says otherwise. M3 decided
+    // The session outlives the Gate unless a person says otherwise. M3 decided
     // the run owns it: restarting in the same workspace rejoins, keeps the same
     // journal file, and keeps accumulating lineage.
     if reset {
@@ -1033,10 +1033,10 @@ fn cmd_status(workspace: Option<&Path>) -> ExitCode {
 
         match run.uptime() {
             None => {
-                // The record says a broker; the machine says no such process, or
+                // The record says a Gate; the machine says no such process, or
                 // a different one wearing its pid. Either way this is not it.
                 println!("  process    not running (pid {} is gone or is not it)", run.pid);
-                println!("  broker     —");
+                println!("  gate     —");
                 println!();
                 println!("  `sluse stop --workspace {}` clears the record.", run.workspace.display());
                 continue;
@@ -1044,14 +1044,14 @@ fn cmd_status(workspace: Option<&Path>) -> ExitCode {
             Some(up) => println!("  process    pid {}, up {}", run.pid, human(up.num_seconds())),
         }
 
-        // A live process is not a serving broker. Asked rather than assumed, and
+        // A live process is not a serving Gate. Asked rather than assumed, and
         // asked without minting a session: `/v1/status` exists for this.
         match sluse_proto::config::load(&run.config) {
-            Err(e) => println!("  broker     cannot ask: the config no longer loads ({e})"),
+            Err(e) => println!("  gate     cannot ask: the config no longer loads ({e})"),
             Ok(loaded) => match probe(&loaded) {
                 Ok(s) => {
                     println!(
-                        "  broker     serving as {}, {} session(s), up {}",
+                        "  gate     serving as {}, {} session(s), up {}",
                         s.user.display(),
                         s.sessions,
                         human(s.uptime_seconds)
@@ -1059,7 +1059,7 @@ fn cmd_status(workspace: Option<&Path>) -> ExitCode {
                     println!("  posture    {}", s.posture_id);
                     println!("  config     {}", s.config_version);
                 }
-                Err(e) => println!("  broker     the process is up but is not answering: {e}"),
+                Err(e) => println!("  gate     the process is up but is not answering: {e}"),
             },
         }
     }
@@ -1093,7 +1093,7 @@ fn cmd_devcert(out: &Path, hostnames: &[String], config: Option<&Path>) -> ExitC
         println!("  {}", p.file_name().unwrap_or_default().to_string_lossy());
     }
     println!();
-    println!("  broker.certPin  {}", certs.pin.as_str());
+    println!("  gate.certPin  {}", certs.pin.as_str());
     println!();
 
     match config {
@@ -1101,7 +1101,7 @@ fn cmd_devcert(out: &Path, hostnames: &[String], config: Option<&Path>) -> ExitC
             // Said every time, because the pin is useless until it is in the
             // config and a person who assumed otherwise finds out at the first
             // handshake.
-            println!("The config was not touched. Put the pin in `broker.certPin` of its device half");
+            println!("The config was not touched. Put the pin in `gate.certPin` of its device half");
             println!("yourself, or re-run with --update-config <path>.");
         }
         Some(path) => match devcert::update_config(&sluse_proto::config::device_path(path), &certs.pin) {
@@ -1136,7 +1136,7 @@ fn probe(loaded: &sluse_proto::Loaded) -> Result<sluse_proto::Status, String> {
         .build()
         .map_err(|e| format!("no runtime: {e}"))?;
     runtime
-        .block_on(sluse_endpoint::broker_client::status(loaded))
+        .block_on(sluse_endpoint::gate_client::status(loaded))
         .map_err(|e| e.to_string())
 }
 
@@ -1153,10 +1153,10 @@ fn human(seconds: i64) -> String {
 #[cfg(test)]
 mod tests {
     /// D-023: the device init sets the Sluse log's descriptor, and the
-    /// broker's posture checks it; the two spell it the same.
+    /// Gate's posture checks it; the two spell it the same.
     #[test]
-    fn the_sluse_logs_descriptor_is_the_brokers() {
-        assert!(include_str!("../../../packaging/box/sluse-box.ps1").contains(sluse_broker::audit::AUDIT_SDDL));
+    fn the_sluse_logs_descriptor_is_the_gates() {
+        assert!(include_str!("../../../packaging/box/sluse-box.ps1").contains(sluse_gate_core::audit::AUDIT_SDDL));
     }
 
     /// D-029: the box's scripts, the shell's CSP and the config examples spell
@@ -1164,7 +1164,7 @@ mod tests {
     /// anything that ships.
     #[test]
     fn ports_agree() {
-        use sluse_proto::ports::{BROKER, CONSOLE, PROXY, VNC};
+        use sluse_proto::ports::{GATE, CONSOLE, PROXY, VNC};
         let files = [
             ("vnc.nft", include_str!("../../../packaging/box/kiosk/vnc.nft")),
             ("sluse-bootstrap", include_str!("../../../packaging/box/kiosk/sluse-bootstrap")),
@@ -1181,7 +1181,7 @@ mod tests {
         assert!(text("sluse-bootstrap").contains(&format!("port={VNC}")));
         assert!(text("browser").matches(&format!("http://localhost:{CONSOLE}/")).count() == 2);
         assert!(text("tauri.conf.json").contains(&format!("ws://*:{VNC}")));
-        assert!(text("local.example.json").contains(&format!("127.0.0.1:{BROKER}")));
+        assert!(text("local.example.json").contains(&format!("127.0.0.1:{GATE}")));
         assert!(text("local.example.json").contains(&format!("127.0.0.1:{CONSOLE}")));
         // The box's proxy settings (M9): apt's two, four each in the
         // environment, profile.d and systemd's, snapd's two; and the browser's.

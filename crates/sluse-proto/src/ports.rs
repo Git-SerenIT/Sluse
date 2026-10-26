@@ -11,8 +11,8 @@
 //! scripts and the shell's CSP spell the numbers, and a test checks that
 //! they agree (`sluse-lifecycle`, `ports_agree`).
 
-/// The broker, mTLS. Host, on the host-only address.
-pub const BROKER: u16 = 7580;
+/// The Gate, mTLS. Host, on the host-only address.
+pub const GATE: u16 = 7580;
 /// Enrolment: server TLS, one route, no client certificate (slice 2). Host.
 pub const ENROL: u16 = 7581;
 /// The console. Box, loopback only. The sign-in left it for the host shell
@@ -33,12 +33,12 @@ pub const BLOCK: std::ops::RangeInclusive<u16> = 7580..=7589;
 /// The ports that listen on the host. Only these are reserved in Windows
 /// (`excludedportrange`): a Windows reservation also stops other programs
 /// binding a port, and one Sluse does not use is not Sluse's to hold.
-pub const ON_HOST: [u16; 3] = [BROKER, ENROL, PROXY];
+pub const ON_HOST: [u16; 3] = [GATE, ENROL, PROXY];
 
-/// What part a port is, for a message a person reads: "broker (7580)".
+/// What part a port is, for a message a person reads: "Sluse Gate (7580)".
 pub fn part(port: u16) -> &'static str {
     match port {
-        BROKER => "broker",
+        GATE => "Sluse Gate",
         ENROL => "enrolment",
         CONSOLE => "console",
         VNC => "the box's screen (VNC)",
@@ -48,7 +48,7 @@ pub fn part(port: u16) -> &'static str {
     }
 }
 
-/// `"broker, 192.168.77.1:7580"` for an address, so every bind, connect
+/// `"Sluse Gate, 192.168.77.1:7580"` for an address, so every bind, connect
 /// and refusal names the part as well as the port (D-029 point 5).
 pub fn label(addr: &str) -> String {
     let port = addr.rsplit_once(':').and_then(|(_, p)| p.parse::<u16>().ok());
@@ -64,11 +64,11 @@ mod tests {
 
     #[test]
     fn the_block_is_host_first_and_every_port_names_its_part() {
-        for p in [BROKER, ENROL, CONSOLE, VNC, PROXY] {
+        for p in [GATE, ENROL, CONSOLE, VNC, PROXY] {
             assert!(BLOCK.contains(&p));
         }
         assert!(!ON_HOST.contains(&CONSOLE) && !ON_HOST.contains(&VNC), "the box's ports are not the host's");
-        assert_eq!(label("192.168.77.1:7580"), "broker, 192.168.77.1:7580");
+        assert_eq!(label("192.168.77.1:7580"), "Sluse Gate, 192.168.77.1:7580");
         assert_eq!(label("127.0.0.1:7582"), "console, 127.0.0.1:7582");
         assert_eq!(part(7588), "a reserved Sluse port");
         assert_eq!(label("192.168.77.1:7584"), "the egress proxy, 192.168.77.1:7584");

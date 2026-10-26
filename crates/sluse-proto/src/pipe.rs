@@ -28,7 +28,7 @@ pub const PIPE_NAME: &str = r"\\.\pipe\sluse";
 pub enum PipeRequest {
     /// Where the caller's box is.
     Status,
-    /// Start the caller's box and the broker, and answer with how to see it.
+    /// Start the caller's box and the Gate, and answer with how to see it.
     Open {
         /// An xkb layout name, from the user's Windows layout ([`xkb_layout`]).
         keyboard: String,
@@ -37,7 +37,7 @@ pub enum PipeRequest {
         /// from an older shell; one [`valid_timezone`] refuses is dropped.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         timezone: Option<String>,
-        /// The host's sign-in (D-036), handed to the broker once it runs.
+        /// The host's sign-in (D-036), handed to the Gate once it runs.
         /// Absent when the config has no `entra` block, or when the shell
         /// could not get one; the box then opens unbound, and the shell
         /// tries again with [`PipeRequest::SignIn`].
@@ -57,11 +57,11 @@ pub enum PipeRequest {
         sign_in: HostSignIn,
     },
     /// Sign the caller's open box out: the Sluse bar's Sign out (D-064). The
-    /// broker drops the sign-in and records who signed out; no sign-in is
+    /// Gate drops the sign-in and records who signed out; no sign-in is
     /// handed over again until the next open (Q7). Answered with
     /// [`PipeEvent::Done`].
     SignOut,
-    /// Stop the broker, which unbinds the sign-in (D-022), and shut the box
+    /// Stop the Gate, which unbinds the sign-in (D-022), and shut the box
     /// down. Both disks are kept (D-026 point 1).
     Close,
     /// "Reset the system, keep my files" (D-026 point 2): a new system disk
@@ -129,8 +129,8 @@ pub enum Phase {
     Make,
     /// The box's VM started, and its checks asked of Hyper-V.
     Start,
-    /// The broker started.
-    Broker,
+    /// The Gate started.
+    Gate,
     /// The box's screen waited for.
     Wait,
     Reset,
@@ -231,7 +231,7 @@ pub enum PipeEvent {
     },
     /// The answer to [`PipeRequest::Status`]. `signIn` says where to sign in
     /// when the config has an `entra` block; `signedIn` whether the caller's
-    /// running broker holds a sign-in, absent when no broker runs for them.
+    /// running Gate holds a sign-in, absent when no Gate runs for them.
     /// `signedOut`: the box was signed in during this open and the person
     /// signed out in it, which holds until the next open (Q7): the shell
     /// does not sign it in again. `user`: who it is signed in as, for the
@@ -303,16 +303,16 @@ pub enum PipeFailure {
     NoBox,
     /// Another user's box is running. One runs at a time (D-027).
     Busy,
-    /// The preflight gate refused.
+    /// The preflight checks refused.
     Preflight,
     /// Hyper-V refused, or the box did not come up.
     Box,
     /// The caller may not do this: another user's box, without being an
     /// elevated administrator.
     NotAllowed,
-    /// The broker did not start.
-    Broker,
-    /// The broker could not use the sign-in: Entra refused the code, or it
+    /// The Gate did not start.
+    Gate,
+    /// The Gate could not use the sign-in: Entra refused the code, or it
     /// names someone other than the person the box is signed in as.
     SignIn,
     /// The person signed out in the box during this open; that holds until
@@ -321,9 +321,9 @@ pub enum PipeFailure {
 }
 
 /// An authorization code the shell caught at [`crate::wire::NATIVE_REDIRECT`]
-/// (D-036), with what redeeming it needs. The broker redeems it, so the user's
+/// (D-036), with what redeeming it needs. The Gate redeems it, so the user's
 /// tokens never pass through the shell. `seq` is the service's, to match the
-/// broker's answer to this hand-over; the shell sends 0.
+/// Gate's answer to this hand-over; the shell sends 0.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HostSignIn {
@@ -401,10 +401,10 @@ pub struct Bootstrap {
     pub vnc_password: Secret,
     /// An xkb layout name, checked by [`valid_layout`] on both sides.
     pub keyboard: String,
-    /// Where the box enrols: `https://<broker host>:<ENROL_PORT>`.
+    /// Where the box enrols: `https://<gate host>:<ENROL_PORT>`.
     pub enrol: String,
-    /// The broker's leaf, which the enrolment call pins. The same leaf serves
-    /// the mTLS listener, so the config's `broker.certPin` must match it.
+    /// The Gate's leaf, which the enrolment call pins. The same leaf serves
+    /// the mTLS listener, so the config's `gate.certPin` must match it.
     pub pin: ContentHash,
     /// The host's IANA timezone, checked by [`valid_timezone`] on both sides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -414,7 +414,7 @@ pub struct Bootstrap {
     /// the shell enforce it; the box only says it.
     #[serde(default = "copy_out_default")]
     pub copy_out: bool,
-    /// Single use, and new each time the service starts a broker. The broker
+    /// Single use, and new each time the service starts a Gate. The Gate
     /// is given only its hash ([`Bootstrap::token_hash`]).
     pub token: Secret,
 }
@@ -433,7 +433,7 @@ impl Bootstrap {
         Ok(Self { vnc_password: random(18)?.into(), keyboard: keyboard.to_owned(), enrol, pin, token: random(40)?.into(), timezone: None, copy_out: true })
     }
 
-    /// What the broker is told, so that the token itself lives only in KVP
+    /// What the Gate is told, so that the token itself lives only in KVP
     /// and in the box.
     pub fn token_hash(&self) -> ContentHash {
         ContentHash::of(self.token.expose().as_bytes())

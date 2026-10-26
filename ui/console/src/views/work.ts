@@ -49,8 +49,8 @@ export function renderWork(target: Element, d: Data): void {
       el("li", {}, el("b", {}, "Find the results"), el("span", {}, "What the agent publishes lands in Sluse Artifacts on your computer, with the sources it declared.")))) : null;
 
   // The chamber.
-  const serving = d.state.broker.status === "serving";
-  const counts = d.state.broker.status === "serving" ? d.state.broker.volume.filter((c) => c.files > 0) : [];
+  const serving = d.state.gate.status === "serving";
+  const counts = d.state.gate.status === "serving" ? d.state.gate.volume.filter((c) => c.files > 0) : [];
   const fromHere = (name: string): number => new Set(ins.filter((r) => sourceOf(r.pathRequested) === name).map((r) => r.hash ?? r.pathRequested)).size;
   const sources = el("ul", { class: "chamber__sources" }, ...d.view.sources.map((s) => {
     const n = fromHere(s.name);

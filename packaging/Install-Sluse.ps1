@@ -23,7 +23,7 @@
 
 [CmdletBinding()]
 param(
-    # Where it goes. Per-machine by default, because the broker is a host
+    # Where it goes. Per-machine by default, because Gate Core is a host
     # service in the product even though it is a child process in the prototype.
     [string] $InstallDir = (Join-Path $env:ProgramFiles 'Sluse'),
 
@@ -94,7 +94,7 @@ $bin = Join-Path $InstallDir 'bin'
 # it here than from an agent run.
 Write-Host ''
 Write-Host '--- verifying ---'
-foreach ($exe in 'sluse.exe', 'sluse-broker.exe', 'sluse-endpoint.exe') {
+foreach ($exe in 'sluse.exe', 'sluse-gate-core.exe', 'sluse-gate-front.exe', 'sluse-endpoint.exe') {
     $path = Join-Path $bin $exe
     if (-not (Test-Path $path)) { throw "missing $exe" }
     $out = & $path --version 2>&1

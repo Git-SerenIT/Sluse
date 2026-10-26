@@ -50,7 +50,8 @@ fails. Releases are not signed yet; check the MSI against `SHA256SUMS`.
 | Path | What | Runs |
 |---|---|---|
 | `crates/sluse-proto` | The shared contract: config schema, capability request and response, journal record, errors | both sides |
-| `crates/sluse-broker` | Scope enforcement (`scope.rs`), sources read as the person, the mTLS listener, the egress proxy, the Event Log | host, SYSTEM |
+| `crates/sluse-gate-core` | Gate Core: scope enforcement (`scope.rs`), the person's tokens, sources read as the person, publishing, the Event Log; starts and serves its Gate Front (`front.rs`) | host, SYSTEM |
+| `crates/sluse-gate-front` | Gate Front, one per box: the box's mTLS listener, request parsing, the egress proxy; no tokens | host, LocalService |
 | `crates/sluse-endpoint` | The MCP server the agent talks to, the journal, the envelope, the console's API | the box |
 | `crates/sluse-lifecycle` | `sluse check / start / stop / status`, the lifecycle service, the box's image build | host, SYSTEM |
 | `crates/sluse-admin` | Setup: the Entra registration, sources and egress, the deployment package, Intune | the admin's PC |

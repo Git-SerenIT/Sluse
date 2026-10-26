@@ -8,17 +8,17 @@
 //!
 //! Three certificates and two facts about them.
 //!
-//! The certificates: a CA that exists only to sign the other two, a **broker
+//! The certificates: a CA that exists only to sign the other two, a **Gate
 //! leaf** with `serverAuth` and the SANs the endpoint will dial, and an
 //! **endpoint leaf** with `clientAuth` and nothing else. mTLS is mandatory
-//! (`docs/config.md`), so the broker's client verifier accepts exactly what this
+//! (`docs/config.md`), so the Gate's client verifier accepts exactly what this
 //! CA signed and a connection without a client certificate does not complete a
 //! handshake.
 //!
 //! The first fact: **the endpoint trusts one certificate, by hash, and no CA
-//! bundle at all.** `cert_pin` is the SHA-256 of the broker leaf in DER form.
+//! bundle at all.** `cert_pin` is the SHA-256 of the Gate leaf in DER form.
 //! A public root store in the guest would be a way for something inside the box
-//! to be talked into trusting a broker that is not the broker; there is no root
+//! to be talked into trusting a Gate that is not the Gate; there is no root
 //! store, so there is nothing to talk into anything.
 //!
 //! The second fact: **`devcert` does not edit the config unless told to.** It
@@ -52,7 +52,7 @@ const VALIDITY_DAYS: i64 = 397;
 
 /// Backdating, for the clock the two ends do not share.
 ///
-/// The broker and the endpoint are the same machine today and will be a host and
+/// The Gate and the endpoint are the same machine today and will be a host and
 /// a guest tomorrow, and a guest's clock is set by its own means. An hour is
 /// enough for the skew that causes a `not_before` rejection on a certificate
 /// generated thirty seconds ago.
@@ -61,14 +61,14 @@ const SKEW_HOURS: i64 = 1;
 /// The six files a run needs.
 pub struct DevCerts {
     pub ca_pem: String,
-    /// The CA's key, which the broker signs each box's enrolment with
+    /// The CA's key, which the Gate signs each box's enrolment with
     /// (slice 2). Without it, enrolment has nothing to sign with.
     pub ca_key_pem: String,
-    pub broker_cert_pem: String,
-    pub broker_key_pem: String,
+    pub gate_cert_pem: String,
+    pub gate_key_pem: String,
     pub endpoint_cert_pem: String,
     pub endpoint_key_pem: String,
-    /// SHA-256 of the broker leaf, DER. What goes in `broker.certPin`.
+    /// SHA-256 of the Gate leaf, DER. What goes in `gate.certPin`.
     pub pin: ContentHash,
 }
 
@@ -86,9 +86,9 @@ pub enum DevCertError {
 
 /// Generate a CA and the two leaves.
 ///
-/// `hostnames` are the extra DNS names the broker leaf should answer to, beyond
+/// `hostnames` are the extra DNS names the Gate leaf should answer to, beyond
 /// the loopback pair every run needs. The guest dials the host by name once the
-/// broker is not on the same machine, and a certificate that cannot be reissued
+/// Gate is not on the same machine, and a certificate that cannot be reissued
 /// without a rebuild is a certificate that gets reused past its usefulness.
 pub fn generate(hostnames: &[String]) -> Result<DevCerts, DevCertError> {
     let now = time_now();
@@ -97,10 +97,10 @@ pub fn generate(hostnames: &[String]) -> Result<DevCerts, DevCertError> {
 
     // --- the CA ------------------------------------------------------------
     let ca_key = KeyPair::generate()?;
-    // The broker's own parameters, name included: the broker signs enrolment
+    // The Gate's own parameters, name included: the Gate signs enrolment
     // leaves as this CA, and a leaf chains only if its issuer is the CA's
-    // subject exactly (`sluse_broker::enrol`).
-    let mut ca_params = sluse_broker::enrol::ca_params();
+    // subject exactly (`sluse_gate_core::enrol`).
+    let mut ca_params = sluse_gate_core::enrol::ca_params();
     ca_params.not_before = not_before;
     ca_params.not_after = not_after;
     let ca_cert = ca_params.self_signed(&ca_key)?;
@@ -109,7 +109,7 @@ pub fn generate(hostnames: &[String]) -> Result<DevCerts, DevCertError> {
 
     let issuer = Issuer::new(ca_params, ca_key);
 
-    // --- the broker leaf ---------------------------------------------------
+    // --- the Gate leaf ---------------------------------------------------
     let mut sans: Vec<String> = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
     for h in hostnames {
         let h = h.trim();
@@ -122,22 +122,22 @@ pub fn generate(hostnames: &[String]) -> Result<DevCerts, DevCertError> {
     }
     let _: Vec<IpAddr> = Vec::new(); // documents the intent of the line above
 
-    let broker_key = KeyPair::generate()?;
-    let mut broker_params = CertificateParams::new(sans)?;
-    broker_params.distinguished_name = dn("sluse-broker");
-    broker_params.is_ca = IsCa::NoCa;
-    broker_params.key_usages =
+    let gate_key = KeyPair::generate()?;
+    let mut gate_params = CertificateParams::new(sans)?;
+    gate_params.distinguished_name = dn("sluse-gate-core");
+    gate_params.is_ca = IsCa::NoCa;
+    gate_params.key_usages =
         vec![KeyUsagePurpose::DigitalSignature, KeyUsagePurpose::KeyEncipherment];
-    broker_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
-    broker_params.not_before = not_before;
-    broker_params.not_after = not_after;
-    let broker_cert = broker_params.signed_by(&broker_key, &issuer)?;
+    gate_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    gate_params.not_before = not_before;
+    gate_params.not_after = not_after;
+    let gate_cert = gate_params.signed_by(&gate_key, &issuer)?;
 
     // --- the endpoint leaf -------------------------------------------------
     //
     // `clientAuth` and nothing else. A certificate that carries both purposes
     // can be presented by a server, and the one thing the guest must not be able
-    // to do is answer to the name of the broker.
+    // to do is answer to the name of the Gate.
     let endpoint_key = KeyPair::generate()?;
     let mut endpoint_params = CertificateParams::new(vec!["sluse-endpoint".to_owned()])?;
     endpoint_params.distinguished_name = dn("sluse-endpoint");
@@ -151,13 +151,13 @@ pub fn generate(hostnames: &[String]) -> Result<DevCerts, DevCertError> {
     // The pin is over the DER, not the PEM. PEM is a wrapper with line breaks
     // and a header, and two encodings of the same certificate must not produce
     // two pins.
-    let pin = ContentHash::of(broker_cert.der());
+    let pin = ContentHash::of(gate_cert.der());
 
     Ok(DevCerts {
         ca_pem,
         ca_key_pem,
-        broker_cert_pem: broker_cert.pem(),
-        broker_key_pem: broker_key.serialize_pem(),
+        gate_cert_pem: gate_cert.pem(),
+        gate_key_pem: gate_key.serialize_pem(),
         endpoint_cert_pem: endpoint_cert.pem(),
         endpoint_key_pem: endpoint_key.serialize_pem(),
         pin,
@@ -167,26 +167,26 @@ pub fn generate(hostnames: &[String]) -> Result<DevCerts, DevCertError> {
 /// The file names `config/local.example.json` expects under `certs\`.
 pub const CA_FILE: &str = "client-ca.pem";
 pub const CA_KEY_FILE: &str = "client-ca.key";
-pub const BROKER_CERT_FILE: &str = "broker.pem";
-pub const BROKER_KEY_FILE: &str = "broker.key";
+pub const GATE_CERT_FILE: &str = "gate.pem";
+pub const GATE_KEY_FILE: &str = "gate.key";
 pub const ENDPOINT_CERT_FILE: &str = "endpoint.pem";
 pub const ENDPOINT_KEY_FILE: &str = "endpoint.key";
 
 /// Write the six files into `dir`, creating it if needed.
 ///
 /// The CA is written under the name the config's `clientCaPath` uses, because in
-/// this prototype one CA signs both leaves: the broker's client verifier trusts
-/// the same authority that issued the broker's own certificate. A deployment
+/// this prototype one CA signs both leaves: the Gate's client verifier trusts
+/// the same authority that issued the Gate's own certificate. A deployment
 /// that wanted the guest's issuer to be a different authority would change one
-/// path in the config and nothing in the broker.
+/// path in the config and nothing in the Gate.
 pub fn write(dir: &Path, certs: &DevCerts) -> Result<Vec<PathBuf>, DevCertError> {
     fs::create_dir_all(dir).map_err(|e| DevCertError::Write { path: dir.to_owned(), source: e })?;
 
     let files = [
         (CA_FILE, &certs.ca_pem),
         (CA_KEY_FILE, &certs.ca_key_pem),
-        (BROKER_CERT_FILE, &certs.broker_cert_pem),
-        (BROKER_KEY_FILE, &certs.broker_key_pem),
+        (GATE_CERT_FILE, &certs.gate_cert_pem),
+        (GATE_KEY_FILE, &certs.gate_key_pem),
         (ENDPOINT_CERT_FILE, &certs.endpoint_cert_pem),
         (ENDPOINT_KEY_FILE, &certs.endpoint_key_pem),
     ];
@@ -203,7 +203,7 @@ pub fn write(dir: &Path, certs: &DevCerts) -> Result<Vec<PathBuf>, DevCertError>
 }
 
 // ---------------------------------------------------------------------------
-// The broker's Entra credential (M7)
+// The Gate's Entra credential (M7)
 // ---------------------------------------------------------------------------
 
 /// Take the private keys off the inherited ACL.
@@ -218,7 +218,7 @@ fn restrict(_path: &Path) -> Result<(), DevCertError> {
     Ok(())
 }
 
-/// Rewrite `broker.certPin` in a config's device half, in place.
+/// Rewrite `gate.certPin` in a config's device half, in place.
 ///
 /// Only from `--update-config`. Since D-038 the pin is the device's, so this
 /// no longer changes `config_version`, which is the authored file's hash.
@@ -235,14 +235,14 @@ pub fn update_config(path: &Path, pin: &ContentHash) -> Result<(), DevCertError>
     let mut doc: serde_json::Value = serde_json::from_slice(&before)
         .map_err(|e| DevCertError::NotAConfig { path: path.to_owned(), detail: e.to_string() })?;
 
-    let broker = doc
-        .get_mut("broker")
+    let gate = doc
+        .get_mut("gate")
         .and_then(|b| b.as_object_mut())
         .ok_or_else(|| DevCertError::NotAConfig {
             path: path.to_owned(),
-            detail: "no `broker` object".to_owned(),
+            detail: "no `gate` object".to_owned(),
         })?;
-    broker.insert("certPin".to_owned(), serde_json::Value::String(pin.as_str().to_owned()));
+    gate.insert("certPin".to_owned(), serde_json::Value::String(pin.as_str().to_owned()));
 
     let mut after = serde_json::to_vec_pretty(&doc)
         .map_err(|e| DevCertError::NotAConfig { path: path.to_owned(), detail: e.to_string() })?;
@@ -276,12 +276,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_pin_is_the_hash_of_the_broker_leaf_and_not_of_anything_else() {
+    fn the_pin_is_the_hash_of_the_gate_leaf_and_not_of_anything_else() {
         let certs = generate(&[]).unwrap();
         // Distinctness is the whole property: a pin that matched the CA would
-        // let anything the CA signed answer as the broker.
+        // let anything the CA signed answer as the Gate.
         assert_ne!(certs.pin, ContentHash::of(certs.ca_pem.as_bytes()));
-        assert_ne!(certs.pin, ContentHash::of(certs.broker_cert_pem.as_bytes()));
+        assert_ne!(certs.pin, ContentHash::of(certs.gate_cert_pem.as_bytes()));
         assert_eq!(certs.pin.as_str().len(), 64);
     }
 
@@ -300,8 +300,8 @@ mod tests {
             "  ".to_owned(),
         ])
         .unwrap();
-        assert!(!certs.broker_cert_pem.is_empty());
-        // The SAN list itself is asserted through a handshake in the broker's
+        assert!(!certs.gate_cert_pem.is_empty());
+        // The SAN list itself is asserted through a handshake in the Gate's
         // tls test; what is checked here is that generation accepts the shapes.
         assert!(generate(&["sluse-host".to_owned()]).is_ok());
     }
@@ -312,7 +312,7 @@ mod tests {
         let certs = generate(&[]).unwrap();
         let written = write(&dir.path().join("certs"), &certs).unwrap();
         assert_eq!(written.len(), 6);
-        for name in [CA_FILE, CA_KEY_FILE, BROKER_CERT_FILE, BROKER_KEY_FILE, ENDPOINT_CERT_FILE, ENDPOINT_KEY_FILE]
+        for name in [CA_FILE, CA_KEY_FILE, GATE_CERT_FILE, GATE_KEY_FILE, ENDPOINT_CERT_FILE, ENDPOINT_KEY_FILE]
         {
             assert!(dir.path().join("certs").join(name).exists(), "{name} is missing");
         }
@@ -324,7 +324,7 @@ mod tests {
         let path = dir.path().join("local.json");
         fs::write(
             &path,
-            br#"{"schemaVersion":1,"broker":{"listen":"127.0.0.1:7580","certPin":"00"}}"#,
+            br#"{"schemaVersion":1,"gate":{"listen":"127.0.0.1:7580","certPin":"00"}}"#,
         )
         .unwrap();
 
@@ -333,10 +333,10 @@ mod tests {
 
         let back: serde_json::Value =
             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(back["broker"]["certPin"], certs.pin.as_str());
+        assert_eq!(back["gate"]["certPin"], certs.pin.as_str());
         // Untouched fields survive: this rewrites one value, not the file.
         assert_eq!(back["schemaVersion"], 1);
-        assert_eq!(back["broker"]["listen"], "127.0.0.1:7580");
+        assert_eq!(back["gate"]["listen"], "127.0.0.1:7580");
     }
 
     #[test]
@@ -353,7 +353,7 @@ mod tests {
         // Refused means unchanged.
         assert_eq!(fs::read(&path).unwrap(), b"this is not JSON");
 
-        // Valid JSON with no broker section is the same answer.
+        // Valid JSON with no Gate section is the same answer.
         let other = dir.path().join("other.json");
         fs::write(&other, br#"{"schemaVersion":1}"#).unwrap();
         assert!(matches!(

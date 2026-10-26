@@ -83,7 +83,7 @@ export function renderSources(target: Element, d: Data): void {
     body = ({
       SOURCE_UNAVAILABLE: () => problem("The source did not answer", `${source} did not answer Sluse. Try again in a moment with List again. If it keeps happening, send the details to your IT department.`, failure!.raw),
       SIGN_IN_REQUIRED: () => problem("Sluse needs you to sign in again", `${source} cannot be listed until you do. To sign in, close the box from the bar above and open Sluse again.`, failure!.raw),
-      BROKER_UNREACHABLE: () => problem("Sluse on your computer is not answering", "Nothing can be listed until it answers. This page asks again by itself; use List again when the bar above says it is back.", failure!.raw),
+      GATE_UNREACHABLE: () => problem("Sluse on your computer is not answering", "Nothing can be listed until it answers. This page asks again by itself; use List again when the bar above says it is back.", failure!.raw),
       NOT_FOUND: () => at === source && d.view.sources.find((s) => s.name === source)?.kind === "onedrive"
         ? problem("Your Sluse folder in OneDrive is not there yet", "It appears here once OneDrive has synced it. If you have not made it yet, the Sluse window on your computer offers to.")
         : problem("This folder is no longer there", "It was moved or deleted at the source after the list above it was made.", failure!.raw, at === source ? undefined : back),

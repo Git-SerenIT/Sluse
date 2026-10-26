@@ -9,7 +9,7 @@
 //! artifact's provenance, the workspace inventory, open volume alerts and a
 //! tail of the audit trail.
 //!
-//! **It asserts nothing of its own.** Every answer here is the broker's answer,
+//! **It asserts nothing of its own.** Every answer here is the Gate's answer,
 //! relayed; the console adds presentation and the inventory's comparison, and
 //! the comparison is careful not to over-claim ([`inventory`]).
 //!

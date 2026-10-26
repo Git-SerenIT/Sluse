@@ -1,0 +1,35 @@
+[package]
+name = "sluse-gate-front"
+description = "Sluse Gate Front: the box's TLS, request parsing and egress proxy, without privilege and without a token. Asks Gate Core; cannot act."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "sluse_gate_front"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sluse-gate-front"
+path = "src/main.rs"
+
+# No token code is linked here, by construction: Gate Core's crate is a
+# dependency of the tests only (D-071).
+[dependencies]
+sluse-proto = { path = "../sluse-proto" }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+axum.workspace = true
+axum-server.workspace = true
+rustls.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+aws-lc-rs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

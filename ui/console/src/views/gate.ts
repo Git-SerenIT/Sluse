@@ -44,7 +44,7 @@ export function renderGate(target: Element, d: Data, state: "waiting" | "signing
           : long ? banner("You are not signed in after 2 minutes.", "Look for a Microsoft sign-in window on your computer; it can open behind this one. If there is none, the bar above the box says what happened.")
             : null,
       long || lost ? details(lost ? `GET /api/state: ${lost.detail}\nlast answer ${lost.at}`
-        : `box ${d.state.boxId}, session ${d.state.session}\nbroker: ${d.state.broker.status === "serving" ? "serving, signedIn: none" : `unreachable (${d.state.broker.detail})`}`) : null,
+        : `box ${d.state.boxId}, session ${d.state.session}\ngate: ${d.state.gate.status === "serving" ? "serving, signedIn: none" : `unreachable (${d.state.gate.detail})`}`) : null,
       lost ? null : el("p", { class: "passage__foot t-small t-muted" }, "Nothing to press here. This page goes on by itself.")),
     el("ol", { class: "steps ledger", "aria-label": "Where this box is" },
       step("done", "This page is ready", when(pageReady)),

@@ -12,7 +12,7 @@
 //! ## The pid problem, which is the only hard thing in this module
 //!
 //! A pid on its own is not an identity. Both platforms reuse them, and a record
-//! left behind by a broker that crashed will eventually name a process that is
+//! left behind by a Gate that crashed will eventually name a process that is
 //! something else entirely — at which point `sluse stop` would kill a stranger.
 //! So a record stores the pid *and* the time the process was created, and
 //! [`Run::alive`] accepts the process only if both still match. The creation
@@ -26,8 +26,8 @@
 //! to a person, and a record does not travel between the two.
 //!
 //! The consequence worth stating plainly: this module will say "not running"
-//! about a broker that really is running, if the record was lost. It will not
-//! say "running" about something that is not the broker. That is the way round
+//! about a Gate that really is running, if the record was lost. It will not
+//! say "running" about something that is not the Gate. That is the way round
 //! it has to fail.
 
 use std::path::{Path, PathBuf};
@@ -36,7 +36,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// One running — or once running — broker.
+/// One running — or once running — Gate.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Run {
@@ -44,19 +44,19 @@ pub struct Run {
     pub box_id: String,
     /// The run workspace. Canonical, because it is the key.
     pub workspace: PathBuf,
-    /// The config `sluse start` generated and the broker loaded.
+    /// The config `sluse start` generated and the Gate loaded.
     pub config: PathBuf,
     /// What the endpoint dials. From the generated config, so this is the URL
     /// the pin was written for.
     pub url: String,
-    /// What the broker bound.
+    /// What the Gate bound.
     pub listen: String,
     pub pid: u32,
-    /// The broker process's creation time, as the kernel reports it. Half of
+    /// The Gate process's creation time, as the kernel reports it. Half of
     /// the identity; see the module note.
     pub pid_created: u64,
     pub started: DateTime<Utc>,
-    /// Where the broker's stderr goes.
+    /// Where the Gate's stderr goes.
     pub log: PathBuf,
 }
 
@@ -90,7 +90,7 @@ impl Run {
 ///
 /// The unix arm is D-011. `/tmp/Sluse` would have worked and would have been
 /// wrong in the way that matters on a development guest: `/tmp` is cleared on
-/// reboot, and a run record that disappears leaves a broker this module then
+/// reboot, and a run record that disappears leaves a Gate this module then
 /// reports as not running — the one thing it promises never to do backwards.
 /// State, not cache, so `state` rather than `config` or `share`.
 pub fn dir() -> PathBuf {
@@ -216,7 +216,7 @@ pub fn all() -> Vec<Run> {
 ///
 /// `PROCESS_QUERY_LIMITED_INFORMATION` rather than `PROCESS_QUERY_INFORMATION`:
 /// the stronger right is refused across integrity levels, and a `status` that
-/// could not see its own elevated broker would report it as dead.
+/// could not see its own elevated Gate would report it as dead.
 #[cfg(windows)]
 fn process_created(pid: u32) -> Option<u64> {
     use windows::Win32::Foundation::{CloseHandle, FILETIME};
@@ -270,7 +270,7 @@ fn process_created(pid: u32) -> Option<u64> {
 /// later field so the comparison silently starts reading a different number.
 /// That is the failure this function exists to prevent rather than cause — a
 /// wrong field compares unequal, `alive()` says no, and `sluse status` reports
-/// a running broker as dead.
+/// a running Gate as dead.
 // Dead on the host, where nothing but the tests calls it. That is the point:
 // compiling it there is how the host's run covers the guest's parse.
 #[cfg_attr(not(unix), allow(dead_code))]
@@ -289,13 +289,13 @@ pub fn created_of(pid: u32) -> Option<u64> {
 /// Ask a process to stop, then make sure it has.
 ///
 /// There is no `SIGTERM` here. A console-attached child could be sent
-/// `CTRL_BREAK_EVENT`, but the broker is started detached precisely so that
+/// `CTRL_BREAK_EVENT`, but the Gate is started detached precisely so that
 /// closing the terminal does not take it down, and a detached process is not in
 /// the caller's console group. So this is `TerminateProcess`, and the thing that
 /// makes it safe is not the signal but the identity check: the pid is only
 /// touched after its creation time has matched the record.
 ///
-/// The cost is stated rather than hidden: the broker does not get to run a
+/// The cost is stated rather than hidden: the Gate does not get to run a
 /// shutdown path. It does not need one — the audit sink holds no handle between
 /// records and every record is flushed as it is written (`audit.rs`) — but if it
 /// ever does, this is the line that has to change.
@@ -325,7 +325,7 @@ pub fn terminate(run: &Run) -> std::io::Result<bool> {
 /// The unix twin (D-011).
 ///
 /// `SIGKILL`, not `SIGTERM`, to match what the Windows path actually does: the
-/// broker is started detached on both platforms and gets no shutdown path on
+/// Gate is started detached on both platforms and gets no shutdown path on
 /// either, so a guest that stopped politely and a host that did not would be two
 /// behaviours to reason about instead of one. The safety is the same and it is
 /// not the signal: `alive()` has already matched the recorded start time, so the
@@ -383,7 +383,7 @@ mod tests {
     fn a_key_is_case_sensitive_on_the_guest() {
         // Two real, distinct directories, because on a case-sensitive filesystem
         // they are two workspaces. Folding them would file one run's record over
-        // the other's and `sluse stop` would then stop the wrong broker.
+        // the other's and `sluse stop` would then stop the wrong Gate.
         let dir = tempfile::tempdir().unwrap();
         let lower = dir.path().join("run");
         let upper = dir.path().join("RUN");
@@ -400,7 +400,7 @@ mod tests {
     // noise here.
     #[test]
     fn starttime_is_field_22() {
-        let stat = "1234 (broker) S 1 1234 1234 0 -1 4194560 1200 0 0 0 5 3 0 0 \
+        let stat = "1234 (gate) S 1 1234 1234 0 -1 4194560 1200 0 0 0 5 3 0 0 \
                     20 0 8 0 987654321 ";
         assert_eq!(starttime_field(stat), Some(987_654_321));
     }
@@ -409,7 +409,7 @@ mod tests {
     fn a_process_name_with_spaces_and_a_bracket_does_not_shift_the_fields() {
         // Linux does not escape field 2, and this is a name a process may
         // legally have. Splitting from the left reads `0` here instead, which
-        // compares unequal and reports a live broker as dead.
+        // compares unequal and reports a live Gate as dead.
         let stat = "1234 (od d) na me) S 1 1234 1234 0 -1 4194560 1200 0 0 0 5 3 0 0 \
                     20 0 8 0 987654321 ";
         assert_eq!(starttime_field(stat), Some(987_654_321));
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn a_truncated_stat_line_is_none_not_a_wrong_number() {
-        assert_eq!(starttime_field("1234 (broker) S 1 1234"), None);
+        assert_eq!(starttime_field("1234 (gate) S 1 1234"), None);
         assert_eq!(starttime_field(""), None);
         assert_eq!(starttime_field("nonsense with no bracket"), None);
     }
@@ -448,7 +448,7 @@ mod tests {
             pid,
             pid_created: created,
             started: Utc::now(),
-            log: PathBuf::from("broker.log"),
+            log: PathBuf::from("gate.log"),
         };
         assert!(run.alive());
 
@@ -476,7 +476,7 @@ mod tests {
             pid: 4,
             pid_created: 12345,
             started: Utc::now(),
-            log: workspace.join("broker.log"),
+            log: workspace.join("gate.log"),
         };
 
         save(&run).unwrap();

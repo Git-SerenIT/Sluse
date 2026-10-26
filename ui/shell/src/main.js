@@ -76,12 +76,12 @@ const NAME = {
   'sign-in': 'Signing you in to Microsoft', check: 'Checking this computer',
   download: "Downloading your box's system", convert: "Preparing your box's disk",
   install: "Installing your box's system", make: 'Making your box', start: 'Starting your box',
-  broker: 'Connecting Sluse to your files', wait: "Waiting for your box's screen",
+  gate: 'Connecting Sluse to your files', wait: "Waiting for your box's screen",
   connect: 'Connecting to your box', console: "Waiting for your box's console",
   reset: "Resetting the box's system", wipe: 'Wiping the box', close: 'Closing your box', open: 'Opening your box',
 };
 const BUILD = ['download', 'convert', 'install', 'make'];
-const OPENING = ['sign-in', 'check', 'start', 'broker', 'wait', 'connect', 'console'];
+const OPENING = ['sign-in', 'check', 'start', 'gate', 'wait', 'connect', 'console'];
 const SLOW = 'The first time on this computer takes a long while, often more than a quarter of an hour.';
 // Q26: closing the window during a build finishes it and leaves the box closed.
 const SAFE = {
@@ -322,7 +322,7 @@ function explainFailure(f, kind) {
         Object.assign(e, { head: 'This computer is not ready for Sluse', body: `Sluse checks this computer before it opens your box, and a check failed. ${IT}` });
       }
       break;
-    case 'broker':
+    case 'gate':
       Object.assign(e, { head: 'Sluse could not connect your box to your files',
         body: 'This is a setup problem on this computer, not in your box, so resetting the box would not help. Try again, or send the details to your IT department.' });
       break;

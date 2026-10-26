@@ -4,7 +4,7 @@
 // Derived from the S-2 stub's endpoint/src/server.rs, itself derived from
 // Chaperone chapr-endpoint/src/server.rs:343-400, 784-845 (rmcp scaffold,
 // stderr tracing, tool-level refusals). The tool surface and its wording are
-// kept; the I/O underneath is now broker calls.
+// kept; the I/O underneath is now Gate calls.
 
 //! The five tools.
 //!
@@ -16,18 +16,18 @@
 //! **The wording is S-2's, deliberately.** Those descriptions were in front of a
 //! real agent for two scored runs and it never reached outside scope; rewriting
 //! them would put a measured thing back in the unmeasured column. What changed
-//! underneath is everything: each tool now asks the broker, on the far side of
+//! underneath is everything: each tool now asks the Gate, on the far side of
 //! an mTLS boundary, instead of touching a filesystem it can see.
 //!
 //! Every call writes exactly one journal record, admitted or not, so a run can
-//! be scored from the journal alone and joined to the broker's log on
+//! be scored from the journal alone and joined to the Gate's log on
 //! `admission_id`.
 
 use std::sync::Arc;
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo};
+use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig};
 use rmcp::{tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler};
 use sluse_proto::{
     AuditRecord, BoxId, ConfigView, ContentHash, Op, SessionId, SluseError, SourceName,
@@ -36,7 +36,7 @@ use sluse_proto::{
 use tokio::sync::Mutex;
 
 use crate::blinders;
-use crate::broker_client::BrokerClient;
+use crate::gate_client::GateClient;
 use crate::envelope;
 use crate::journal::Journal;
 use crate::workspace;
@@ -52,7 +52,7 @@ pub struct Endpoint {
 }
 
 struct Inner {
-    broker: BrokerClient,
+    gate: GateClient,
     journal: Mutex<Journal>,
     view: ConfigView,
     workspace: std::path::PathBuf,
@@ -61,7 +61,7 @@ struct Inner {
     session: SessionId,
     /// How much of this session's journal the host's mirror holds.
     mirrored: std::sync::atomic::AtomicU64,
-    /// Held shared by every read and fetch from asking the broker until its
+    /// Held shared by every read and fetch from asking the Gate until its
     /// record is journaled, and exclusively by a publish while it takes the
     /// session's admissions: rmcp runs a batch's calls at once, and a publish
     /// beside a fetch read the journal before the fetch was in it, which
@@ -122,18 +122,18 @@ pub struct InlineFile {
 
 impl Endpoint {
     pub fn new(
-        broker: BrokerClient,
+        gate: GateClient,
         journal: Journal,
         view: ConfigView,
         workspace: std::path::PathBuf,
         box_id: BoxId,
         config_version: ContentHash,
     ) -> Self {
-        let session = broker.session().clone();
+        let session = gate.session().clone();
         Self {
             tool_router: Self::tool_router(),
             inner: Arc::new(Inner {
-                broker,
+                gate,
                 journal: Mutex::new(journal),
                 view,
                 workspace,
@@ -150,7 +150,7 @@ impl Endpoint {
         AuditRecord::new(
             Writer::Endpoint,
             self.inner.box_id.clone(),
-            self.inner.broker.acting_as(),
+            self.inner.gate.acting_as(),
             self.inner.config_version.clone(),
             self.inner.session.clone(),
             op,
@@ -158,27 +158,27 @@ impl Endpoint {
         )
     }
 
-    /// Who a record names is **who the broker acted as**, not the guest's OS
+    /// Who a record names is **who the Gate acted as**, not the guest's OS
     /// user: the box holds no credential and has no identity of its own
-    /// (invariant 3). Set here, after the broker has answered, from what that
+    /// (invariant 3). Set here, after the Gate has answered, from what that
     /// answer said (`x-sluse-user`), so a record written after a sign-in names
-    /// the person, as the broker's own record of the same admission does. A
-    /// workspace re-read asks no broker and names the last answer.
+    /// the person, as the Gate's own record of the same admission does. A
+    /// workspace re-read asks no Gate and names the last answer.
     async fn journal(&self, mut rec: AuditRecord) {
-        rec.user = self.inner.broker.acting_as();
+        rec.user = self.inner.gate.acting_as();
         let path = {
             let mut j = self.inner.journal.lock().await;
             j.record(rec);
             j.path().to_owned()
         };
-        crate::journal::mirror(&self.inner.broker, &path, &self.inner.session, &self.inner.mirrored).await;
+        crate::journal::mirror(&self.inner.gate, &path, &self.inner.session, &self.inner.mirrored).await;
     }
 
-    /// Journal what the broker decided, then tell the agent the narrower thing.
+    /// Journal what the Gate decided, then tell the agent the narrower thing.
     ///
     /// The two happen together so they cannot drift: there is no path where a
     /// refusal reaches the agent without the journal having the reason the
-    /// broker actually gave.
+    /// Gate actually gave.
     async fn refuse(&self, rec: AuditRecord, err: SluseError, raw: &str) -> CallToolResult {
         let told = blinders::tell(&err, raw);
         self.journal(rec.failed(&err)).await;
@@ -198,7 +198,7 @@ impl Endpoint {
     /// *looks* like a source name is not one.
     ///
     /// The config view is advisory and that is fine here — this decides where
-    /// to *ask*, not what may be read. A source path still gets the broker's
+    /// to *ask*, not what may be read. A source path still gets the Gate's
     /// answer, and a workspace path is still confined by
     /// [`workspace::resolve`]. If a deployment ever names a source `admitted`,
     /// the source wins and the fetched tree under that name is reachable only
@@ -208,7 +208,7 @@ impl Endpoint {
         source_named(&self.inner.view, path)
     }
 
-    /// The capability a refusal record carries before the broker has said:
+    /// The capability a refusal record carries before the Gate has said:
     /// bytes, for every source since D-046.
     fn expected_capability(&self, _path: &str) -> sluse_proto::Capability {
         sluse_proto::Capability::Bytes
@@ -224,7 +224,7 @@ impl Endpoint {
         destination: &std::path::Path,
         request_path: &str,
         source: &SourceName,
-        admitted: &crate::broker_client::Admitted<T>,
+        admitted: &crate::gate_client::Admitted<T>,
     ) -> std::io::Result<()> {
         let view = self.configured_source(request_path);
         let manifest = crate::manifest::Manifest {
@@ -245,7 +245,7 @@ impl Endpoint {
 
     /// Read a file out of the guest's own workspace. **D-019 point 3.**
     ///
-    /// This is the one tool path that does not ask the broker, because there is
+    /// This is the one tool path that does not ask the Gate, because there is
     /// nothing to ask: the bytes are already inside the box and were admitted
     /// once already. No admission is minted, no `admission_id` is carried and
     /// the host's log gains nothing — so the scorer's 1:1 join over `read` and
@@ -286,7 +286,7 @@ impl Endpoint {
                     state: None,
                 }]);
                 // Worth a record on its own: the copy is no longer the bytes the
-                // broker authorised, so anything built from it derives from
+                // Gate authorised, so anything built from it derives from
                 // something the source never had.
                 if m.hash != hash {
                     notes.push("MODIFIED_SINCE_ADMISSION".to_owned());
@@ -370,7 +370,7 @@ is the last observation, not a fresh check.")]
         Parameters(PathArg { path }): Parameters<PathArg>,
     ) -> Result<CallToolResult, McpError> {
         let rec = self.record(Op::List, &path);
-        match self.inner.broker.list(&path).await {
+        match self.inner.gate.list(&path).await {
             Err(e) => Ok(self.refuse(rec, e, &path).await),
             Ok(listing) => {
                 let mut lines: Vec<String> = listing
@@ -426,7 +426,7 @@ larger than the configured cap, are refused with the reason; text in Windows-125
         // endpoint comes back enveloped.
         //
         // The two are told apart by the first segment and nothing else, so a
-        // path that names no source never reaches the broker. Nothing leaks by
+        // path that names no source never reaches the Gate. Nothing leaks by
         // that: an unknown source and a workspace file that is not there both
         // end as `NOT_FOUND`, which D-008 has already collapsed into the same
         // sentence as out-of-scope — and `sluse_sources` tells the agent which
@@ -437,19 +437,19 @@ larger than the configured cap, are refused with the reason; text in Windows-125
 
         let _admitting = self.inner.admitting.read().await;
         let rec = self.record(Op::Read, &path).with_capability(self.expected_capability(&path));
-        let admitted = match self.inner.broker.read(&path).await {
+        let admitted = match self.inner.gate.read(&path).await {
             Ok(a) => a,
             Err(f) => return Ok(self.refuse(rec.with_admission_id(f.admission_id), f.error, &path).await),
         };
 
-        // The bytes crossed and the broker recorded the admission, so this is
+        // The bytes crossed and the Gate recorded the admission, so this is
         // journaled as admitted even if the envelope cannot be rendered below.
         let rec = rec
             .with_capability(admitted.capability)
             .resolved(admitted.resolved.clone())
             .admitted(admitted.admission_id.clone(), admitted.hash.clone(), admitted.bytes);
 
-        // Not a broker refusal when it fails: the file was admitted and the
+        // Not a Gate refusal when it fails: the file was admitted and the
         // endpoint will not put arbitrary bytes in a model's context. Recorded
         // as admitted with the reason, because it *was* admitted.
         let (text, note) = match as_text(&path, &admitted.value, self.inner.view.max_read_bytes).await {
@@ -505,7 +505,7 @@ read a document, PDF, spreadsheet or deck, sluse_read gives its text enveloped."
         let rel = path.split_once(['/', '\\']).map(|(_, r)| r).unwrap_or("");
         let destination = workspace::admitted_path(&self.inner.workspace, &source, rel);
 
-        let admitted = match self.inner.broker.fetch_to_file(&path, &destination).await {
+        let admitted = match self.inner.gate.fetch_to_file(&path, &destination).await {
             Ok(a) => a,
             Err(f) => return Ok(self.refuse(rec.with_admission_id(f.admission_id), f.error, &path).await),
         };
@@ -658,7 +658,7 @@ for a Word or PowerPoint document send markdown with `render`, optionally styled
         };
 
         // Every file read and named before anything is sent, so a delivery that
-        // cannot be assembled is refused without the broker seeing half of it.
+        // cannot be assembled is refused without the Gate seeing half of it.
         let mut files: Vec<(String, Vec<u8>, Vec<sluse_proto::LineageItem>)> = Vec::new();
         for raw in &paths {
             let resolved = match workspace::resolve(&self.inner.workspace, raw) {
@@ -688,12 +688,12 @@ for a Word or PowerPoint document send markdown with `render`, optionally styled
             files.push((name, bytes, declared));
         }
 
-        let response = match self.inner.broker.publish(&files, lineage.clone()).await {
+        let response = match self.inner.gate.publish(&files, lineage.clone()).await {
             Ok(r) => r,
             Err(e) => return Ok(self.refuse(rec, e, &joined).await),
         };
 
-        // One journal record per artifact, matching the broker's, so the join is
+        // One journal record per artifact, matching the Gate's, so the join is
         // one-to-one on both sides.
         for artifact in &response.artifacts {
             let mut rec = self.record(Op::Publish, &artifact.path);
@@ -888,7 +888,7 @@ fn office_encrypted_text(path: &str) -> String {
 
 /// The configured source a path's first segment names, if any.
 ///
-/// A free function so it can be tested without a broker: this one decision
+/// A free function so it can be tested without a Gate: this one decision
 /// routes every `sluse_read` either across the boundary or into the workspace
 /// (**D-019 point 3**), and getting it backwards would send source reads to the
 /// local disk.
@@ -899,8 +899,8 @@ fn source_named<'a>(view: &'a ConfigView, path: &str) -> Option<&'a sluse_proto:
 
 #[tool_handler]
 impl ServerHandler for Endpoint {
-    fn get_info(&self) -> ServerInfo {
-        let mut info = ServerInfo::default();
+    fn get_info(&self) -> ServerConfig {
+        let mut info = ServerConfig::default();
         info.capabilities = ServerCapabilities::builder().enable_tools().build();
         info.instructions = Some(format!(
             "Sluse endpoint. You have no data sources on local disk. Everything you may work with is \

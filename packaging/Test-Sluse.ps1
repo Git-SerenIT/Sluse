@@ -6,7 +6,7 @@
 # that answered both would let one hide the other.
 #
 # **What this tests.** That a source with real permissions on it refuses through
-# the broker: `restricted/` comes back `ACCESS_DENIED`, the one refusal M3
+# Gate Core: `restricted/` comes back `ACCESS_DENIED`, the one refusal M3
 # decided to tell the agent plainly rather than blind (D-008).
 #
 # CI runs this script on every push against a local NTFS deny ACE, so it is
@@ -19,7 +19,7 @@
 #
 # It drives the console's loopback API rather than an agent. An agent tests the
 # tool wording and is a scored run's job; this tests the enforcing path, which
-# is the broker's, and which answers over HTTP where a script can check it.
+# is Gate Core's, and which answers over HTTP where a script can check it.
 #
 # Records are left where they land and are **not** scored here: the scorers are
 # JavaScript and a clean host has no Node (D-012 point 6). Copy the run
@@ -43,11 +43,11 @@ param(
     # The request-form path that must refuse. It has to be **below** a
     # configured scope, never a scope root: `scope::compile` canonicalises every
     # scope at start-up, so a deny ACE on the scope itself fails the gate and
-    # the broker never starts. Under the scope, the same ACE is the refusal M3
+    # Gate Core never starts. Under the scope, the same ACE is the refusal M3
     # designed.
     [string] $DeniedPath = 'fixture/restricted/sealed',
 
-    # Leave the broker and console running afterwards, to look at the console.
+    # Leave Gate Core and console running afterwards, to look at the console.
     [switch] $KeepRunning
 )
 
@@ -129,7 +129,7 @@ if ($LASTEXITCODE -ne 0) { throw "sluse start failed with $LASTEXITCODE - the ga
 # A hidden window throws away everything the console says about why it would
 # not start, and three seconds was a guess. Its output goes to files beside the
 # run and the script waits until it answers, the way `sluse start` waits for the
-# broker.
+# Gate.
 $consoleOut = Join-Path $WorkDir 'console.log'
 $consoleErr = Join-Path $WorkDir 'console.err'
 # **Every path is quoted.** `Start-Process -ArgumentList` joins an array with
@@ -162,11 +162,11 @@ try {
 
     Write-Host ''
     Write-Host '--- checks ---'
-    Check 'the broker is serving' {
+    Check 'Sluse Gate is serving' {
         $r = Api '/api/state'
         if (-not $r.ok) { throw "the console did not answer" }
-        if ($r.body.broker.status -ne 'serving') { throw "broker is $($r.body.broker.status): $($r.body.broker.detail)" }
-        "acting as $($r.body.user.kind):$($r.body.user.name), posture $($r.body.broker.postureId)"
+        if ($r.body.gate.status -ne 'serving') { throw "Gate Core is $($r.body.gate.status): $($r.body.gate.detail)" }
+        "acting as $($r.body.user.kind):$($r.body.user.name), posture $($r.body.gate.postureId)"
     }
 
     Check 'the posture snapshot answered, rather than shrugging at everything' {
@@ -178,7 +178,7 @@ try {
         # check and still starts, because posture never blocks. That is correct
         # and it is also indistinguishable from a passing run unless somebody
         # counts, which is what this does.
-        $snapshot = Join-Path $WorkDir 'audit\broker-posture.jsonl'
+        $snapshot = Join-Path $WorkDir 'audit\gate-posture.jsonl'
         if (-not (Test-Path $snapshot)) { throw "no posture snapshot at $snapshot" }
         $checks = (Get-Content $snapshot | Select-Object -Last 1 | ConvertFrom-Json).checks
         $machine = @($checks | Where-Object { $_.list -eq 'posture' })
@@ -261,7 +261,7 @@ try {
         if ($r.body.code -ne 'ACCESS_DENIED') {
             throw "refused with $($r.body.code), not ACCESS_DENIED. A different code means scope or a missing path, not permissions"
         }
-        'the source refused, the broker named it, and the console was told plainly'
+        'the source refused, Gate Core named it, and the console was told plainly'
     }
 
     Check 'the guest is never told a host path it did not ask for' {
@@ -288,7 +288,7 @@ Write-Host ''
 Write-Host ("{0} passed, {1} failed" -f $script:pass, $script:fail)
 Write-Host ''
 Write-Host 'The records are in:'
-Write-Host "  $WorkDir\audit\broker.jsonl   the host's side"
+Write-Host "  $WorkDir\audit\gate.jsonl   the host's side"
 Write-Host "  $WorkDir\journal\             the guest's side"
 Write-Host ''
 Write-Host 'They are not scored here. Copy the run directory to the development'

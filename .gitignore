@@ -44,3 +44,4 @@ Test output/
 # jok's own checklist for the demo-tenant environment, with real tenant values
 # in it. The committed background is spikes/test-environment.md.
 test environment.md
+docs/design/brainstorm.md

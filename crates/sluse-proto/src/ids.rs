@@ -16,7 +16,7 @@
 //!
 //! This crate is otherwise pure data. [`SessionId::mint`] and its siblings read
 //! the clock and the OS random source, which is a departure, and a deliberate
-//! one: the broker mints admission, publish and posture ids while the endpoint
+//! one: the Gate mints admission, publish and posture ids while the endpoint
 //! mints session ids, and a grammar implemented twice is a grammar that drifts.
 //! One implementation, one test.
 //!
@@ -109,7 +109,7 @@ minted!(SessionId, "sess");
 string_newtype! {
     /// One admission: one file, admitted once, by one `read` or `fetch`.
     ///
-    /// **The join key.** The broker mints it when it admits bytes and returns it
+    /// **The join key.** The Gate mints it when it admits bytes and returns it
     /// in the `x-sluse-admission-id` header; the endpoint records the same value
     /// beside its own hash of the bytes it received. Two records, two writers,
     /// one id, and the scorer asserts the join is 1:1 with equal hashes. That is
@@ -126,8 +126,8 @@ string_newtype! {
 minted!(PublishId, "pub");
 
 string_newtype! {
-    /// One preflight run: the gate and posture results as they were at broker
-    /// start. Every broker record carries it, so "what was this machine like
+    /// One preflight run: the required and posture results as they were at
+    /// start. Every Gate record carries it, so "what was this machine like
     /// when that file was admitted" is answerable after the fact
     /// (`docs/sluse_prototype.md`, Preflight).
     PostureId

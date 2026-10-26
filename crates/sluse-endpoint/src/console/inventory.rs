@@ -11,7 +11,7 @@
 //! ## What a state means, and what it does not
 //!
 //! [`classify`] answers from two facts: whether the local copy is still there,
-//! and what the source says now. It **never over-claims**. When the broker
+//! and what the source says now. It **never over-claims**. When the Gate
 //! cannot be reached, or the source is unavailable, the answer is
 //! [`InventoryState::Unknown`] — not `Stale`, and not `Current`. A console that
 //! shows "current" because it failed to ask is worse than one that admits it
@@ -46,7 +46,7 @@ pub struct InventoryItem {
     /// The hash of the bytes admitted. **The identity**: two names for the same
     /// bytes are one thing, and the console groups on this.
     pub hash: ContentHash,
-    /// The admission this came from, so a person can find the broker's record.
+    /// The admission this came from, so a person can find the Gate's record.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub admission_id: Option<AdmissionId>,
     pub admitted_at: DateTime<Utc>,
@@ -392,9 +392,9 @@ mod tests {
             );
         }
 
-        // The distinction the whole module exists for: not reaching the broker
+        // The distinction the whole module exists for: not reaching the Gate
         // must never read as "unchanged".
-        let unreachable = SluseError::BrokerUnreachable { detail: "connection refused".into() };
+        let unreachable = SluseError::GateUnreachable { detail: "connection refused".into() };
         assert_eq!(classify(item, Err(unreachable)), InventoryState::Unknown);
         assert!(!InventoryState::Unknown.is_answered());
     }

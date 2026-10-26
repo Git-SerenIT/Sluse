@@ -9,7 +9,7 @@
 //! with its own data folder. It has no IPC: no capability names it, and it
 //! only ever shows Microsoft's pages. Its one job is to catch the redirect to
 //! [`NATIVE_REDIRECT`](sluse_proto::wire::NATIVE_REDIRECT) before it loads and
-//! read the code from it. **The code goes to the service, and the broker
+//! read the code from it. **The code goes to the service, and the Gate
 //! redeems it**, so the person's tokens never pass through this process.
 //!
 //! A silent attempt comes first, hidden, with `prompt=none`; only if Entra

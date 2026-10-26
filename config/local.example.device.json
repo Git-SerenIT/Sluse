@@ -1,11 +1,11 @@
 {
   "boxId": "box-local-example",
   "environment": "local",
-  "broker": {
+  "gate": {
     "listen": "127.0.0.1:7580",
     "url": "https://127.0.0.1:7580",
-    "certPath": "certs\\broker.pem",
-    "keyPath": "certs\\broker.key",
+    "certPath": "certs\\gate.pem",
+    "keyPath": "certs\\gate.key",
     "clientCaPath": "certs\\client-ca.pem",
     "certPin": "0000000000000000000000000000000000000000000000000000000000000000"
   },
@@ -19,6 +19,6 @@
   "journalDir": "journal",
   "audit": {
     "sink": "jsonl",
-    "path": "audit\\broker.jsonl"
+    "path": "audit\\gate.jsonl"
   }
 }

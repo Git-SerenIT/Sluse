@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 SerenIT ApS and Prompted EV
 
-//! The endpoint against a real broker, over a real handshake.
+//! The endpoint against a real Gate, over a real handshake.
 //!
-//! The broker's own `tests/mtls.rs` proves the listener with a hand-rolled
+//! The Gate's own `tests/mtls.rs` proves the listener with a hand-rolled
 //! rustls client, which is the right tool for asserting what the *handshake*
 //! does. This proves a different thing, and the more important one for M3: that
-//! **the client the guest actually ships** — `BrokerClient`, reqwest,
+//! **the client the guest actually ships** — `GateClient`, reqwest,
 //! `PinnedVerifier` — can talk to it, and that the two records join.
 //!
-//! The thing to watch here is [`a_client_without_the_pin_is_not_talking_to_the_broker`].
+//! The thing to watch here is [`a_client_without_the_pin_is_not_talking_to_the_gate`].
 //! reqwest 0.13's `rustls` feature, given no explicit roots, installs
 //! `rustls-platform-verifier` — the operating system root store. If
 //! `use_preconfigured_tls` were ever dropped from `build_client`, the guest would
@@ -18,29 +18,29 @@
 
 use std::sync::Arc;
 
-use sluse_broker::app::Broker;
-use sluse_broker::audit::MemorySink;
-use sluse_broker::{http, preflight, scope, serve, tls};
-use sluse_endpoint::broker_client::BrokerClient;
+use sluse_gate_core::app::Core;
+use sluse_gate_core::audit::MemorySink;
+use sluse_gate_core::{http, preflight, scope, tls};
+use sluse_endpoint::gate_client::GateClient;
 use sluse_endpoint::journal::Journal;
 use sluse_proto::{ContentHash, Loaded, Op, Outcome, SluseError};
 
 mod certs;
 
 // ---------------------------------------------------------------------------
-// A broker and a config that names it
+// A Gate and a config that names it
 // ---------------------------------------------------------------------------
 
 struct Fixture {
     dir: tempfile::TempDir,
     loaded: Loaded,
     sink: Arc<MemorySink>,
-    running: serve::Running,
+    served: sluse_gate_front::testing::Served,
 }
 
 impl Drop for Fixture {
     fn drop(&mut self) {
-        self.running.shutdown_now();
+        self.served.gate.shutdown_now();
     }
 }
 
@@ -60,8 +60,8 @@ async fn start() -> Fixture {
     start_with_pin(None).await
 }
 
-/// `pin_override` replaces `broker.certPin` in the config the *endpoint* reads,
-/// so the client expects a certificate the broker will not present.
+/// `pin_override` replaces `gate.certPin` in the config the *endpoint* reads,
+/// so the client expects a certificate the Gate will not present.
 async fn start_with_pin(pin_override: Option<ContentHash>) -> Fixture {
     tls::install_provider();
 
@@ -77,39 +77,38 @@ async fn start_with_pin(pin_override: Option<ContentHash>) -> Fixture {
     std::fs::write(root.join("in-scope").join("docs").join("blåbær grød.txt"), b"danish").unwrap();
     std::fs::write(root.join("elsewhere").join("secret.txt"), b"secret").unwrap();
 
-    // The broker enforces from its own config, which always carries the true
+    // The Gate enforces from its own config, which always carries the true
     // pin. Only the endpoint's copy is tampered with below.
-    let broker_config = dir.path().join("broker.json");
-    certs::write_config(&broker_config, &root, &c.pin);
-    let loaded_broker: Loaded = sluse_proto::config::load(&broker_config).unwrap();
+    let gate_config = dir.path().join("gate.json");
+    certs::write_config(&gate_config, &root, &c.pin);
+    let loaded_gate: Loaded = sluse_proto::config::load(&gate_config).unwrap();
 
     let guest_pin = pin_override.unwrap_or_else(|| c.pin.clone());
     let guest_config = dir.path().join("guest.json");
     certs::write_config(&guest_config, &root, &guest_pin);
     let loaded_guest: Loaded = sluse_proto::config::load(&guest_config).unwrap();
 
-    let compiled = scope::compile(&loaded_broker).unwrap();
-    let server_tls = tls::server_config(&loaded_broker).unwrap();
-    let posture = preflight::run(&loaded_broker, preflight::CertCheck::Ok { pin: c.pin.clone() });
-    assert!(posture.gate_passed());
+    let compiled = scope::compile(&loaded_gate).unwrap();
+    let posture = preflight::run(&loaded_gate, preflight::CertCheck::Ok { pin: c.pin.clone() });
+    assert!(posture.required_passed());
 
     let sink = Arc::new(MemorySink::new());
-    let broker = Arc::new(Broker::new(loaded_broker, compiled, sink.clone(), posture));
+    let front = sluse_gate_core::front::gate_start(&loaded_gate, "127.0.0.1:0", false).unwrap();
+    let gate = Arc::new(Core::new(loaded_gate, compiled, sink.clone(), posture));
 
-    let listener = serve::bind("127.0.0.1:0").unwrap();
-    let addr = listener.local_addr().unwrap();
-    let (running, _task) = serve::serve(listener, server_tls.config, http::router(broker)).unwrap();
+    let served = sluse_gate_front::testing::serve(front, http::router(gate)).await;
+    let addr = served.addr();
 
     // The config was written with a placeholder port; point the guest's copy at
     // the ephemeral one the OS chose.
     let mut loaded = loaded_guest;
-    loaded.config.broker.url = format!("https://localhost:{}", addr.port());
+    loaded.config.gate.url = format!("https://localhost:{}", addr.port());
 
-    Fixture { dir, loaded, sink, running }
+    Fixture { dir, loaded, sink, served }
 }
 
-async fn connect(fx: &Fixture) -> (BrokerClient, sluse_proto::Health) {
-    BrokerClient::connect(&fx.loaded).await.expect("the endpoint should reach the broker")
+async fn connect(fx: &Fixture) -> (GateClient, sluse_proto::Health) {
+    GateClient::connect(&fx.loaded).await.expect("the endpoint should reach the Gate")
 }
 
 // ---------------------------------------------------------------------------
@@ -117,35 +116,35 @@ async fn connect(fx: &Fixture) -> (BrokerClient, sluse_proto::Health) {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_client_with_the_right_pin_reaches_the_broker() {
+async fn a_client_with_the_right_pin_reaches_the_gate() {
     let fx = start().await;
     let (_client, health) = connect(&fx).await;
 
     assert!(health.ok);
     assert_eq!(health.box_id.as_str(), "box-local-test");
-    // The session comes from the broker; the guest does not choose it.
+    // The session comes from the Gate; the guest does not choose it.
     assert!(health.session_id.as_str().starts_with("sess-"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_client_without_the_pin_is_not_talking_to_the_broker() {
-    // The guest's config names a certificate the broker will never present.
+async fn a_client_without_the_pin_is_not_talking_to_the_gate() {
+    // The guest's config names a certificate the Gate will never present.
     let fx = start_with_pin(Some(ContentHash::of(b"some other certificate"))).await;
 
-    let err = BrokerClient::connect(&fx.loaded)
+    let err = GateClient::connect(&fx.loaded)
         .await
-        .expect_err("a broker that is not the pinned one must not be talked to");
+        .expect_err("a Gate that is not the pinned one must not be talked to");
 
     // This is also the test that fails if `use_preconfigured_tls` is ever
     // dropped: without it reqwest would verify against the OS root store, this
     // handshake would fail for an unrelated reason or — on a machine where the
     // certificate happened to chain — succeed.
-    assert_eq!(err.reason_code(), "BROKER_UNREACHABLE");
+    assert_eq!(err.reason_code(), "GATE_UNREACHABLE");
     assert!(
         err.to_string().contains("pin"),
         "the failure should name the pin, not just fail: {err}"
     );
-    assert!(fx.sink.records().is_empty(), "nothing reached the broker");
+    assert!(fx.sink.records().is_empty(), "nothing reached the Gate");
 }
 
 // ---------------------------------------------------------------------------
@@ -153,17 +152,17 @@ async fn a_client_without_the_pin_is_not_talking_to_the_broker() {
 // ---------------------------------------------------------------------------
 
 /// A resolved path is a header value, and header values are ASCII. Until
-/// 2026-09-25 the broker dropped a non-ASCII one silently, so a file with a
+/// 2026-09-25 the Gate dropped a non-ASCII one silently, so a file with a
 /// Danish name reached the guest's journal with no resolved path at all.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_danish_file_name_reaches_the_journal_as_the_broker_resolved_it() {
+async fn a_danish_file_name_reaches_the_journal_as_the_gate_resolved_it() {
     let fx = start().await;
     let (client, _) = connect(&fx).await;
     let admitted = client.read("fixture/in-scope/docs/blåbær grød.txt").await.unwrap();
     assert_eq!(admitted.value, b"danish");
-    let broker_rec = fx.sink.records().into_iter().find(|r| r.op == Op::Read).unwrap();
+    let gate_rec = fx.sink.records().into_iter().find(|r| r.op == Op::Read).unwrap();
     assert!(admitted.resolved.ends_with("blåbær grød.txt"), "{}", admitted.resolved);
-    assert_eq!(Some(admitted.resolved), broker_rec.path_resolved);
+    assert_eq!(Some(admitted.resolved), gate_rec.path_resolved);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -190,24 +189,24 @@ async fn a_read_produces_two_records_that_join_on_one_admission_with_equal_hashe
         .admitted(admitted.admission_id.clone(), admitted.hash.clone(), admitted.bytes),
     );
 
-    // Invariant 7: the broker hashed what it sent, the endpoint hashed what it
+    // Invariant 7: the Gate hashed what it sent, the endpoint hashed what it
     // received, and neither took the other's word for it — the hash is
     // deliberately not on the wire.
-    let broker_rec = fx
+    let gate_rec = fx
         .sink
         .records()
         .into_iter()
         .find(|r| r.op == Op::Read && r.outcome == Outcome::Admitted)
-        .expect("the broker recorded the admission");
+        .expect("the Gate recorded the admission");
     let endpoint_rec = &journal.records()[0];
 
-    assert_eq!(broker_rec.admission_id, endpoint_rec.admission_id, "the join key");
-    assert_eq!(broker_rec.hash, endpoint_rec.hash, "both sides hashed the same bytes");
-    assert_eq!(broker_rec.hash, Some(ContentHash::of(b"a note in scope")));
-    assert_eq!(broker_rec.bytes, endpoint_rec.bytes);
+    assert_eq!(gate_rec.admission_id, endpoint_rec.admission_id, "the join key");
+    assert_eq!(gate_rec.hash, endpoint_rec.hash, "both sides hashed the same bytes");
+    assert_eq!(gate_rec.hash, Some(ContentHash::of(b"a note in scope")));
+    assert_eq!(gate_rec.bytes, endpoint_rec.bytes);
     // And the two writers are distinguishable, which is the whole two-record
     // design: one is the host's account, one is the guest's.
-    assert_eq!(broker_rec.writer, sluse_proto::Writer::Broker);
+    assert_eq!(gate_rec.writer, sluse_proto::Writer::Core);
     assert_eq!(endpoint_rec.writer, sluse_proto::Writer::Endpoint);
 }
 
@@ -226,8 +225,8 @@ async fn a_fetch_streams_to_the_workspace_and_hashes_what_it_wrote() {
     assert_eq!(admitted.hash, ContentHash::of(b"a note in scope"));
     assert_eq!(admitted.bytes, 15);
 
-    let broker_rec = fx.sink.records().into_iter().find(|r| r.op == Op::Fetch).unwrap();
-    assert_eq!(broker_rec.hash, Some(admitted.hash));
+    let gate_rec = fx.sink.records().into_iter().find(|r| r.op == Op::Fetch).unwrap();
+    assert_eq!(gate_rec.hash, Some(admitted.hash));
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +234,7 @@ async fn a_fetch_streams_to_the_workspace_and_hashes_what_it_wrote() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn the_broker_keeps_the_reason_and_the_agent_gets_one_message() {
+async fn the_gate_keeps_the_reason_and_the_agent_gets_one_message() {
     let fx = start().await;
     let (client, _) = connect(&fx).await;
 
@@ -350,7 +349,7 @@ async fn a_delivery_carries_the_lineage_of_the_whole_session() {
     assert_eq!(std::fs::read_dir(fx.artifacts()).unwrap().count(), 2);
 
     // A declared source the delivery's admitted set does not hold is refused
-    // whole, by the broker as well as the endpoint (D-055).
+    // whole, by the Gate as well as the endpoint (D-055).
     let stray = sluse_proto::LineageItem { hash: sluse_proto::ContentHash::of(b"never"), ..lineage[0].clone() };
     let refused = client.publish(&[("x.md".to_owned(), b"x".to_vec(), vec![stray])], lineage).await.unwrap_err();
     assert_eq!(refused.reason_code(), "SOURCE_NOT_ADMITTED");
@@ -389,7 +388,7 @@ async fn a_restart_rejoins_the_run_so_lineage_and_the_volume_window_continue() {
     drop(journal);
     drop(client);
 
-    // Second process: it finds the run on disk and the broker still holds it.
+    // Second process: it finds the run on disk and the Gate still holds it.
     let remembered = sluse_endpoint::session::remembered(&workspace).unwrap();
     assert_eq!(remembered, session);
 
@@ -397,7 +396,7 @@ async fn a_restart_rejoins_the_run_so_lineage_and_the_volume_window_continue() {
     let resumed_client = fresh.with_session(remembered.clone());
     assert!(
         resumed_client.config_view().await.is_ok(),
-        "the broker should still recognise a session it issued minutes ago"
+        "the Gate should still recognise a session it issued minutes ago"
     );
 
     let resumed = sluse_endpoint::session::attach(
@@ -417,7 +416,7 @@ async fn a_restart_rejoins_the_run_so_lineage_and_the_volume_window_continue() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_session_the_broker_never_issued_is_refused() {
+async fn a_session_the_gate_never_issued_is_refused() {
     let fx = start().await;
     let (client, _) = connect(&fx).await;
 

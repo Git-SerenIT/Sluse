@@ -95,13 +95,18 @@
         <!-- The lifecycle service (D-027): SYSTEM, automatic. -->
         <ServiceInstall Name="Sluse"
                         DisplayName="Sluse lifecycle service"
-                        Description="Opens each user's Sluse box and runs the broker."
+                        Description="Opens each user's Sluse box and runs Sluse Gate."
                         Type="ownProcess" Start="auto" Account="LocalSystem" ErrorControl="normal"
                         Arguments="service" />
         <ServiceControl Id="SluseService" Name="Sluse" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
       </Component>
       <Component>
-        <File Source="$(var.Stage)\bin\sluse-broker.exe" KeyPath="yes" />
+        <File Source="$(var.Stage)\bin\sluse-gate-core.exe" KeyPath="yes" />
+      </Component>
+      <!-- Gate Front (D-071): started by Gate Core as LocalService; what the
+           box's firewall rule names. -->
+      <Component>
+        <File Source="$(var.Stage)\bin\sluse-gate-front.exe" KeyPath="yes" />
       </Component>
       <Component>
         <File Source="$(var.Stage)\bin\sluse-endpoint.exe" KeyPath="yes" />

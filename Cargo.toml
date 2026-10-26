@@ -13,7 +13,7 @@
 # ownership meeting may rename all of this; renaming a working prototype is
 # cheaper than not having one.
 #
-# Build order, per docs/sluse_prototype.md: sluse-proto -> sluse-broker (with
+# Build order, per docs/sluse_prototype.md: sluse-proto -> sluse-gate-core (with
 # `sluse devcert` out of sluse-lifecycle) -> sluse-endpoint -> the rest of
 # sluse-lifecycle -> the console. Only sluse-proto is built today (M1); the other
 # three are members from the start so the workspace is whole and so a shared type
@@ -23,7 +23,8 @@
 resolver = "2"
 members = [
     "crates/sluse-proto",      # M1 — the shared contract
-    "crates/sluse-broker",     # M2 — mTLS listener, sources, scope, audit, volume
+    "crates/sluse-gate-core",  # M2, D-071 — tokens, sources, scope, audit, volume; as SYSTEM
+    "crates/sluse-gate-front", # D-071 — the box's TLS, request parsing, the egress proxy; no tokens
     "crates/sluse-endpoint",   # M3 — MCP over stdio; M5 — the console's API
     "crates/sluse-lifecycle",  # M2 devcert, M4 check/start/stop/status
     "crates/sluse-admin",      # D-039 slice 4 — setup's engine
@@ -35,7 +36,7 @@ members = [
 # number is a claim about proven-ness, not a record of effort.
 #
 # Human owns version bumps (CLAUDE.md, Human-owned). Nothing automated edits this.
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 # Measured from the locked graph, never estimated from direct dependencies and
 # never copied from Chaperone (D-010 point 6). Chaperone's own MSRV line was
@@ -63,7 +64,13 @@ edition = "2021"
 # **Re-measured 2026-10-05**, after `sluse-admin` joined: still 1.88.0, for
 # both targets, from time, jsonwebtoken, darling and rcgen. The shell is its
 # own workspace and declares its own floor (`ui/shell/src-tauri/Cargo.toml`).
-rust-version = "1.88.0"
+#
+# **Re-measured 2026-10-26**, after rmcp 2.2 to 3.7 (D-071 slice 1): **1.89.0**,
+# from uuid 1.29.0, which rmcp's `server` feature now pulls in (`uuid = "1"`)
+# for the endpoint, on both targets. Pinning an older uuid in the lock would
+# keep 1.88.0 and break at the next `cargo update`; the floor is measured, so
+# it moves.
+rust-version = "1.89.0"
 # Apache-2.0 for the box (D-005). Which entity grants it, and the NOTICE text,
 # are Q-8 and not settled; there is no LICENSE or NOTICE file at the root yet
 # because writing one would decide Q-8 by accident.
@@ -77,9 +84,10 @@ publish = false
 # serde, rustls or chrono than the contract they both speak.
 #
 # Versions are current as of 2026-09-14 and were measured, not inherited from
-# Chaperone (D-010 point 6). The one deliberate pin is rmcp: the 2.2 line is what
-# the S-2 stub's tool handlers are written against, and porting them is M3's job
-# while the 3.x upgrade is its own.
+# Chaperone (D-010 point 6). rmcp moved from 2.2 to 3.7 on 2026-10-26 (D-071):
+# 3.x speaks MCP 2026-07-28 as well as the `initialize` versions back to
+# 2024-11-05, and Gate Core's MCP client needs it (3.6.0 or later for the
+# fallback fixes, `docs/research/2026-10-26-mcp-transport.md`).
 [workspace.dependencies]
 # --- contract -------------------------------------------------------------
 serde = { version = "1", features = ["derive"] }
@@ -152,8 +160,13 @@ reqwest = { version = "0.13", default-features = false, features = [
     "stream",
     "multipart",
 ] }
-rmcp = { version = "2.2", features = ["server", "macros", "transport-io", "schemars"] }
+rmcp = { version = "3.7", features = ["server", "macros", "transport-io", "schemars"] }
 include_dir = "0.7"
+# Gate Front and its parent speak HTTP/2 over Front's stdin and stdout (D-071).
+# Already in the graph under axum and reqwest, at these versions.
+hyper = { version = "1", features = ["client", "server", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "service"] }
+http-body-util = "0.1"
 # The read route's body is a hand-written `Stream` so it can hash as it streams
 # and write its record once, at the end, whichever way the stream ends. Already
 # in the graph under axum and hyper.
@@ -218,6 +231,11 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 # --- dev ------------------------------------------------------------------
 tempfile = "3"
 tower = "0.5"
+
+# No incremental cache: on the development VM it grew to 17 GB and filled the
+# disk (2026-10-26). A small edit rebuilds the crate it touches in full.
+[profile.dev]
+incremental = false
 
 [profile.release]
 opt-level = 2

@@ -55,7 +55,7 @@ export const kindIcon = (kind: string): string =>
 
 /**
  * A publish's folder in Sluse Artifacts and the file's name in it, from its
- * record's path, `artifacts/<folder>/<name>`, as the broker names the folder
+ * record's path, `artifacts/<folder>/<name>`, as Gate Core names the folder
  * on the host (D-031 point 5 amended): `2026-10-19 14.32 q3-variance`.
  */
 export function folderOf(path: string, artifact?: string): string | undefined {
@@ -87,7 +87,7 @@ export function reasonWords(code: string | undefined, outcome: string): string {
     SIGN_IN_REQUIRED: "Sluse needed a sign-in it did not have",
     TOO_LARGE: "Larger than Sluse lets into the box",
     NOT_FOUND: "Not there at the source",
-    BROKER_UNREACHABLE: "Sluse on your computer did not answer",
+    GATE_UNREACHABLE: "Sluse on your computer did not answer",
   };
   if (code && said[code]) return said[code];
   // A code with no words yet: said plainly, with the code under it.

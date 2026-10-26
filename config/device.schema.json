@@ -5,20 +5,16 @@
   "type": "object",
   "properties": {
     "artifacts": {
-      "description": "Where published artifacts land. The single write path. On a device the\nbroker writes to the signed-in user's `%USERPROFILE%\\Sluse Artifacts`\ninstead, as that user (D-031); this path is used where there is no user\ntoken, as in LOCAL.",
+      "description": "Where published artifacts land. The single write path. On a device the\nGate writes to the signed-in user's `%USERPROFILE%\\Sluse Artifacts`\ninstead, as that user (D-031); this path is used where there is no user\ntoken, as in LOCAL.",
       "type": "string"
     },
     "audit": {
-      "description": "Where the broker writes audit records.",
+      "description": "Where the Gate writes audit records.",
       "$ref": "#/$defs/AuditConfig"
     },
     "boxId": {
       "description": "Which box this is. Carried on every audit record.",
       "$ref": "#/$defs/BoxId"
-    },
-    "broker": {
-      "description": "Where the broker listens and what certificate it presents.",
-      "$ref": "#/$defs/BrokerConfig"
     },
     "endpoint": {
       "description": "What the endpoint presents, and where the console listens.",
@@ -27,6 +23,10 @@
     "environment": {
       "description": "Which environment this box runs in. Drives `not_applicable` rows in\nthe preflight report and is stamped on every result file, so a LOCAL\nresult cannot be read as saying something about identity or the guest\nboundary (D-010). A fact about how the box was made, so the device's.",
       "$ref": "#/$defs/Environment"
+    },
+    "gate": {
+      "description": "Where the Gate listens and what certificate it presents.",
+      "$ref": "#/$defs/GateConfig"
     },
     "journalDir": {
       "description": "Where the endpoint writes its per-session journal files.",
@@ -48,7 +48,7 @@
   "required": [
     "boxId",
     "environment",
-    "broker",
+    "gate",
     "endpoint",
     "artifacts",
     "workspace",
@@ -86,7 +86,7 @@
           "const": "jsonl"
         },
         {
-          "description": "The Windows Event Log. **v1's sink** (`docs/audit.md`): every customer's\nSIEM agent already collects it, so integration work is zero. Windows\nonly; elsewhere the broker refuses to start with it.",
+          "description": "The Windows Event Log. **v1's sink** (`docs/audit.md`): every customer's\nSIEM agent already collects it, so integration work is zero. Windows\nonly; elsewhere the Gate refuses to start with it.",
           "type": "string",
           "const": "eventlog"
         }
@@ -95,45 +95,6 @@
     "BoxId": {
       "description": "Which box. From the config, carried on every audit record\n(`docs/audit.md`, Fields). Not minted: a human or the platform names it.",
       "type": "string"
-    },
-    "BrokerConfig": {
-      "description": "Where the broker listens and what it presents.",
-      "type": "object",
-      "properties": {
-        "certPath": {
-          "description": "Broker leaf certificate (PEM).",
-          "type": "string"
-        },
-        "certPin": {
-          "description": "SHA-256 of the broker's leaf certificate in DER form.\n\nThe endpoint trusts this one certificate and no CA bundle at all. A\npublic root store here would be a way for something in the guest to be\ntalked into trusting a broker that is not the broker.",
-          "$ref": "#/$defs/ContentHash"
-        },
-        "clientCaPath": {
-          "description": "The CA whose certificates the broker accepts from clients. mTLS is\nmandatory: a client without one does not complete a handshake.",
-          "type": "string"
-        },
-        "keyPath": {
-          "description": "Its private key (PEM).",
-          "type": "string"
-        },
-        "listen": {
-          "description": "Socket address to bind, e.g. `127.0.0.1:7580`.",
-          "type": "string"
-        },
-        "url": {
-          "description": "The base URL the endpoint dials, e.g. `https://127.0.0.1:7580`.",
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "listen",
-        "url",
-        "certPath",
-        "keyPath",
-        "clientCaPath",
-        "certPin"
-      ]
     },
     "ContentHash": {
       "description": "A SHA-256 digest in lowercase hex. On the wire it is a bare string.",
@@ -144,7 +105,7 @@
       "type": "object",
       "properties": {
         "clientCertPath": {
-          "description": "Endpoint client certificate (PEM), signed by the broker's client CA.",
+          "description": "Endpoint client certificate (PEM), signed by the Gate's client CA.",
           "type": "string"
         },
         "clientKeyPath": {
@@ -176,6 +137,45 @@
           "type": "string",
           "const": "demo"
         }
+      ]
+    },
+    "GateConfig": {
+      "description": "Where the Gate listens and what it presents.",
+      "type": "object",
+      "properties": {
+        "certPath": {
+          "description": "Gate leaf certificate (PEM).",
+          "type": "string"
+        },
+        "certPin": {
+          "description": "SHA-256 of the Gate's leaf certificate in DER form.\n\nThe endpoint trusts this one certificate and no CA bundle at all. A\npublic root store here would be a way for something in the guest to be\ntalked into trusting a Gate that is not the Gate.",
+          "$ref": "#/$defs/ContentHash"
+        },
+        "clientCaPath": {
+          "description": "The CA whose certificates the Gate accepts from clients. mTLS is\nmandatory: a client without one does not complete a handshake.",
+          "type": "string"
+        },
+        "keyPath": {
+          "description": "Its private key (PEM).",
+          "type": "string"
+        },
+        "listen": {
+          "description": "Socket address to bind, e.g. `127.0.0.1:7580`.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The base URL the endpoint dials, e.g. `https://127.0.0.1:7580`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "listen",
+        "url",
+        "certPath",
+        "keyPath",
+        "clientCaPath",
+        "certPin"
       ]
     }
   }

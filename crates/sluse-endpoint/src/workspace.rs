@@ -13,7 +13,7 @@
 //! keeps the journal describing what actually happened, and keeps a publish from
 //! delivering a file the agent never fetched.
 //!
-//! The enforcing decision is always the broker's, on the far side of the
+//! The enforcing decision is always the Gate's, on the far side of the
 //! boundary (invariant 2). This is hygiene.
 
 use std::path::{Component, Path, PathBuf};
@@ -28,10 +28,10 @@ use crate::manifest::{self, Manifest};
 /// fetched `tender/docs/bid.md` finds it at a path it can predict, and so two
 /// files of the same name from different sources do not collide.
 ///
-/// Split as the broker splits a request: `/` and `\` alike, empty and `.`
+/// Split as the Gate splits a request: `/` and `\` alike, empty and `.`
 /// segments dropped. Joined whole, `src//x` was an absolute path that left the
 /// workspace, and `a\b` a file named with a backslash (review R-30). A `..`
-/// never gets here: the broker refuses it before a byte is written.
+/// never gets here: the Gate refuses it before a byte is written.
 pub fn admitted_path(workspace: &Path, source: &SourceName, rel: &str) -> PathBuf {
     let mut at = workspace.join("admitted").join(source.as_str());
     for part in rel.split(['/', '\\']).filter(|p| !p.is_empty() && *p != ".") {
@@ -194,7 +194,7 @@ pub struct Local {
 /// 500 MB file must not become 500 MB of context through the side door — then
 /// hash what was read and pick up the sidecar if there is one.
 ///
-/// Nothing here is a boundary; see this module's note. The broker is not asked,
+/// Nothing here is a boundary; see this module's note. The Gate is not asked,
 /// because the bytes are already inside the box and were admitted once already.
 pub fn read_local(workspace: &Path, raw: &str, limit: u64) -> Result<Local, SluseError> {
     let file = resolve(workspace, raw)?;
@@ -236,7 +236,7 @@ mod tests {
 
     /// Review R-30: every spelling of one request lands on one path, inside.
     #[test]
-    fn a_request_lands_where_the_broker_resolved_it_however_it_is_spelled() {
+    fn a_request_lands_where_the_gate_resolved_it_however_it_is_spelled() {
         let ws = Path::new("/ws");
         let source = SourceName::new_unchecked("fixture");
         let want = admitted_path(ws, &source, "docs/bid.md");

@@ -7,7 +7,7 @@
 //!
 //! Signs in to Microsoft Graph by device code, as a tenant administrator,
 //! then:
-//! 1. finds or makes **one registration, "Sluse broker", a public client**
+//! 1. finds or makes **one registration, "Sluse Gate", a public client**
 //!    (D-036): the host's sign-in redirects to Entra's native-client page,
 //!    and it holds Graph's delegated `Files.Read.All`, `Sites.Read.All`,
 //!    `offline_access`, `openid` and `profile`. No application permissions,
@@ -37,12 +37,12 @@ use crate::graph::Graph;
 /// "Microsoft Graph Command Line Tools", Microsoft's public client.
 pub const GRAPH_CLI_CLIENT: &str = "14d82eec-204b-4c2f-b7e8-296a70dab67e";
 const GRAPH_APP: &str = "00000003-0000-0000-c000-000000000000";
-pub const BROKER_NAME: &str = "Sluse broker";
+pub const GATE_NAME: &str = "Sluse Gate";
 /// The OBO-era sign-in page's registration, deleted by setup (D-036).
 pub const ENTRY_NAME: &str = "Sluse entry";
 /// The delegated Graph permissions Sluse's app holds, and so what admin
 /// consent must cover ([`crate::consent`]).
-pub const BROKER_GRAPH_SCOPES: [&str; 5] = ["Files.Read.All", "Sites.Read.All", "offline_access", "openid", "profile"];
+pub const GATE_GRAPH_SCOPES: [&str; 5] = ["Files.Read.All", "Sites.Read.All", "offline_access", "openid", "profile"];
 
 pub struct Options {
     pub out: PathBuf,
@@ -64,7 +64,7 @@ pub struct Options {
 
 pub struct Outcome {
     pub tenant: String,
-    pub broker_app: String,
+    pub gate_app: String,
     /// Its service principal's object id: what consent and assignment name.
     pub service_principal: String,
     /// What this run made or removed, for the person to read.
@@ -170,7 +170,7 @@ pub async fn setup(http: &reqwest::Client, token: String, o: &Options) -> Result
     Ok(Outcome {
         version,
         tenant,
-        broker_app: r.app_id,
+        gate_app: r.app_id,
         service_principal: r.service_principal,
         created: r.changed,
         package: o.out.clone(),
@@ -208,14 +208,14 @@ pub async fn register(g: &Graph) -> Result<Registered, String> {
         Ok(Value::Array(scopes.iter().map(|s| Ok(json!({ "id": graph_scope(s)?, "type": "Scope" }))).collect::<Result<_, String>>()?))
     };
 
-    let broker = g.app(BROKER_NAME, &mut created).await?;
-    let broker_id = broker["id"].as_str().ok_or("the broker application has no id")?.to_owned();
-    let broker_app = broker["appId"].as_str().ok_or("the broker application has no appId")?.to_owned();
+    let gate = g.app(GATE_NAME, &mut created).await?;
+    let gate_id = gate["id"].as_str().ok_or("the Gate application has no id")?.to_owned();
+    let gate_app = gate["appId"].as_str().ok_or("the Gate application has no appId")?.to_owned();
     let patch = |id: &str, body: Value| g.call(reqwest::Method::PATCH, format!("/applications/{id}"), Some(body));
 
     // OBO's API scope goes (D-036). Entra refuses to delete an enabled scope,
     // so an older setup's is disabled first, with its pre-authorisation.
-    let scopes = broker["api"]["oauth2PermissionScopes"].as_array().cloned().unwrap_or_default();
+    let scopes = gate["api"]["oauth2PermissionScopes"].as_array().cloned().unwrap_or_default();
     if !scopes.is_empty() {
         let disabled: Vec<Value> = scopes
             .into_iter()
@@ -224,10 +224,10 @@ pub async fn register(g: &Graph) -> Result<Registered, String> {
                 s
             })
             .collect();
-        patch(&broker_id, json!({ "api": { "oauth2PermissionScopes": disabled, "preAuthorizedApplications": [] } })).await?;
+        patch(&gate_id, json!({ "api": { "oauth2PermissionScopes": disabled, "preAuthorizedApplications": [] } })).await?;
         created.push("removed: the access_as_user scope (OBO)".into());
     }
-    if broker["keyCredentials"].as_array().is_some_and(|k| !k.is_empty()) {
+    if gate["keyCredentials"].as_array().is_some_and(|k| !k.is_empty()) {
         created.push("removed: the certificate credential".into());
     }
     // An app found by its name may have been made by anyone (review R-10):
@@ -235,13 +235,13 @@ pub async fn register(g: &Graph) -> Result<Registered, String> {
     // as it, and it has no redirect but the native one, before it is
     // consented to for the whole tenant. Every run, so one added later goes
     // at the next. Managing it needs the roles setup asks for, not ownership.
-    let at = format!("/applications/{broker_id}");
+    let at = format!("/applications/{gate_id}");
     for owner in g.list(format!("{at}/owners?$select=id")).await? {
         let Some(id) = owner["id"].as_str() else { continue };
         g.call(reqwest::Method::DELETE, format!("{at}/owners/{id}/$ref"), None).await?;
         created.push(format!("removed: owner {id}"));
     }
-    for secret in broker["passwordCredentials"].as_array().cloned().unwrap_or_default() {
+    for secret in gate["passwordCredentials"].as_array().cloned().unwrap_or_default() {
         let Some(key) = secret["keyId"].as_str() else { continue };
         g.call(reqwest::Method::POST, format!("{at}/removePassword"), Some(json!({ "keyId": key }))).await?;
         created.push(format!("removed: a client secret ({key})"));
@@ -251,7 +251,7 @@ pub async fn register(g: &Graph) -> Result<Registered, String> {
         g.call(reqwest::Method::DELETE, format!("{at}/federatedIdentityCredentials/{id}"), None).await?;
         created.push(format!("removed: a federated credential ({id})"));
     }
-    patch(&broker_id, json!({
+    patch(&gate_id, json!({
         "signInAudience": "AzureADMyOrg",
         "web": { "redirectUris": [], "implicitGrantSettings": { "enableIdTokenIssuance": false, "enableAccessTokenIssuance": false } },
         "spa": { "redirectUris": [] },
@@ -260,13 +260,13 @@ pub async fn register(g: &Graph) -> Result<Registered, String> {
         "isFallbackPublicClient": true,
         "publicClient": { "redirectUris": [sluse_proto::wire::NATIVE_REDIRECT] },
         "keyCredentials": [],
-        "requiredResourceAccess": [{ "resourceAppId": GRAPH_APP, "resourceAccess": access(&BROKER_GRAPH_SCOPES)? }],
+        "requiredResourceAccess": [{ "resourceAppId": GRAPH_APP, "resourceAccess": access(&GATE_GRAPH_SCOPES)? }],
         // D-057: a synced user's AD SID in the ID token, which a domain
         // account's Windows logon is compared with.
         "optionalClaims": { "idToken": [{ "name": "onprem_sid", "essential": false }], "accessToken": [], "saml2Token": [] },
     }))
     .await?;
-    let sp = g.service_principal(&broker_app, &mut created).await?;
+    let sp = g.service_principal(&gate_app, &mut created).await?;
     let service_principal = sp["id"].as_str().ok_or("the service principal has no id")?.to_owned();
 
     // The OBO-era sign-in page's registration, made by an older setup.
@@ -276,7 +276,7 @@ pub async fn register(g: &Graph) -> Result<Registered, String> {
         created.push(format!("deleted: application {ENTRY_NAME:?}"));
     }
 
-    Ok(Registered { app_id: broker_app, service_principal, changed: created })
+    Ok(Registered { app_id: gate_app, service_principal, changed: created })
 }
 
 /// The deployment's package in `out` (D-043), in a folder closed first: the
@@ -372,7 +372,7 @@ fn protect_package(dir: &Path) -> Result<(), String> {
 
 /// The tenant's `sluse.json`, the authored file (D-038 point 2), checked by
 /// the config's own loader. The device half is each device's service's.
-pub fn tenant_config(tenant: &str, broker: &str, o: &Options) -> Result<String, String> {
+pub fn tenant_config(tenant: &str, gate: &str, o: &Options) -> Result<String, String> {
     // A rerun is the same deployment, published again (D-038 point 4).
     let deployment = std::fs::read(o.out.join("sluse.json"))
         .ok()
@@ -390,9 +390,9 @@ pub fn tenant_config(tenant: &str, broker: &str, o: &Options) -> Result<String, 
             "sensitivity": 2,
         }],
         "volume": { "admissions": 25, "windowSeconds": 60, "bytes": 52428800 },
-        "entra": { "tenantId": tenant, "clientId": broker },
+        "entra": { "tenantId": tenant, "clientId": gate },
         // The shipped catalog's default bundles. Not the tenant's SharePoint:
-        // the broker brings its files (D-046), and with it on the list a token
+        // the Gate brings its files (D-046), and with it on the list a token
         // got in the box would have a way there (D-044).
         "egress": {
             "catalog": catalog.version,
@@ -414,7 +414,7 @@ const INSTALL: &str = r#"# SPDX-License-Identifier: Apache-2.0
 #
 # A Sluse deployment's package (D-043): Sluse.msi, this tenant's sluse.json
 # and package.json, installed as SYSTEM by Intune as one Win32 app. No key:
-# the broker is a public client (D-036).
+# the Gate is a public client (D-036).
 #
 #   powershell.exe -NoProfile -ExecutionPolicy Bypass -File Install-Sluse.ps1
 #   powershell.exe -NoProfile -ExecutionPolicy Bypass -File Install-Sluse.ps1 -Uninstall
@@ -619,17 +619,17 @@ mod tests {
 
         let first = setup(&http, token.clone(), &options(&base, &out)).await.unwrap();
         assert_eq!(first.created.len(), 2, "one application, one service principal: {:?}", first.created);
-        let broker = t.lock().unwrap().apps[0].clone();
+        let gate = t.lock().unwrap().apps[0].clone();
         // D-036: a public client, the native redirect, no credential, no API.
-        assert_eq!(broker["isFallbackPublicClient"], true);
-        assert_eq!(broker["publicClient"]["redirectUris"][0], sluse_proto::wire::NATIVE_REDIRECT);
-        assert_eq!(broker["keyCredentials"], json!([]));
-        assert_eq!(broker["identifierUris"], json!([]));
-        assert_eq!(broker["optionalClaims"]["idToken"][0]["name"], "onprem_sid", "D-057");
-        assert_eq!(broker["requiredResourceAccess"][0]["resourceAccess"].as_array().unwrap().len(), 5);
+        assert_eq!(gate["isFallbackPublicClient"], true);
+        assert_eq!(gate["publicClient"]["redirectUris"][0], sluse_proto::wire::NATIVE_REDIRECT);
+        assert_eq!(gate["keyCredentials"], json!([]));
+        assert_eq!(gate["identifierUris"], json!([]));
+        assert_eq!(gate["optionalClaims"]["idToken"][0]["name"], "onprem_sid", "D-057");
+        assert_eq!(gate["requiredResourceAccess"][0]["resourceAccess"].as_array().unwrap().len(), 5);
         let config = sluse_proto::config::load_authored(&std::fs::read(out.join("sluse.json")).unwrap()).unwrap();
         let entra = config.entra.as_ref().unwrap();
-        assert_eq!(entra.client_id, first.broker_app);
+        assert_eq!(entra.client_id, first.gate_app);
         assert_eq!(config.sources[0].scope, ["in-scope"], "--scope reaches the config");
         assert!(config.deployment.is_some(), "setup names the deployment");
         let egress = config.egress.as_ref().expect("setup writes the box's way out");
@@ -672,7 +672,7 @@ mod tests {
     async fn an_app_someone_else_made_under_the_name_is_stripped_before_consent() {
         let (base, t) = stand_in().await;
         t.lock().unwrap().apps.push(json!({
-            "id": "object-0", "appId": "00000000-0000-4000-8000-000000000000", "displayName": BROKER_NAME,
+            "id": "object-0", "appId": "00000000-0000-4000-8000-000000000000", "displayName": GATE_NAME,
             "signInAudience": "AzureADMultipleOrgs",
             "owners": [{ "id": "employee" }],
             "passwordCredentials": [{ "keyId": "secret-1" }],
@@ -703,7 +703,7 @@ mod tests {
         {
             let mut t = t.lock().unwrap();
             t.apps.push(json!({
-                "id": "object-0", "appId": "00000000-0000-4000-8000-000000000000", "displayName": BROKER_NAME,
+                "id": "object-0", "appId": "00000000-0000-4000-8000-000000000000", "displayName": GATE_NAME,
                 "identifierUris": ["api://00000000-0000-4000-8000-000000000000"],
                 "api": { "oauth2PermissionScopes": [{ "id": "s", "value": "access_as_user", "isEnabled": true }],
                          "preAuthorizedApplications": [{ "appId": "entry", "delegatedPermissionIds": ["s"] }] },

@@ -49,11 +49,11 @@ function Kvp-Item($name, $data) {
 }
 
 # D-023, D-039 slice 7: Sluse's records in a log of their own, "Sluse",
-# whose descriptor lets only SYSTEM write (the broker and its proxy are
+# whose descriptor lets only SYSTEM write (Sluse Gate is
 # SYSTEM). An older device's source in the Application log, which any
 # process may write to, moves here; its old records stay where they are.
 # Not proof against an administrator, who can change the descriptor.
-# The SDDL equals sluse_broker::audit::AUDIT_SDDL (a test says so).
+# The SDDL equals sluse_gate_core::audit::AUDIT_SDDL (a test says so).
 function Set-SluseLog {
     $sddl = 'O:BAG:SYD:(A;;0xf0007;;;SY)(A;;0x1;;;BA)(A;;0x1;;;S-1-5-32-573)'
     if ([Diagnostics.EventLog]::SourceExists('Sluse') -and [Diagnostics.EventLog]::LogNameFromSourceName('Sluse', '.') -ne 'Sluse') {
@@ -66,8 +66,8 @@ function Set-SluseLog {
     Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Sluse' -Name CustomSD -Value $sddl
 }
 
-# IT-facing names (Q66): the firewall rule may say "broker".
-$FirewallRule = 'Sluse boxes: broker and proxy (host-only)'
+# IT-facing names (Q66): the firewall rule says "Sluse Gate" (D-071).
+$FirewallRule = 'Sluse boxes: Sluse Gate (host-only)'
 
 # What Hyper-V Manager says about a box (Q67).
 function Box-Notes([string] $who) {
@@ -298,13 +298,13 @@ switch ($a.verb) {
                 if ($LASTEXITCODE -ne 0) { throw "port $p ($part): Windows would not reserve it (netsh exited $LASTEXITCODE)" }
             }
         }
-        # The box reaches the broker and the proxy on the host's address, on
-        # the host's Sluse ports (D-029), for the broker binary only: the
-        # proxy is that binary's --proxy mode.
+        # The box reaches Sluse Gate on the host's address, on the host's
+        # Sluse ports (D-029), for Gate Front's binary only: Front listens for
+        # the box and runs its proxy; Gate Core faces no network (D-071).
         Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
         New-NetFirewallRule -DisplayName $FirewallRule -Group 'Sluse' -Direction Inbound -Action Allow `
-            -Description "Lets the Sluse boxes on this computer reach Sluse's broker and its proxy on the host-only network Sluse boxes, 192.168.77.0/24, for sluse-broker.exe only. Sluse adds and removes this rule." `
-            -Program $a.broker -Protocol TCP -LocalPort @($a.hostPorts) -LocalAddress $a.hostAddress -Profile Any | Out-Null
+            -Description "Lets the Sluse boxes on this computer reach Sluse Gate on the host-only network Sluse boxes, 192.168.77.0/24, for sluse-gate-front.exe only. Sluse adds and removes this rule." `
+            -Program $a.gate -Protocol TCP -LocalPort @($a.hostPorts) -LocalAddress $a.hostAddress -Profile Any | Out-Null
         Set-SluseLog
         Out-Json @{ restart = $false }
     }
@@ -345,7 +345,7 @@ switch ($a.verb) {
         Out-Json @{ removed = $true }
     }
     'guest-checks' {
-        # Preflight's guest checks, asked of Hyper-V (slice 5). The broker's
+        # Preflight's guest checks, asked of Hyper-V (slice 5). Gate Core's
         # gate takes these from the service, which is the one that can ask.
         $vm = Get-VM -Name $a.vm
         $nics = @(Get-VMNetworkAdapter -VMName $a.vm)

@@ -23,14 +23,14 @@ as root.
 
 | Adversary | Posture | What holds |
 |---|---|---|
-| The agent: over-collection, prompt injection, unintended action | Preventive on scope, detective on volume | It cannot reach a source except through the broker, and never beyond the person's own access. **It can read everything inside its scope.** |
+| The agent: over-collection, prompt injection, unintended action | Preventive on scope, detective on volume | It cannot reach a source except through Sluse Gate, and never beyond the person's own access. **It can read everything inside its scope.** |
 | The user: deliberate misuse | Detective | A tamper-evident record, not a tamper-proof one. A determined insider, or an administrator, can defeat it. |
 
 ## What is claimed, and what is not
 
 | Against the agent | Against the user | Not claimed |
 |---|---|---|
-| Admission scope, preventive: the broker checks every path, and the source's permissions have the last word | An audit trail, tamper-evident | Prevention of exfiltration through the AI provider: the agent can send everything in scope into its conversation |
+| Admission scope, preventive: Sluse Gate checks every path, and the source's permissions have the last word | An audit trail, tamper-evident | Prevention of exfiltration through the AI provider: the agent can send everything in scope into its conversation |
 | Admission volume, **detective only**: bulk admission raises an alert | Provenance for each published artifact: the sources the agent declares, each checked against what it was given | Output from an injected agent that a person then copies or pastes |
 | Network confinement: no route, no DNS, only the listed hosts through a proxy on the host | An inventory of the material Sluse admitted, not of copies something else made | Aggregation risk: what many files together reveal |
 | A single write path out, into Sluse Artifacts on the host | | Data correctness |
@@ -48,9 +48,9 @@ Assertions the design holds to. A change that breaks one is a bug.
    way file content crosses into the box. The clipboard is a separate,
    known channel.
 2. **The box cannot assert its own scope.** Scope comes from the admin's
-   config and is checked by the broker, outside the box.
+   config and is checked by Sluse Gate, outside the box.
 3. **No durable credential for company data exists in the box.** The
-   person's tokens live in the broker on the host, in memory. What does
+   person's tokens live in Gate Core on the host, in memory. What does
    live in the box: the AI runtime's own sign-in, and the box's mTLS
    certificate, which identifies the box, not a person.
 4. **Admission is the control point, not residence.** Once given and
@@ -62,14 +62,25 @@ Assertions the design holds to. A change that breaks one is a bug.
    schema version.
 7. **Audit is uniform.** Every admission is hashed from the bytes received,
    on both sides.
-8. **The box's authority never exceeds the person's own.** Structural: the
-   broker acts as the person.
+8. **The box's authority never exceeds the person's own.** Structural:
+   Gate Core acts as the person.
 
 **Where scope is checked.** The endpoint in the box checks it too, but only
 as advice: it is inside the hostile zone. Its job is to keep what is out of
 scope absent from the agent's view, so there is nothing to route around.
-The broker on the host is the enforcing check, and the source's own
+Gate Core on the host is the enforcing check, and the source's own
 permissions are final.
+
+**Sluse Gate, at two trust levels.** The box reaches only **Gate Front**,
+one per box, which holds no token and runs as LocalService: it terminates
+the box's TLS, parses every request it sends, and runs the egress proxy.
+**Gate Core**, as SYSTEM, holds the person's tokens, reads the sources as
+the person, checks scope again on every request, and writes the Sluse log;
+it has no network listener. Front may refuse; only Core may allow. What
+only Front sees, such as an egress refusal, Core records as Front's claim,
+only as true as Front. Limits: network confinement rests on Front holding
+the allow-list; Front holds the host's TLS certificate, which identifies
+the host, not a person; a publish's upload is still parsed by Core.
 
 **The untrusted-data envelope** wraps every `sluse_read`: a per-read random
 delimiter the content cannot forge, a header naming the file and its hash,
@@ -108,7 +119,7 @@ Written down as channels, not as mitigations. Each is open in v0.1.
   the inventory shows the file missing, not where it went. Only Wipe
   removes everything.
 - **The box's certificate is readable by the agent.** Used directly against
-  the broker, it has the endpoint's authority and no more: same scope, same
+  Sluse Gate, it has the endpoint's authority and no more: same scope, same
   person, recorded on the host. It skips the box's journal and the envelope.
 - **The console's API in the box is unauthenticated.** Anything in the box
   can sign the person out, clear the workspace or open an app, and read each
@@ -141,8 +152,9 @@ Built, and not yet run on a device:
 - that the Sluse log accepts writes from SYSTEM only (an administrator can
   change it either way);
 - the App Control policy on Sluse Artifacts;
-- whether Conditional Access cuts off a device when the broker refreshes the
+- whether Conditional Access cuts off a device when Gate Core refreshes the
   person's token as SYSTEM;
+- Gate Front's start as LocalService;
 - Codex and Mistral Vibe, which are installed and wired like the other
   runtimes and not checked. Vibe uses Mistral's EU endpoint; where Mistral
   processes and keeps what it is sent is Mistral's term, not Sluse's claim.

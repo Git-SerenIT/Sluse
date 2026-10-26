@@ -31,7 +31,7 @@ getrandom.workspace = true
 # broker has to run them anyway, because `/v1/health` reports the `posture_id`
 # every audit record cites. `sluse check` calls the same code so that one
 # machine cannot be described two ways (docs/sluse_prototype.md, M2).
-sluse-broker = { path = "../sluse-broker" }
+sluse-gate-core = { path = "../sluse-gate-core" }
 
 # The probe behind `sluse status` and the "broker reachable" gate is the guest's
 # own client, not a second one written here. If the host probed with a client

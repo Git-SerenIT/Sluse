@@ -25,7 +25,7 @@
 //!
 //! ## What the agent is told is not this
 //!
-//! These are the *broker's* reasons, and they are complete because the broker's
+//! These are the *Gate's* reasons, and they are complete because the Gate's
 //! audit record must be complete. What reaches the agent is narrower: D-008
 //! makes scope blinders rather than a fence, so the endpoint maps
 //! [`UnknownSource`], [`OutOfScope`] and [`NotFound`] to one indistinguishable
@@ -55,8 +55,8 @@ pub enum SluseError {
     /// The path could not be parsed as `<source>/<relative path>`, or it
     /// contained something the grammar refuses outright.
     ///
-    /// The one error the endpoint may raise **without** asking the broker: a
-    /// path that cannot be parsed cannot be audited meaningfully by the broker
+    /// The one error the endpoint may raise **without** asking the Gate: a
+    /// path that cannot be parsed cannot be audited meaningfully by the Gate
     /// either, and forwarding it would only put unparseable strings in the host
     /// log. It is journaled in the guest.
     #[error("malformed path \"{raw}\": {reason}")]
@@ -73,7 +73,7 @@ pub enum SluseError {
     // ---- The request was well formed and refused -------------------------
     /// Inside a known source, outside every scope the config admits.
     ///
-    /// `scopes` is the enforcing list as the broker holds it, for the host's
+    /// `scopes` is the enforcing list as the Gate holds it, for the host's
     /// audit record. It does not travel to the agent.
     #[error("\"{raw}\" resolves to \"{resolved}\", which is outside the scope of source \"{source_name}\"")]
     OutOfScope {
@@ -122,7 +122,7 @@ pub enum SluseError {
     /// unintelligible. Transport, not policy.
     ///
     /// Kept apart from every refusal above because the inventory depends on the
-    /// difference: a file the broker cannot reach is `Unknown`, never
+    /// difference: a file the Gate cannot reach is `Unknown`, never
     /// `Orphaned`. Reporting a network blip as a deleted file would have the
     /// console tell a user their evidence is gone.
     #[error("source \"{source_name}\" is unavailable: {detail}")]
@@ -130,37 +130,37 @@ pub enum SluseError {
 
     /// A source kind the config accepts but this build does not serve.
     ///
-    /// Since M7 every kind the loader takes is served, so this is now a broker
+    /// Since M7 every kind the loader takes is served, so this is now a Gate
     /// reached by a path that cannot serve the kind (a `sharepoint` source at
-    /// a filesystem backend, or a broker built without Entra): an error, so
+    /// a filesystem backend, or a Gate built without Entra): an error, so
     /// nothing silently behaves as if it worked.
     #[error("source \"{source_name}\" is of kind \"{kind}\", which this build does not serve")]
     UnsupportedSourceKind { source_name: String, kind: String },
 
     // ---- The caller is not who it needs to be ----------------------------
-    /// The `x-sluse-session` header named a session the broker did not issue.
+    /// The `x-sluse-session` header named a session the Gate did not issue.
     ///
-    /// **The broker mints session ids and the guest carries them**, rather than
-    /// the other way round, so records and a journal name a run the broker
+    /// **The Gate mints session ids and the guest carries them**, rather than
+    /// the other way round, so records and a journal name a run the Gate
     /// knows. The volume window no longer keys on it (D-060): `/v1/health`
     /// mints freely, so a session was a threshold the box could reset.
     ///
     /// jok's answer on 2026-09-16, and the reason `/v1/health` returns a session
     /// id at all.
-    #[error("session \"{session_id}\" was not issued by this broker; call /v1/health for one")]
+    #[error("session \"{session_id}\" was not issued by this gate; call /v1/health for one")]
     UnknownSession { session_id: String },
 
     /// A listing audience this build does not serve.
     ///
     /// `Audience::User` shows out-of-scope entries greyed rather than absent,
     /// and it is a field the caller sets — so an agent that speaks HTTP to the
-    /// broker directly could ask for it and enumerate everything D-008 exists to
+    /// Gate directly could ask for it and enumerate everything D-008 exists to
     /// keep out of its world. Both the MCP surface and the console present the
-    /// same client certificate, so the broker cannot tell them apart.
+    /// same client certificate, so the Gate cannot tell them apart.
     ///
     /// **M5 serves both**, and the decision this variant was waiting for was
-    /// taken then: the broker still cannot tell the console from the agent, so
-    /// `User` is not a privilege the broker grants a caller — it is a listing
+    /// taken then: the Gate still cannot tell the console from the agent, so
+    /// `User` is not a privilege the Gate grants a caller — it is a listing
     /// the console asks for and the MCP surface never does. The endpoint's tool
     /// handlers send `Agent` and nothing in `sluse-endpoint::server` can be made
     /// to send anything else; an agent that speaks HTTP past the endpoint is
@@ -177,12 +177,12 @@ pub enum SluseError {
     ///
     /// **The remedy is a person, not a retry**: sign in again at the console.
     /// Also what Entra's `interaction_required` becomes — MFA, a Conditional
-    /// Access policy, consent — because the broker cannot answer any of those
+    /// Access policy, consent — because the Gate cannot answer any of those
     /// on the user's behalf and must not try.
     #[error("no signed-in user to act as: {detail}. Sign in again at the console")]
     SignInRequired { detail: String },
 
-    /// A user token was presented and is not one the broker accepts: bad
+    /// A user token was presented and is not one the Gate accepts: bad
     /// signature, wrong tenant, wrong audience, wrong client, or a different
     /// user from the one this session is bound to.
     ///
@@ -236,21 +236,21 @@ pub enum SluseError {
     #[error("artifact \"{name}\": the declared source \"{source_path}\" was not admitted in this session")]
     SourceNotAdmitted { name: String, source_path: String },
 
-    // ---- Client-side: raised in the guest, never received from the broker --
-    /// The broker could not be reached at all.
+    // ---- Client-side: raised in the guest, never received from the Gate --
+    /// The Gate could not be reached at all.
     ///
     /// Fail closed: the tool call fails and is journaled as an error. Whether
     /// a cached check window should soften this is Q-2, still open; the
     /// prototype does not cache (`docs/sluse_prototype.md`, Provisional).
-    #[error("the broker is unreachable: {detail}")]
-    BrokerUnreachable { detail: String },
+    #[error("the Gate is unreachable: {detail}")]
+    GateUnreachable { detail: String },
 
-    /// The broker's certificate is not the pinned one.
+    /// The Gate's certificate is not the pinned one.
     ///
     /// The handshake is abandoned. The endpoint trusts one leaf and no CA
     /// bundle, so this is either a misconfiguration or something standing where
-    /// the broker should be; neither is a condition to retry through.
-    #[error("the broker presented certificate {presented}, not the pinned {expected}")]
+    /// the Gate should be; neither is a condition to retry through.
+    #[error("the Gate presented certificate {presented}, not the pinned {expected}")]
     CertificatePinMismatch {
         expected: ContentHash,
         presented: ContentHash,
@@ -295,13 +295,13 @@ impl SluseError {
             Self::MalformedArtifactName { .. } => "MALFORMED_ARTIFACT_NAME",
             Self::HashMismatch { .. } => "HASH_MISMATCH",
             Self::SourceNotAdmitted { .. } => "SOURCE_NOT_ADMITTED",
-            Self::BrokerUnreachable { .. } => "BROKER_UNREACHABLE",
+            Self::GateUnreachable { .. } => "GATE_UNREACHABLE",
             Self::CertificatePinMismatch { .. } => "CERTIFICATE_PIN_MISMATCH",
             Self::Internal { .. } => "INTERNAL",
         }
     }
 
-    /// The HTTP status the broker answers with.
+    /// The HTTP status the Gate answers with.
     ///
     /// The mapping is deliberately coarse and says what kind of thing happened,
     /// not which variant: 400 the request was malformed, 403 policy refused it,
@@ -331,17 +331,17 @@ impl SluseError {
             Self::HashMismatch { .. } | Self::SourceNotAdmitted { .. } => 422,
             Self::UnsupportedSourceKind { .. } => 501,
 
-            // 401, not 403: the caller has not identified a session the broker
+            // 401, not 403: the caller has not identified a session the Gate
             // knows, and the remedy is to get one rather than to ask for less.
             Self::UnknownSession { .. }
             | Self::SignInRequired { .. }
             | Self::TokenRejected { .. } => 401,
             Self::SourceUnavailable { .. } => 502,
 
-            // Raised inside the guest and never sent by the broker. A status is
+            // Raised inside the guest and never sent by the Gate. A status is
             // given anyway so the mapping is total and so these can share one
             // rendering path in the console.
-            Self::BrokerUnreachable { .. } | Self::CertificatePinMismatch { .. } => 503,
+            Self::GateUnreachable { .. } | Self::CertificatePinMismatch { .. } => 503,
 
             Self::Internal { .. } => 500,
         }
@@ -364,14 +364,14 @@ impl SluseError {
     /// the console stops asking outside LOCAL, so what is still refused is the
     /// agent asking for what D-033 keeps from the box. Nor does
     /// [`UnknownSession`](Self::UnknownSession): a session
-    /// the broker never issued is a caller asking for something it has not been
-    /// given, which is a decision the broker made about the request.
+    /// the Gate never issued is a caller asking for something it has not been
+    /// given, which is a decision the Gate made about the request.
     pub fn is_refusal(&self) -> bool {
         !matches!(
             self,
             Self::UnsupportedSourceKind { .. }
                 | Self::SourceUnavailable { .. }
-                | Self::BrokerUnreachable { .. }
+                | Self::GateUnreachable { .. }
                 | Self::CertificatePinMismatch { .. }
                 | Self::Internal { .. }
         )
@@ -438,7 +438,7 @@ mod tests {
                 actual: h2.clone(),
             },
             SluseError::SourceNotAdmitted { name: "summary.md".into(), source_path: "tender/x.md".into() },
-            SluseError::BrokerUnreachable { detail: "connection refused".into() },
+            SluseError::GateUnreachable { detail: "connection refused".into() },
             SluseError::CertificatePinMismatch { expected: h, presented: h2 },
             SluseError::Internal { message: "bug".into() },
         ]

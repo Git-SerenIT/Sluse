@@ -50,7 +50,7 @@ impl Drop for Sd {
 /// The tenant package folder (`admin setup --out`): SYSTEM, Administrators
 /// and the account running setup, protected from inheritance, applied to
 /// what is already in it. Under `C:\` it would otherwise inherit
-/// `Users:(RX)`, so anyone reads the tenant's broker key, and `Authenticated
+/// `Users:(RX)`, so anyone reads the tenant's Gate key, and `Authenticated
 /// Users:(M)`, so anyone edits `Install-Sluse.ps1`, which Intune runs as
 /// SYSTEM on every device (found on L1, 2026-09-30). The owner is left alone:
 /// it is the account that made the folder.

@@ -2,16 +2,16 @@
 // Copyright 2026 SerenIT ApS and Prompted EV
 
 //! The journal's mirror on the host (slice 4, D-027 point 5): what the box
-//! journals reaches the host's copy, a line missed while the broker was away
+//! journals reaches the host's copy, a line missed while the Gate was away
 //! arrives with the next record, and nothing is ever there twice.
 
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
-use sluse_broker::app::Broker;
-use sluse_broker::audit::MemorySink;
-use sluse_broker::{http, preflight, scope, serve, tls};
-use sluse_endpoint::broker_client::BrokerClient;
+use sluse_gate_core::app::Core;
+use sluse_gate_core::audit::MemorySink;
+use sluse_gate_core::{http, preflight, scope, tls};
+use sluse_endpoint::gate_client::GateClient;
 use sluse_endpoint::journal;
 use sluse_proto::wire::JournalAppend;
 use sluse_proto::Loaded;
@@ -21,7 +21,7 @@ mod certs;
 struct Host {
     dir: tempfile::TempDir,
     loaded: Loaded,
-    _running: serve::Running,
+    _served: sluse_gate_front::testing::Served,
 }
 
 async fn host() -> Host {
@@ -30,20 +30,19 @@ async fn host() -> Host {
     let c = certs::make();
     certs::write(dir.path(), &c);
     std::fs::create_dir_all(dir.path().join("fixture/in-scope")).unwrap();
-    let config = dir.path().join("broker.json");
+    let config = dir.path().join("gate.json");
     certs::write_config(&config, &dir.path().join("fixture"), &c.pin);
     let loaded = sluse_proto::config::load(&config).unwrap();
     let compiled = scope::compile(&loaded).unwrap();
-    let server_tls = tls::server_config(&loaded).unwrap();
     let posture = preflight::run(&loaded, preflight::CertCheck::Ok { pin: c.pin.clone() });
-    let broker = Broker::new(loaded.clone(), compiled, Arc::new(MemorySink::new()), posture)
+    let gate = Core::new(loaded.clone(), compiled, Arc::new(MemorySink::new()), posture)
         .with_journal_mirror(Some(dir.path().join("mirror")));
-    let l = serve::bind("127.0.0.1:0").unwrap();
-    let port = l.local_addr().unwrap().port();
-    let (running, _) = serve::serve(l, server_tls.config, http::router(Arc::new(broker))).unwrap();
+    let front = sluse_gate_core::front::gate_start(&loaded, "127.0.0.1:0", false).unwrap();
+    let served = sluse_gate_front::testing::serve(front, http::router(Arc::new(gate))).await;
+    let port = served.addr().port();
     let mut loaded = loaded;
-    loaded.config.broker.url = format!("https://localhost:{port}");
-    Host { dir, loaded, _running: running }
+    loaded.config.gate.url = format!("https://localhost:{port}");
+    Host { dir, loaded, _served: served }
 }
 
 fn append(path: &std::path::Path, text: &str) {
@@ -54,7 +53,7 @@ fn append(path: &std::path::Path, text: &str) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_host_copy_catches_up_and_never_holds_a_line_twice() {
     let h = host().await;
-    let (client, _) = BrokerClient::connect(&h.loaded).await.unwrap();
+    let (client, _) = GateClient::connect(&h.loaded).await.unwrap();
     let session = client.session().clone();
     let local = h.dir.path().join("journal.jsonl");
     let host_copy = h.dir.path().join("mirror").join(format!("{session}.jsonl"));
@@ -64,7 +63,7 @@ async fn the_host_copy_catches_up_and_never_holds_a_line_twice() {
     journal::mirror(&client, &local, &session, &cursor).await;
     assert_eq!(std::fs::read_to_string(&host_copy).unwrap(), "{\"n\":1}\n");
 
-    // Two records written while the broker was away. A mirror call that
+    // Two records written while the Gate was away. A mirror call that
     // fails stores nothing, so the cursor is where these two found it.
     append(&local, "{\"n\":2}\n");
     append(&local, "{\"n\":3}\n");
@@ -90,7 +89,7 @@ async fn the_host_copy_catches_up_and_never_holds_a_line_twice() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_gap_is_answered_with_where_the_host_is() {
     let h = host().await;
-    let (client, _) = BrokerClient::connect(&h.loaded).await.unwrap();
+    let (client, _) = GateClient::connect(&h.loaded).await.unwrap();
     let session = client.session().clone();
     let at = |offset, lines: &str| JournalAppend { session: session.clone(), offset, lines: lines.into() };
     assert_eq!(client.mirror_journal(&at(0, "a\n")).await.unwrap(), 2);
@@ -108,7 +107,7 @@ async fn a_gap_is_answered_with_where_the_host_is() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_long_journal_goes_in_chunks_and_a_restart_resumes() {
     let h = host().await;
-    let (client, _) = BrokerClient::connect(&h.loaded).await.unwrap();
+    let (client, _) = GateClient::connect(&h.loaded).await.unwrap();
     let session = client.session().clone();
     let local = h.dir.path().join("journal.jsonl");
     let host_copy = h.dir.path().join("mirror").join(format!("{session}.jsonl"));

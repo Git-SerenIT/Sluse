@@ -5,6 +5,32 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.2
+
+**For the administrator**
+- **Sluse Gate** is the new name for what ran beside each box (the
+  "broker"), and it is now two processes. **Gate Front**, one per box,
+  runs as LOCAL SERVICE with no token and is the only part the box can
+  reach: its TLS, every request it sends, and its egress proxy. **Gate
+  Core** runs as SYSTEM, holds the person's sign-in and reads the sources
+  as them; it no longer listens on the network. In Task Manager:
+  `sluse-gate-front.exe` and `sluse-gate-core.exe`.
+- The firewall rule is now **"Sluse boxes: Sluse Gate (host-only)"** and
+  names `sluse-gate-front.exe`. An older rule, "Sluse boxes: broker and
+  proxy (host-only)", can be deleted.
+- Sluse's app registration is now looked for as **"Sluse Gate"**. Rename
+  an existing "Sluse broker" app in Entra (Branding & properties, Name)
+  before running Tenant setup again, or setup makes a second app.
+- In the Event Log, records Sluse Gate writes say `"writer":"core"`; the
+  preflight's blocking checks are called **required** checks.
+- Gate Front's own log is `logs\front.log` in Sluse's data folder.
+
+**For the person using it:** nothing changes.
+
+**Not yet proven on a device:** Gate Front's start as LOCAL SERVICE, and
+everything else in this version; it is built and tested on the
+development machine only.
+
 ## 0.1.1
 
 **For the administrator**

@@ -752,7 +752,7 @@ function appResult(r) {
     return ['±', c, pill('changed', 'Changed')];
   });
   return el('div', { class: 'panel stack', style: '--stack-gap: var(--space-3)' },
-    el('dl', { class: 'facts facts--wide' }, el('div', {}, el('dt', {}, 'Name'), el('dd', {}, 'Sluse broker')),
+    el('dl', { class: 'facts facts--wide' }, el('div', {}, el('dt', {}, 'Name'), el('dd', {}, 'Sluse Gate')),
       el('div', {}, el('dt', {}, 'Application (client) id'), el('dd', {}, chip(r.appId, 'Copy the application id')))),
     el('hr', { class: 'rule' }),
     said.length ? el('ul', { class: 'diff' }, said.map(([s, t, p]) => diffLine(s, t, p))) : status('done', "Nothing to change: Sluse's app is as it should be."),
@@ -763,7 +763,7 @@ function appProblem(e) {
   const raw = `Making Sluse's app: ${e}`;
   if (/applications are named/.test(e)) {
     const ids = (/appId ([^)]*)\)/.exec(e)?.[1] ?? '').split(', ').filter(Boolean);
-    return banner('problem', 'Two app registrations are named "Sluse broker".', "Sluse finds its app by that name, so it cannot tell which one is Sluse's, and changed neither. Remove or rename the one that is not Sluse's in App registrations, then run this again.",
+    return banner('problem', 'Two app registrations are named "Sluse Gate".', "Sluse finds its app by that name, so it cannot tell which one is Sluse's, and changed neither. Remove or rename the one that is not Sluse's in App registrations, then run this again.",
       { raw, more: el('div', { class: 'stack', style: '--stack-gap: var(--space-1)' }, ids.map((id, i) => chip(id, `Copy application id ${i + 1}`))) });
   }
   if (expired(e)) return banner('warning', 'Your sign-in has expired.', "Sign in again, then make or repair Sluse's app.", { raw, actions: [btn('Sign in again', () => signIn(false), { cls: 'btn--sm btn--primary', ico: 'sign-in' })] });

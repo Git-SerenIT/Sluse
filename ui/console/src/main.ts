@@ -5,7 +5,7 @@
 // section a URL hash, the top bar, the strips and the gate on every page.
 //
 // The page keeps itself current (D-032): every few seconds it reads again
-// whatever **writes no audit record**: the broker's state (`/v1/status`), the
+// whatever **writes no audit record**: Gate Core's state (`/v1/status`), the
 // journal, provenance, the inventory as last checked and alerts. What does
 // write one stays a person's click: opening a folder (`/v1/list`) and checking
 // the copies (`/v1/stat`), because a screen that did those by itself would
@@ -81,8 +81,8 @@ async function refreshAll(auto = false): Promise<void> {
 
 /** The person must sign in first, or Sluse has never answered (Q8, Q35). */
 function gated(d: Data): "waiting" | "signing-in" | null {
-  if (d.state.broker.status !== "serving") return d.journal.length === 0 ? "waiting" : null;
-  const b = d.state.broker;
+  if (d.state.gate.status !== "serving") return d.journal.length === 0 ? "waiting" : null;
+  const b = d.state.gate;
   const onlyCloud = cloud(d).length > 0 && local(d).length === 0;
   return onlyCloud && !b.signedIn && !b.signedOut ? "signing-in" : null;
 }
@@ -135,7 +135,7 @@ function strip(kind: string, title: string, text: string, ...more: (Node | null)
 }
 
 function drawStrips(d: Data): void {
-  const b = d.state.broker;
+  const b = d.state.gate;
   const strips: (Node | null)[] = [];
   const c = cloud(d), l = local(d);
   const are = (xs: string[]): string => (xs.length > 1 ? "are" : "is");
@@ -145,7 +145,7 @@ function drawStrips(d: Data): void {
   }
   if (b.status !== "serving") {
     strips.push(strip("warning", "Sluse on your computer is not answering.",
-      "Nothing new can be let into the box until it answers. What is already here stays. This page asks again by itself.", details(`broker unreachable: ${b.detail}`)));
+      "Nothing new can be let into the box until it answers. What is already here stays. This page asks again by itself.", details(`gate unreachable: ${b.detail}`)));
   } else if (c.length && b.signedOut) {
     strips.push(strip("info", "You signed out.",
       `${list(c)} ${are(c)} not read until you sign in again${l.length ? `; ${list(l)} ${are(l)} still read as your Windows account` : ""}. To sign in again, close the box from the bar above and open Sluse again.`));

@@ -205,7 +205,7 @@ fn open_box(app: tauri::AppHandle, timezone: Option<String>, theme: Option<Theme
 }
 
 /// Asked by the page once the box is open and every minute after (D-036):
-/// if the box's broker holds no sign-in, sign in **silently** and hand it
+/// if the box's Gate holds no sign-in, sign in **silently** and hand it
 /// over. `may_ask` on the first ask after an open: an open's sign-in grown
 /// too old during a build leaves the box unbound, and Microsoft's page is
 /// shown then rather than leaving the box without a sign-in (D-066,
@@ -332,7 +332,7 @@ fn reset_box(app: tauri::AppHandle, wipe: bool) -> Result<(), Failure> {
 
 /// Explorer on the user's Sluse Artifacts (D-031) or Sluse Inputs (D-054),
 /// made first if it is not there yet. The shell runs as the user, so this is
-/// theirs to make. The same folders the broker uses as them, under
+/// theirs to make. The same folders the Gate uses as them, under
 /// `%USERPROFILE%`.
 #[tauri::command(async)]
 fn open_folder(which: String) -> Result<(), String> {
@@ -350,7 +350,7 @@ fn open_folder(which: String) -> Result<(), String> {
 /// The user's OneDrive `Sluse` folder (D-054): `present`, `missing`, or
 /// `no-client` where no OneDrive sync client is signed in on this computer.
 /// With `create`, a missing one is made, in the synced OneDrive folder, as
-/// the user: the user's click is the approval, and the broker, which only
+/// the user: the user's click is the approval, and the Gate, which only
 /// reads, never holds a scope that writes (D-054). The sync client takes it
 /// to the drive's root.
 #[tauri::command(async)]

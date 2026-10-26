@@ -5,7 +5,7 @@
 //!
 //! ## Why `start` generates the config rather than taking one
 //!
-//! Nothing a run decides may reach the broker as a command-line override. The
+//! Nothing a run decides may reach the Gate as a command-line override. The
 //! one property the audit trail leans on hardest is that `config_version` is the
 //! hash of the config file, cited in every record, identifying what was
 //! enforced; a setting passed past the file leaves every record in the run
@@ -111,6 +111,9 @@ pub enum RunError {
 
     #[error("sluse-endpoint{0} is not beside this executable; build the workspace first")]
     NoEndpoint(&'static str),
+
+    #[error("{0} is not beside this executable; build the workspace first")]
+    Missing(&'static str),
 }
 
 fn io<'a>(what: &'static str, path: &'a Path) -> impl FnOnce(std::io::Error) -> RunError + 'a {
@@ -137,15 +140,15 @@ pub fn lay_out(plan: &Plan) -> Result<Written, RunError> {
 
     // ---- certificates -----------------------------------------------------
     let certs_dir = ws.join("certs");
-    let broker_cert = certs_dir.join(devcert::BROKER_CERT_FILE);
-    let (pin, certs_generated) = if broker_cert.is_file() {
+    let gate_cert = certs_dir.join(devcert::GATE_CERT_FILE);
+    let (pin, certs_generated) = if gate_cert.is_file() {
         // The pin is the hash of the DER, so it is re-derived from the file
         // rather than remembered. A certificate someone replaced by hand is then
         // pinned correctly instead of being pinned to what used to be there.
-        let pem = std::fs::read_to_string(&broker_cert).map_err(io("certificate", &broker_cert))?;
-        (pin_of_pem(&pem, &broker_cert)?, false)
+        let pem = std::fs::read_to_string(&gate_cert).map_err(io("certificate", &gate_cert))?;
+        (pin_of_pem(&pem, &gate_cert)?, false)
     } else {
-        // The listen host goes in the SAN, so a broker on the host-only segment
+        // The listen host goes in the SAN, so a Gate on the host-only segment
         // (M8) presents a certificate naming the address the guest dials. The
         // endpoint checks the pin, not the name; the SAN is for anything else
         // that looks.
@@ -295,11 +298,11 @@ fn config_json(plan: &Plan, pin: &ContentHash) -> (String, String) {
         r#"{{
   "boxId": {box_id},
   "environment": "local",
-  "broker": {{
+  "gate": {{
     "listen": {listen},
     "url": {url},
-    "certPath": "certs/broker.pem",
-    "keyPath": "certs/broker.key",
+    "certPath": "certs/gate.pem",
+    "keyPath": "certs/gate.key",
     "clientCaPath": "certs/client-ca.pem",
     "certPin": "{pin}"
   }},
@@ -313,7 +316,7 @@ fn config_json(plan: &Plan, pin: &ContentHash) -> (String, String) {
   "journalDir": "journal",
   "audit": {{
     "sink": "jsonl",
-    "path": "audit/broker.jsonl"
+    "path": "audit/gate.jsonl"
   }}
 }}
 "#,
@@ -430,7 +433,7 @@ fn task_md() -> &'static str {
          `sluse_publish`). None of it is on local disk in this directory.\n\
          \n\
          `sluse_fetch` copies a file into the local workspace, where you can\n\
-         read it again without going back to the broker. A copy stays untrusted\n\
+         read it again without going back to the Gate. A copy stays untrusted\n\
          material: reading it back through `sluse_read` returns it inside the\n\
          same envelope it arrived in.\n\
          \n\
@@ -512,16 +515,30 @@ pub fn box_bundle() -> Result<PathBuf, String> {
     }
 }
 
-/// The broker binary, beside this one. Same reasoning.
-pub fn broker_binary() -> Result<PathBuf, RunError> {
+/// The Gate binary, beside this one. Same reasoning.
+pub fn gate_binary() -> Result<PathBuf, RunError> {
     const EXE: &str = if cfg!(windows) { ".exe" } else { "" };
     let here = std::env::current_exe().map_err(|_| RunError::NoExeDir)?;
     let dir = here.parent().ok_or(RunError::NoExeDir)?;
-    let candidate = dir.join(format!("sluse-broker{EXE}"));
+    let candidate = dir.join(format!("sluse-gate-core{EXE}"));
     if candidate.is_file() {
         Ok(candidate)
     } else {
         Err(RunError::NoEndpoint(EXE))
+    }
+}
+
+/// Gate Front, beside Gate Core: the program the box's firewall rule names,
+/// since Front is what listens (D-071).
+pub fn front_binary() -> Result<PathBuf, RunError> {
+    const EXE: &str = if cfg!(windows) { ".exe" } else { "" };
+    let here = std::env::current_exe().map_err(|_| RunError::NoExeDir)?;
+    let dir = here.parent().ok_or(RunError::NoExeDir)?;
+    let candidate = dir.join(format!("sluse-gate-front{EXE}"));
+    if candidate.is_file() {
+        Ok(candidate)
+    } else {
+        Err(RunError::Missing(if cfg!(windows) { "sluse-gate-front.exe" } else { "sluse-gate-front" }))
     }
 }
 
@@ -577,7 +594,7 @@ mod tests {
     #[test]
     fn the_pin_read_back_from_the_certificate_is_the_generated_one() {
         let certs = devcert::generate(&[]).unwrap();
-        let read_back = pin_of_pem(&certs.broker_cert_pem, Path::new("broker.pem")).unwrap();
+        let read_back = pin_of_pem(&certs.gate_cert_pem, Path::new("gate.pem")).unwrap();
         assert_eq!(
             read_back, certs.pin,
             "re-deriving the pin from the written certificate must give what devcert reported"
@@ -585,12 +602,12 @@ mod tests {
     }
 
     #[test]
-    fn a_broker_on_the_host_only_segment_gets_that_address_in_its_certificate() {
+    fn a_gate_on_the_host_only_segment_gets_that_address_in_its_certificate() {
         assert_eq!(listen_host("192.168.221.1:7580"), "192.168.221.1");
         assert_eq!(listen_host("[::1]:7580"), "::1");
 
         let certs = devcert::generate(&[listen_host("192.168.221.1:7580")]).unwrap();
-        let der = rustls_pem_der(&certs.broker_cert_pem).unwrap();
+        let der = rustls_pem_der(&certs.gate_cert_pem).unwrap();
         // An iPAddress GeneralName: context tag 7, four bytes, the address.
         let san = [0x87, 4, 192, 168, 221, 1];
         assert!(der.windows(san.len()).any(|w| w == san), "no IP SAN for 192.168.221.1");
@@ -628,20 +645,20 @@ mod tests {
     #[test]
     fn the_generated_config_spells_its_relative_paths_the_same_way_everywhere() {
         // A `\` is a separator on Windows and an ordinary filename character
-        // everywhere else, so the guest read `certs\broker.pem` as one absent
-        // file and the gate failed on a certificate `sluse start` had written
+        // everywhere else, so the guest read `certs\Gate.pem` as one absent
+        // file and a required check failed on a certificate `sluse start` had written
         // itself, seconds earlier. Found by running `sluse start` on the guest;
         // the suite could not see it, because the loader is happy with any
         // relative path and only opening the file says otherwise.
         let dir = tempfile::tempdir().unwrap();
         let (_, body) = config_json(&plan(dir.path(), dir.path()), &ContentHash::of(b"x"));
         for expected in [
-            r#""certPath": "certs/broker.pem""#,
-            r#""keyPath": "certs/broker.key""#,
+            r#""certPath": "certs/gate.pem""#,
+            r#""keyPath": "certs/gate.key""#,
             r#""clientCaPath": "certs/client-ca.pem""#,
             r#""clientCertPath": "certs/endpoint.pem""#,
             r#""clientKeyPath": "certs/endpoint.key""#,
-            r#""path": "audit/broker.jsonl""#,
+            r#""path": "audit/gate.jsonl""#,
         ] {
             assert!(body.contains(expected), "the generated config must contain {expected}");
         }

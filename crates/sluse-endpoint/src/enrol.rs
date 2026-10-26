@@ -9,7 +9,7 @@
 //! 2. if it is the one already enrolled with, stop: the identity stands;
 //! 3. make a P-256 key pair, here, and keep the private half;
 //! 4. send the public half and the token to the enrolment listener, pinned to
-//!    the broker's leaf;
+//!    the Gate's leaf;
 //! 5. check that the config it returns pins the same leaf;
 //! 6. write the key, the certificate and the config into the user's
 //!    directory, owned by the user the agent runs as, and the config last.
@@ -62,16 +62,16 @@ pub async fn run(config: &Path, pool: &Path, owner: Option<(u32, u32)>) -> Resul
         public_key: key.public_key_raw().iter().map(|b| format!("{b:02x}")).collect(),
         hostname: hostname(),
     };
-    let resp = crate::broker_client::enrol(&boot.enrol, boot.pin.clone(), &req)
+    let resp = crate::gate_client::enrol(&boot.enrol, boot.pin.clone(), &req)
         .await
         .map_err(|e| format!("{}: {e}", boot.enrol))?;
 
     // The config decides where the key and certificate go, so it is read
     // before anything is written, and refused if it would put them elsewhere.
     let loaded = sluse_proto::config::load_from_bytes(resp.config.as_bytes(), resp.device.as_bytes(), config)
-        .map_err(|e| format!("the broker's config: {e}"))?;
-    if loaded.config.broker.cert_pin != boot.pin {
-        return Err("the broker's config pins a different leaf from the one this bootstrap pinned".into());
+        .map_err(|e| format!("the Gate's config: {e}"))?;
+    if loaded.config.gate.cert_pin != boot.pin {
+        return Err("the Gate's config pins a different leaf from the one this bootstrap pinned".into());
     }
     let cert_path = inside(dir, &loaded.config.endpoint.client_cert_path)?;
     let key_path = inside(dir, &loaded.config.endpoint.client_key_path)?;

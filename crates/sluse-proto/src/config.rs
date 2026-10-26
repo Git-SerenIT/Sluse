@@ -7,7 +7,7 @@
 //! **The schema is the product boundary** (`docs/config.md`): the box consumes
 //! this file under Apache-2.0, and the platform — proprietary, and not built —
 //! will one day emit it. In v1 a human or a consultant writes it. That is why
-//! these types live in the contract crate rather than in the broker: the broker,
+//! these types live in the contract crate rather than in the Gate: the Gate,
 //! the lifecycle CLI and the endpoint all read the same file, and a field one of
 //! them understands differently is a scope disagreement.
 //!
@@ -30,12 +30,12 @@
 //!
 //! 1. Those answers are platform-specific and change between the host and the
 //!    guest, and this crate is shared by both. Canonicalisation of a UNC path,
-//!    junction handling and `\\?\` prefixes belong in the broker (M2).
+//!    junction handling and `\\?\` prefixes belong in the Gate (M2).
 //! 2. They are not stable. A scope that exists at load can be gone a second
 //!    later, so a check here would buy a guarantee it cannot keep — and the
-//!    broker re-validates on every request regardless, because that is the only
+//!    Gate re-validates on every request regardless, because that is the only
 //!    check that holds (`docs/config.md`, What enforces what).
-//! 3. The preflight gate is the place where "can this machine actually run
+//! 3. The preflight checks is the place where "can this machine actually run
 //!    this" is answered, and it reports as a list a person reads
 //!    (`docs/deployment.md`).
 //!
@@ -127,14 +127,14 @@ pub struct Authored {
     pub volume: VolumeConfig,
 
     /// The tenant and Sluse's app registration. **Required when any source is
-    /// `sharepoint`**, and absent otherwise. No credential: the broker is a
+    /// `sharepoint`**, and absent otherwise. No credential: the Gate is a
     /// public client (D-036).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entra: Option<EntraConfig>,
 
     /// Where the box may connect out to, through the host's proxy (M9,
     /// D-035). **Absent means nowhere**: a box whose config has no list
-    /// reaches the broker and nothing else.
+    /// reaches the Gate and nothing else.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub egress: Option<EgressConfig>,
 
@@ -161,14 +161,14 @@ pub struct Device {
     #[serde(default = "default_max_read_bytes")]
     pub max_read_bytes: u64,
 
-    /// Where the broker listens and what certificate it presents.
-    pub broker: BrokerConfig,
+    /// Where the Gate listens and what certificate it presents.
+    pub gate: GateConfig,
 
     /// What the endpoint presents, and where the console listens.
     pub endpoint: EndpointConfig,
 
     /// Where published artifacts land. The single write path. On a device the
-    /// broker writes to the signed-in user's `%USERPROFILE%\Sluse Artifacts`
+    /// Gate writes to the signed-in user's `%USERPROFILE%\Sluse Artifacts`
     /// instead, as that user (D-031); this path is used where there is no user
     /// token, as in LOCAL.
     pub artifacts: String,
@@ -179,7 +179,7 @@ pub struct Device {
     /// Where the endpoint writes its per-session journal files.
     pub journal_dir: String,
 
-    /// Where the broker writes audit records.
+    /// Where the Gate writes audit records.
     pub audit: AuditConfig,
 }
 
@@ -244,7 +244,7 @@ pub struct Config {
     pub max_read_bytes: u64,
     pub max_fetch_bytes: Option<u64>,
     pub volume: VolumeConfig,
-    pub broker: BrokerConfig,
+    pub gate: GateConfig,
     pub endpoint: EndpointConfig,
     pub artifacts: String,
     pub workspace: String,
@@ -270,7 +270,7 @@ impl Config {
             max_read_bytes: d.max_read_bytes,
             max_fetch_bytes: a.max_fetch_bytes,
             volume: a.volume,
-            broker: d.broker,
+            gate: d.gate,
             endpoint: d.endpoint,
             artifacts: d.artifacts,
             workspace: d.workspace,
@@ -350,8 +350,8 @@ fn valid_egress_entry(e: &str) -> bool {
         && !labels.last().is_some_and(|l| l.bytes().all(|b| b.is_ascii_digit()))
 }
 
-/// Sluse's app registration in Entra. **No credential** (D-036): the broker
-/// is a public client, the user signs in on the host, and the broker holds
+/// Sluse's app registration in Entra. **No credential** (D-036): the Gate
+/// is a public client, the user signs in on the host, and the Gate holds
 /// the user's tokens in memory.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -411,14 +411,14 @@ pub struct SourceConfig {
     deny_unknown_fields
 )]
 pub enum SourceKind {
-    /// A directory on the machine the broker runs on. The LOCAL fixture, and
+    /// A directory on the machine the Gate runs on. The LOCAL fixture, and
     /// nothing a customer would deploy.
     LocalFolder {
         /// Absolute path to the root.
         root: String,
     },
     /// An SMB share, addressed by UNC. Never a mapped drive letter: a letter is
-    /// per-session state of whoever mapped it, and the broker runs as SYSTEM,
+    /// per-session state of whoever mapped it, and the Gate runs as SYSTEM,
     /// where it means something different or nothing at all.
     Smb {
         /// `\\server\share`, optionally with a path below it.
@@ -436,7 +436,7 @@ pub enum SourceKind {
         library: String,
     },
     /// The user's own `%USERPROFILE%\Sluse Inputs` (D-054): files the user
-    /// puts there to be admitted. Per user, so no address: the broker finds it
+    /// puts there to be admitted. Per user, so no address: the Gate finds it
     /// from the user's profile and creates it as them at start, as it does
     /// Sluse Artifacts. Its contents are the user's choice, not the admin's,
     /// and its provenance is the user's device: off unless the admin adds it.
@@ -444,7 +444,7 @@ pub enum SourceKind {
     /// The `Sluse` folder at the root of the signed-in user's own OneDrive
     /// (D-054), reached with their token as a library is. Per user, so no
     /// address. The user makes the folder and decides what is in it; the
-    /// broker only reads. A shortcut in it is out of scope. Needs
+    /// Gate only reads. A shortcut in it is out of scope. Needs
     /// [`Authored::entra`].
     Onedrive,
 }
@@ -520,26 +520,26 @@ pub struct VolumeConfig {
     pub bytes: Option<u64>,
 }
 
-/// Where the broker listens and what it presents.
+/// Where the Gate listens and what it presents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct BrokerConfig {
+pub struct GateConfig {
     /// Socket address to bind, e.g. `127.0.0.1:7580`.
     pub listen: String,
     /// The base URL the endpoint dials, e.g. `https://127.0.0.1:7580`.
     pub url: String,
-    /// Broker leaf certificate (PEM).
+    /// Gate leaf certificate (PEM).
     pub cert_path: String,
     /// Its private key (PEM).
     pub key_path: String,
-    /// The CA whose certificates the broker accepts from clients. mTLS is
+    /// The CA whose certificates the Gate accepts from clients. mTLS is
     /// mandatory: a client without one does not complete a handshake.
     pub client_ca_path: String,
-    /// SHA-256 of the broker's leaf certificate in DER form.
+    /// SHA-256 of the Gate's leaf certificate in DER form.
     ///
     /// The endpoint trusts this one certificate and no CA bundle at all. A
     /// public root store here would be a way for something in the guest to be
-    /// talked into trusting a broker that is not the broker.
+    /// talked into trusting a Gate that is not the Gate.
     pub cert_pin: ContentHash,
 }
 
@@ -547,7 +547,7 @@ pub struct BrokerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct EndpointConfig {
-    /// Endpoint client certificate (PEM), signed by the broker's client CA.
+    /// Endpoint client certificate (PEM), signed by the Gate's client CA.
     pub client_cert_path: String,
     /// Its private key (PEM).
     pub client_key_path: String,
@@ -578,7 +578,7 @@ pub enum AuditSinkKind {
     Jsonl,
     /// The Windows Event Log. **v1's sink** (`docs/audit.md`): every customer's
     /// SIEM agent already collects it, so integration work is zero. Windows
-    /// only; elsewhere the broker refuses to start with it.
+    /// only; elsewhere the Gate refuses to start with it.
     Eventlog,
 }
 
@@ -755,7 +755,7 @@ pub fn load(path: &Path) -> Result<Loaded, ConfigError> {
 /// The loader, with the bytes already in hand.
 ///
 /// Split out so tests and the schema example do not need a file, and so the
-/// broker can hash exactly the bytes it validated rather than re-reading a file
+/// Gate can hash exactly the bytes it validated rather than re-reading a file
 /// that may have changed in between.
 pub fn load_from_bytes(authored: &[u8], device: &[u8], path: &Path) -> Result<Loaded, ConfigError> {
     let a = load_authored(authored)?;
@@ -893,16 +893,16 @@ fn validate_device(c: &Device) -> Result<(), ConfigError> {
     if c.max_read_bytes == 0 {
         return Err(ConfigError::ZeroMaxRead(c.max_read_bytes));
     }
-    // A hash in shape, or the gate report panics where it shortens it
+    // A hash in shape, or the preflight's report panics where it shortens it
     // (review R-34).
-    if ContentHash::from_hex(c.broker.cert_pin.as_str()).is_none() {
+    if ContentHash::from_hex(c.gate.cert_pin.as_str()).is_none() {
         return Err(ConfigError::InvalidDevice(format!(
-            "broker.certPin {:?} is not a SHA-256 in lowercase hex",
-            c.broker.cert_pin.as_str()
+            "gate.certPin {:?} is not a SHA-256 in lowercase hex",
+            c.gate.cert_pin.as_str()
         )));
     }
-    validate_socket_addr("broker.listen", &c.broker.listen)?;
-    refuse_wildcard("broker.listen", &c.broker.listen)?;
+    validate_socket_addr("gate.listen", &c.gate.listen)?;
+    refuse_wildcard("gate.listen", &c.gate.listen)?;
     validate_socket_addr("endpoint.consoleListen", &c.endpoint.console_listen)?;
 
     if c.audit.sink == AuditSinkKind::Jsonl && c.audit.path.is_none() {
@@ -975,10 +975,10 @@ fn is_unc(s: &str) -> bool {
 /// A scope entry is a path *relative to its source's root*.
 ///
 /// Refused: anything absolute, anything drive-qualified, anything with a `..`
-/// component, and the empty string. This is not the enforcing check — the broker
+/// component, and the empty string. This is not the enforcing check — the Gate
 /// canonicalises and re-checks on every request, because only a check made
 /// outside the guest against the resolved path holds. It is the check that stops
-/// an unworkable config from ever reaching the broker, where the same mistake
+/// an unworkable config from ever reaching the Gate, where the same mistake
 /// would surface as a refusal on a file a user expected to be able to read.
 fn validate_scope_entry(source: &str, entry: &str) -> Result<(), ConfigError> {
     let bad = |reason: &str| ConfigError::BadScope {
@@ -1002,7 +1002,7 @@ fn validate_scope_entry(source: &str, entry: &str) -> Result<(), ConfigError> {
     Ok(())
 }
 
-/// `host:port`, with a port that parses. Not resolved: the broker binds it and
+/// `host:port`, with a port that parses. Not resolved: the Gate binds it and
 /// reports the real failure if it cannot.
 fn validate_socket_addr(field: &'static str, value: &str) -> Result<(), ConfigError> {
     let bad = |reason: &str| ConfigError::BadAddress {
@@ -1023,8 +1023,8 @@ fn validate_socket_addr(field: &'static str, value: &str) -> Result<(), ConfigEr
     }
 }
 
-/// The broker binds one address, never every interface (M8). On the host it is
-/// the host-only segment's address; `0.0.0.0` would also put the broker on the
+/// The Gate binds one address, never every interface (M8). On the host it is
+/// the host-only segment's address; `0.0.0.0` would also put the Gate on the
 /// laptop's Wi-Fi. mTLS would still refuse a stranger, but a listener nobody
 /// needs on that network is surface for nothing. The console has its own,
 /// stricter rule: loopback only (`require_loopback` in the endpoint).
@@ -1093,11 +1093,11 @@ mod tests {
                 "sensitivity": 2
             }],
             "volume": { "admissions": 25, "windowSeconds": 60 },
-            "broker": {
+            "gate": {
                 "listen": "127.0.0.1:7580",
                 "url": "https://127.0.0.1:7580",
-                "certPath": "certs/broker.pem",
-                "keyPath": "certs/broker.key",
+                "certPath": "certs/gate.pem",
+                "keyPath": "certs/gate.key",
                 "clientCaPath": "certs/client-ca.pem",
                 "certPin": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
             },
@@ -1109,7 +1109,7 @@ mod tests {
             "artifacts": "artifacts",
             "workspace": "workspace",
             "journalDir": "journal",
-            "audit": { "sink": "jsonl", "path": "audit/broker.jsonl" }
+            "audit": { "sink": "jsonl", "path": "audit/gate.jsonl" }
         })
     }
 
@@ -1134,7 +1134,7 @@ mod tests {
     }
 
     const DEVICE_KEYS: [&str; 9] =
-        ["boxId", "environment", "maxReadBytes", "broker", "endpoint", "artifacts", "workspace", "journalDir", "audit"];
+        ["boxId", "environment", "maxReadBytes", "gate", "endpoint", "artifacts", "workspace", "journalDir", "audit"];
 
     /// The authored file's bytes and the device's half's, from one value.
     fn split(mut v: serde_json::Value) -> (String, String) {
@@ -1184,7 +1184,7 @@ mod tests {
     fn two_devices_with_different_pins_cite_one_version() {
         let a = load_value(valid_json()).unwrap();
         let mut v = valid_json();
-        v["broker"]["certPin"] = serde_json::json!("0".repeat(64));
+        v["gate"]["certPin"] = serde_json::json!("0".repeat(64));
         v["boxId"] = serde_json::json!("box-other");
         let b = load_value(v).unwrap();
         assert_eq!(a.version, b.version);
@@ -1435,7 +1435,7 @@ mod tests {
         assert!(loaded.config.entra.is_some());
     }
 
-    /// Refused at start rather than at the first read: without the broker's
+    /// Refused at start rather than at the first read: without the Gate's
     /// registration there is no way to act as the user, and that is a reason
     /// the box does not run (invariant 6).
     #[test]
@@ -1506,15 +1506,15 @@ mod tests {
     #[test]
     fn addresses_must_have_a_port_and_name_one_interface() {
         for (field, value) in [
-            ("broker", "127.0.0.1"),
-            ("broker", "127.0.0.1:0"),
-            ("broker", "127.0.0.1:notaport"),
-            ("broker", "0.0.0.0:7580"),
-            ("broker", "[::]:7580"),
+            ("gate", "127.0.0.1"),
+            ("gate", "127.0.0.1:0"),
+            ("gate", "127.0.0.1:notaport"),
+            ("gate", "0.0.0.0:7580"),
+            ("gate", "[::]:7580"),
             // Review R-36: the resolver's shorthand for every interface.
-            ("broker", "0:7580"),
-            ("broker", "0x0:7580"),
-            ("broker", "127.1:7580"),
+            ("gate", "0:7580"),
+            ("gate", "0x0:7580"),
+            ("gate", "127.1:7580"),
         ] {
             let mut v = valid_json();
             v[field]["listen"] = serde_json::json!(value);
@@ -1526,11 +1526,11 @@ mod tests {
     }
 
     /// Review R-34: a pin that is not a hash is refused at load, not a panic
-    /// later where the gate report shortens it.
+    /// later where the preflight's report shortens it.
     #[test]
     fn a_cert_pin_that_is_not_a_hash_is_refused() {
         let mut v = valid_json();
-        v["broker"]["certPin"] = serde_json::json!("TODO");
+        v["gate"]["certPin"] = serde_json::json!("TODO");
         assert!(matches!(load_value(v), Err(ConfigError::InvalidDevice(_))));
     }
 

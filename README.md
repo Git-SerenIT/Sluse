@@ -7,7 +7,7 @@ nobody can say afterwards what it was given. So security teams say no.
 
 Sluse moves the agent into a **box**, a Linux virtual machine on the
 person's own Windows PC, with no filesystem mounts and no credential for
-company data. A **broker** outside the box, acting as the signed-in person,
+company data. **Sluse Gate** outside the box, acting as the signed-in person,
 releases files from the places IT allowed: SharePoint, an SMB share, the
 person's OneDrive `Sluse` folder or a local Sluse Inputs folder. What the
 agent produces leaves the box one way, into a directory on the host PC
@@ -29,7 +29,7 @@ Each with its limit. The full table of what is and is not claimed is in
 
 | Risk | What Sluse does | Where it stops |
 | --- | --- | --- |
-| **Excessive agent access** | The agent has no credential and no mount. It reaches only the folders IT listed, as the person, checked by the broker outside the box | Everything in scope is readable, and can go to the AI provider |
+| **Excessive agent access** | The agent has no credential and no mount. It reaches only the folders IT listed, as the person, checked by Sluse Gate outside the box | Everything in scope is readable, and can go to the AI provider |
 | **Accidental data discovery** | Outside the listed folders, nothing exists for the agent: out of scope answers as not found | Connectors on the provider's side (Microsoft 365 in Claude, apps in ChatGPT) reach around Sluse; the guide says to turn them off |
 | **Uncontrolled file modification** | Read-only against every source. The one way out is a new folder in Sluse Artifacts, written all or nothing | Text copied out of the box, and hosts on the egress list that take uploads |
 | **Loss of provenance** | Every admitted file is hashed and recorded in the Windows Event Log, outside the box. Every published file names its sources, each checked to be one the agent was given | Which sources were really used is the agent's word; text copied out carries none |
@@ -39,7 +39,7 @@ Each with its limit. The full table of what is and is not claimed is in
 
 ## How it works
 
-[![How Sluse works: the sources IT put in scope, a broker that checks scope and reads as you, the box with the agent and its workspace, results published to Sluse Artifacts with their sources, and the Sluse log recording each file admitted, refused or published. The agent talks to its AI provider, and what it was given can go into that conversation.](docs/images/how-it-works.png)](docs/images/how-it-works.gif)
+[![How Sluse works: the sources IT put in scope, the Gate that checks scope and reads as you, the box with the agent and its workspace, results published to Sluse Artifacts with their sources, and the Sluse log recording each file admitted, refused or published. The agent talks to its AI provider, and what it was given can go into that conversation.](docs/images/how-it-works.png)](docs/images/how-it-works.gif)
 
 *Select the picture for the animated version.*
 
@@ -50,24 +50,26 @@ flowchart LR
     end
     SH["host shell<br/>the person's window"] -. "screen, input,<br/>clipboard text" .- BOX
     SH -->|"sign-in"| B
-    E ==>|"capability request<br/>mTLS"| B["sluse-broker<br/>acts as the person"]
+    E ==>|"capability request<br/>mTLS"| F["Gate Front<br/>no token"]
+    F ==>|"parsed request"| B["Gate Core<br/>acts as the person"]
     B ==>|"file bytes"| S[("SharePoint, OneDrive<br/>SMB share, Sluse Inputs")]
     B -->|"publish"| D[("Sluse Artifacts<br/>on the host PC")]
     B --- L[("Sluse log<br/>Windows Event Log")]
-    A -->|"inference"| P["egress proxy<br/>on the host"]
+    A -->|"inference"| P["egress proxy<br/>in Gate Front"]
     P -->|"listed hosts only"| M[("AI provider,<br/>other listed hosts")]
 ```
 
 | Component | Where | What it does |
 | --- | --- | --- |
 | `sluse-endpoint` | the box | The agent's only tools for company data, as an MCP server over stdio. Journals every admission. Holds no token, only its own mTLS key. |
-| `sluse-broker` | the host, as SYSTEM | Checks every path against the admin's config (**enforcing**), reads every file as the person, writes publishes into Sluse Artifacts, records to the Sluse log. Holds the person's tokens in memory only. |
+| `sluse-gate-front` | the host, as LocalService | Gate Front, one per box: everything the box can reach. Ends the box's mTLS, parses every request before Gate Core sees it, runs the egress proxy. Holds no token and reads no file; it may refuse, only Gate Core may allow. Its start as LocalService is built, not yet run on a device. |
+| `sluse-gate-core` | the host, as SYSTEM | Gate Core: checks every path against the admin's config (**enforcing**), reads every file as the person, writes publishes into Sluse Artifacts, records to the Sluse log, with what only Gate Front saw recorded as Front's claim. Holds the person's tokens in memory only. No network listener of its own. |
 | lifecycle service | the host, as SYSTEM | Checks the PC's posture, builds the box on the device, opens, closes, resets and wipes it. |
 | host shell | the host, as the person | The one window: the box's screen, input and clipboard text, no file channel. Signs the person in, so no token enters the box. |
-| egress proxy | the host | The box has no route and no DNS; the proxy lets it reach the config's listed hosts by name, nothing else. A listed host that takes uploads is a way out. |
+| egress proxy | the host, in Gate Front | The box has no route and no DNS; the proxy lets it reach the config's listed hosts by name, nothing else. A listed host that takes uploads is a way out. |
 
 - **Scope is enforced outside the box.** The box cannot assert its own scope,
-  and the broker never exceeds the person's own access: the source's
+  and Gate Core never exceeds the person's own access: the source's
   permissions have the last word.
 - **Admission is the control point, not residence.** Once given, a file may
   stay on the box's disk until the person wipes the box.
@@ -105,7 +107,7 @@ until it is built and run, and then it moves to Status.
 
 | Area | Today (v0.1) | Planned | When |
 | --- | --- | --- | --- |
-| Sources | SharePoint, the person's OneDrive `Sluse` folder, SMB shares and a local Sluse Inputs folder, read as the person | Internal tools and APIs as sources: MCP servers and tool calls through the broker, scoped per operation in the config, called as the person, recorded like a file. Read only first | v0.2, first |
+| Sources | SharePoint, the person's OneDrive `Sluse` folder, SMB shares and a local Sluse Inputs folder, read as the person | Internal tools and APIs as sources: MCP servers and tool calls through Gate Core, scoped per operation in the config, called as the person, recorded like a file. Read only first | v0.2, first |
 | Writing back | None. The one way out is Sluse Artifacts | A writing operation only after the person confirms it in the host's window, which the agent cannot draw over | after tool calls |
 | The providers' connectors | Connectors such as Microsoft 365 in Claude, or apps in ChatGPT, read company data from the provider's cloud, around Sluse. The guide says to turn them off; Sluse cannot check | Sluse Admin reads the tenant's consent and assignment for the providers' apps and warns when they are open | v0.2 |
 | Agent runtimes | Claude Code and Claude Desktop, run end to end. Codex and Mistral Vibe installed, not checked | Both checked | when each can be tested |

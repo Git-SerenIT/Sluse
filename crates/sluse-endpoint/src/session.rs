@@ -25,10 +25,10 @@
 //! person has to infer from timestamps. [`Resumed::describe`] is what the MCP
 //! server logs and what `sluse status` will show at M4.
 //!
-//! ## What the broker still decides
+//! ## What the Gate still decides
 //!
-//! The id itself is **always** the broker's. This file only remembers one. A
-//! session the broker has forgotten — it holds them for twelve hours idle —
+//! The id itself is **always** the Gate's. This file only remembers one. A
+//! session the Gate has forgotten — it holds them for twelve hours idle —
 //! answers `UnknownSession` on the first call, and the endpoint takes a new one
 //! rather than carrying on with a session that no longer exists anywhere else.
 
@@ -48,7 +48,7 @@ const STATE_FILE: &str = ".sluse-session.json";
 struct State {
     session_id: String,
     /// When this run started, as the endpoint saw it. Not authoritative — the
-    /// broker has its own issue time — and useful for exactly one thing: telling
+    /// Gate has its own issue time — and useful for exactly one thing: telling
     /// a person how long the run they are looking at has been going.
     started: DateTime<Utc>,
     /// How many times an endpoint process has attached to this session.
@@ -58,7 +58,7 @@ struct State {
 /// What happened when the endpoint looked for a run to join.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resumed {
-    /// No run on disk, or the broker had forgotten the one there was.
+    /// No run on disk, or the Gate had forgotten the one there was.
     Started { session: SessionId },
     /// An existing run, rejoined.
     Rejoined { session: SessionId, age: Duration, attachments: u32 },
@@ -118,7 +118,7 @@ fn read(workspace: &Path) -> Option<State> {
 
 /// Record that this process is attached to `session`, and say what happened.
 ///
-/// `rejoined` is what the caller learned by asking the broker: `true` when the
+/// `rejoined` is what the caller learned by asking the Gate: `true` when the
 /// remembered session was still good, `false` when a new one was taken.
 pub fn attach(
     workspace: &Path,
@@ -225,12 +225,12 @@ mod tests {
     }
 
     #[test]
-    fn a_session_the_broker_has_forgotten_starts_a_fresh_run() {
+    fn a_session_the_gate_has_forgotten_starts_a_fresh_run() {
         let dir = tempfile::tempdir().unwrap();
         let old = SessionId::mint();
         attach(dir.path(), &old, false, t(0)).unwrap();
 
-        // The caller asked the broker, was told UnknownSession, took a new one.
+        // The caller asked the Gate, was told UnknownSession, took a new one.
         // The old run's age must not be inherited by the new session.
         let new = SessionId::mint();
         let r = attach(dir.path(), &new, false, t(90_000)).unwrap();

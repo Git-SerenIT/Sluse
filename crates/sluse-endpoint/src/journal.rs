@@ -8,13 +8,13 @@
 //!
 //! One file per session, one JSON object per line, **one line per tool call
 //! whatever the outcome**. It is the guest's account of what it asked for and
-//! what it got; the broker's is the host's account of what it decided. They join
+//! what it got; the Gate's is the host's account of what it decided. They join
 //! on `admission_id`, and the scorer asserts the join is one-to-one with equal
 //! hashes — which is how invariant 7 is checked rather than asserted.
 //!
 //! **This is not a trust anchor** (`docs/audit.md`). It is inside the box and
 //! anything inside the box can be wrong about itself; it is functional. The
-//! record that counts is the broker's.
+//! record that counts is the Gate's.
 //!
 //! ## Lineage
 //!
@@ -94,7 +94,7 @@ impl Journal {
 
     /// Append, and never fail the operation being recorded.
     ///
-    /// Same rule as the broker's sink: an admission that happened stays
+    /// Same rule as the Gate's sink: an admission that happened stays
     /// happened, and a journal that could not be written is a loss to report,
     /// not a reason to tell the agent its read failed.
     pub fn record(&mut self, rec: AuditRecord) {
@@ -178,11 +178,11 @@ fn normal(path: &str) -> String {
 /// 0 and asks the host where it is first, so a restart sends what the host
 /// lacks rather than the whole file again; and it sends at most
 /// [`MIRROR_CHUNK`] at a time, whole lines only, so a long journal is not one
-/// request the broker's body limit refuses forever (review R-12). A failure
+/// request the Gate's body limit refuses forever (review R-12). A failure
 /// is logged and changes nothing: the next call catches up, and the operation
 /// being recorded never fails for it.
 pub async fn mirror(
-    broker: &crate::broker_client::BrokerClient,
+    gate: &crate::gate_client::GateClient,
     path: &Path,
     session: &SessionId,
     cursor: &std::sync::atomic::AtomicU64,
@@ -192,7 +192,7 @@ pub async fn mirror(
     let Some(end) = bytes.iter().rposition(|&b| b == b'\n').map(|i| i + 1) else { return };
     let mut from = cursor.load(Ordering::SeqCst);
     if from == 0 {
-        match send(broker, session, 0, String::new(), cursor).await {
+        match send(gate, session, 0, String::new(), cursor).await {
             Some(have) => from = have,
             None => return,
         }
@@ -206,7 +206,7 @@ pub async fn mirror(
             None => start + bytes[start..end].iter().position(|&b| b == b'\n').map_or(end - start, |i| i + 1),
         };
         let lines = String::from_utf8_lossy(&bytes[start..stop]).into_owned();
-        match send(broker, session, from, lines, cursor).await {
+        match send(gate, session, from, lines, cursor).await {
             Some(have) if have != from => from = have,
             _ => return,
         }
@@ -214,12 +214,12 @@ pub async fn mirror(
 }
 
 /// How much one mirror request carries at most, before JSON escaping; the
-/// broker takes 4 MiB on the route.
+/// Gate takes 4 MiB on the route.
 const MIRROR_CHUNK: usize = 1024 * 1024;
 
 /// One mirror request; the host's `have`, stored in `cursor`.
 async fn send(
-    broker: &crate::broker_client::BrokerClient,
+    gate: &crate::gate_client::GateClient,
     session: &SessionId,
     offset: u64,
     lines: String,
@@ -227,12 +227,12 @@ async fn send(
 ) -> Option<u64> {
     use std::sync::atomic::Ordering;
     let append = sluse_proto::wire::JournalAppend { session: session.clone(), offset, lines };
-    match broker.mirror_journal(&append).await {
+    match gate.mirror_journal(&append).await {
         Ok(have) => {
             cursor.store(have, Ordering::SeqCst);
             Some(have)
         }
-        // A broker with no mirror is not asked again by this process.
+        // A Gate with no mirror is not asked again by this process.
         Err(sluse_proto::SluseError::AudienceNotServed { .. }) => {
             cursor.store(u64::MAX, Ordering::SeqCst);
             None

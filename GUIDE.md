@@ -91,7 +91,7 @@ check it against (`Get-FileHash Sluse.msi`); it is not signed yet.
    for what setup does as you. **Leave "Consent on behalf of your
    organization" unticked**: ticked, it grants those permissions to
    Microsoft's tool for everyone in the tenant.
-2. **Tenant:** Sluse Admin makes one app registration, "Sluse broker". It
+2. **Tenant:** Sluse Admin makes one app registration, "Sluse Gate". It
    has no secret and no certificate, and reads only: Graph's
    `Files.Read.All` and `Sites.Read.All`, delegated, so it can never reach
    more than the signed-in person can. Grant admin consent in the portal
@@ -252,8 +252,9 @@ the box only if the essentials hold.
 "Sluse boxes", and Windows lists its adapter, vEthernet (Sluse boxes), as
 an "Unidentified network". That is expected: the network is host-only and
 has no gateway, so a box reaches nothing but Sluse on the PC. Its firewall
-rule is "Sluse boxes: broker and proxy (host-only)", in group Sluse. In
-Hyper-V Manager each box's notes name the person it reads as.
+rule is "Sluse boxes: Sluse Gate (host-only)", in group Sluse, for
+`sluse-gate-front.exe`. In Hyper-V Manager each box's notes name the person
+it reads as.
 
 ## Known edges in v0.1
 

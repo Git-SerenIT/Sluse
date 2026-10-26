@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 SerenIT ApS and Prompted EV
 
-//! The endpoint-to-broker wire contract: HTTP and JSON over mTLS.
+//! The endpoint-to-gate wire contract: HTTP and JSON over mTLS.
 //!
-//! One direction only. The endpoint, in the guest, calls the broker, on the
-//! host; the broker never calls the guest. That is what makes invariant 2 —
+//! One direction only. The endpoint, in the guest, calls the Gate, on the
+//! host; the Gate never calls the guest. That is what makes invariant 2 —
 //! *the box cannot assert its own scope* — structural rather than a matter of
 //! the guest behaving: scope is decided on the far side of a connection the
 //! guest opens and cannot answer.
 //!
 //! mTLS is mandatory, not a hardening option. The endpoint proves it is the
-//! endpoint with a client certificate; the broker proves it is the broker with a
+//! endpoint with a client certificate; the Gate proves it is the Gate with a
 //! leaf the endpoint has pinned by hash and no CA bundle at all.
 //!
 //! ## Why the content hash is not on the wire for reads
 //!
 //! A `read` or `fetch` answers with a byte stream and a few headers. The hash of
 //! those bytes is not among them: it would have to be a trailer, which reqwest
-//! 0.12 and 0.13 do not surface, or a header, which would mean the broker read
+//! 0.12 and 0.13 do not surface, or a header, which would mean the Gate read
 //! the whole file before sending any of it — and a 500 MB fetch would then be
 //! buffered in the one process that must never be a bottleneck.
 //!
@@ -37,7 +37,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Route paths. Versioned from the first line: the endpoint ships inside a guest
-/// image and the broker is installed on the host, so the two are updated
+/// image and the Gate is installed on the host, so the two are updated
 /// separately and will not always be the same age.
 pub mod route {
     pub const HEALTH: &str = "/v1/health";
@@ -57,8 +57,8 @@ pub mod route {
     pub const JOURNAL: &str = "/v1/journal";
 }
 
-/// The enrolment listener's port, on the broker's own host. Server TLS with the
-/// broker's pinned leaf, **no client certificate**, and one route (D-027 design
+/// The enrolment listener's port, on the Gate's own host. Server TLS with the
+/// Gate's pinned leaf, **no client certificate**, and one route (D-027 design
 /// point 4). The mTLS listener is not touched: there is no route there that
 /// takes a client without a certificate.
 pub const ENROL_PORT: u16 = crate::ports::ENROL;
@@ -85,10 +85,10 @@ pub mod header {
     /// bytes mode; this build refuses one.
     pub const CAPABILITY: &str = "x-sluse-capability";
 
-    /// Who the broker acted as for this response: [`UserRef::display`], on
+    /// Who the Gate acted as for this response: [`UserRef::display`], on
     /// every response it sends. The endpoint's journal records this, not the
     /// identity it saw at start-up, so the guest's record of an admission names
-    /// the same person as the broker's once the box is signed in (D-022).
+    /// the same person as the Gate's once the box is signed in (D-022).
     ///
     /// [`UserRef::display`]: crate::UserRef::display
     pub const USER: &str = "x-sluse-user";
@@ -136,37 +136,37 @@ pub mod header {
 // GET /v1/health
 // ---------------------------------------------------------------------------
 
-/// What the broker says about itself. The only route that needs no session.
+/// What the Gate says about itself. The only route that needs no session.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Health {
     pub ok: bool,
     pub box_id: BoxId,
-    /// The hash of the config the broker loaded. The endpoint compares it with
+    /// The hash of the config the Gate loaded. The endpoint compares it with
     /// its own copy's hash: a guest running against a different config than the
     /// host is enforcing is a condition worth seeing immediately, even though
-    /// only the broker's copy decides anything.
+    /// only the Gate's copy decides anything.
     pub config_version: ContentHash,
-    /// The broker binary's version.
-    pub broker_version: String,
-    /// Who the broker is acting as: the box's signed-in user, else its own
+    /// The Gate binary's version.
+    pub gate_version: String,
+    /// Who the Gate is acting as: the box's signed-in user, else its own
     /// process identity. Can change after this answer; `x-sluse-user` on
     /// every response is the current one.
     pub user: crate::audit::UserRef,
     /// The preflight snapshot in force.
     pub posture_id: PostureId,
-    /// **A session id the broker minted, for the caller to carry from here on.**
+    /// **A session id the Gate minted, for the caller to carry from here on.**
     ///
     /// The guest does not choose this. It ties records and a journal to one
     /// run; it is not what the volume window counts by, which is the source
     /// alone (D-060), because a box can mint as many as it likes. Every other
     /// route requires
-    /// [`headers::SESSION`], and the broker refuses one it did not issue with
+    /// [`headers::SESSION`], and the Gate refuses one it did not issue with
     /// [`SluseError::UnknownSession`](crate::SluseError::UnknownSession).
     ///
     /// A fresh one per call, so health is not a way to reattach to somebody
     /// else's session. A caller that only wants liveness — `sluse check`'s
-    /// "broker reachable" gate — discards it, and it ages out unused.
+    /// "gate reachable" Gate — discards it, and it ages out unused.
     pub session_id: SessionId,
 }
 
@@ -179,7 +179,7 @@ pub struct Health {
 /// Everything [`Health`] reports except the session id, and that omission is
 /// the whole reason the route exists. `/v1/health` mints on every call because
 /// it is where a session comes from; anything that only wants to know whether
-/// the broker is serving — `sluse status`, the "broker reachable" gate, the
+/// the Gate is serving — `sluse status`, the "gate reachable" Gate, the
 /// console's state panel — would mint one per call and evict live sessions out
 /// of a registry that holds a bounded number of them. A liveness probe that
 /// costs another caller its session is a probe that breaks the thing it is
@@ -192,18 +192,18 @@ pub struct Health {
 pub struct Status {
     pub ok: bool,
     pub box_id: BoxId,
-    /// The hash of the config the broker loaded.
+    /// The hash of the config the Gate loaded.
     pub config_version: ContentHash,
-    /// The broker binary's version.
-    pub broker_version: String,
-    /// Who the broker is acting as.
+    /// The Gate binary's version.
+    pub gate_version: String,
+    /// Who the Gate is acting as.
     pub user: crate::audit::UserRef,
     /// The preflight snapshot in force.
     pub posture_id: PostureId,
-    /// Whether every gate check passed. Always true on a serving broker — it
+    /// Whether every required check passed. Always true on a serving Gate — it
     /// refuses to start otherwise — and reported anyway, so a reader does not
     /// have to already know that in order to trust the answer.
-    pub gate_passed: bool,
+    pub required_passed: bool,
     /// Who the box is signed in as (D-022), or `None`. Asked by the console
     /// on every refresh, so the person sees whose authority the box is using.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -212,7 +212,7 @@ pub struct Status {
     /// which handed it over and waits for this.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_sign_in: Option<HostSignInResult>,
-    /// How many sessions the broker is holding. Not a count of users:
+    /// How many sessions the Gate is holding. Not a count of users:
     /// `/v1/health` mints one per call, so this is closer to "how many times
     /// has something asked for a session recently".
     pub sessions: usize,
@@ -220,10 +220,10 @@ pub struct Status {
     pub uptime_seconds: i64,
     /// The device's environment, so the console asks for the greyed listing
     /// and the host's audit tail only where they are served, in LOCAL
-    /// (D-033, D-045 point 2). Absent from an older broker: taken as not LOCAL.
+    /// (D-033, D-045 point 2). Absent from an older gate: taken as not LOCAL.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<crate::Environment>,
-    /// Whether the broker still holds the session in the request's
+    /// Whether the Gate still holds the session in the request's
     /// [`headers::SESSION`]; absent when none was sent. How a restarted
     /// endpoint asks to resume its run without a refused request in the
     /// Sluse log for a session that only aged out (L1, 2026-10-07).
@@ -235,7 +235,7 @@ pub struct Status {
     pub signed_out: bool,
     /// What each source let in during the volume window now (Q36, D-060):
     /// the counts the alert is raised from, so the console's meters and the
-    /// alert agree. Absent from an older broker.
+    /// alert agree. Absent from an older Gate.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub volume: Vec<SourceCount>,
 }
@@ -265,7 +265,7 @@ pub struct HostSignInResult {
 // ---------------------------------------------------------------------------
 
 /// What a sign-out did. **D-022**: the box's binding is dropped, and with it
-/// the Graph and refresh tokens the broker held.
+/// the Graph and refresh tokens the Gate held.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SignedOut {
@@ -287,13 +287,13 @@ pub struct EnrolRequest {
     pub token: String,
     /// The raw P-256 public key, uncompressed (65 bytes), as lowercase hex.
     pub public_key: String,
-    /// The box's own name, for the broker's log. Not trusted for anything.
+    /// The box's own name, for the Gate's log. Not trusted for anything.
     pub hostname: String,
 }
 
-/// What the box is given: its client certificate, signed by the broker's
-/// client CA, and **the broker's two config files, byte for byte**, so that
-/// the box's `config_version` is the broker's.
+/// What the box is given: its client certificate, signed by the Gate's
+/// client CA, and **the Gate's two config files, byte for byte**, so that
+/// the box's `config_version` is the Gate's.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnrolResponse {
@@ -399,7 +399,7 @@ pub struct SourceView {
     ///
     /// No host path in scope form: the guest learns a resolved path only as
     /// the `resolved` value on a path it already named, where it is needed for
-    /// the journal to line up with the broker's record. The source's own
+    /// the journal to line up with the Gate's record. The source's own
     /// location is in `address`, which is not a path the guest can use.
     pub scopes: Vec<String>,
     /// Whether this source answered the last time anything asked it, and when.
@@ -428,7 +428,7 @@ pub struct SourceLastSeen {
 }
 
 impl SourceView {
-    /// Build a view from a config source. Kept here so the broker cannot
+    /// Build a view from a config source. Kept here so the Gate cannot
     /// accidentally publish the address of a source under a field the guest
     /// treats as a path.
     pub fn new(
@@ -540,7 +540,7 @@ pub struct ReadRequest {
 ///
 /// The body itself is `application/octet-stream` and is streamed, so it is not
 /// part of this type — this is the metadata the endpoint needs to journal what
-/// it received and to join its record to the broker's.
+/// it received and to join its record to the Gate's.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReadHeaders {
     pub admission_id: AdmissionId,
@@ -567,7 +567,7 @@ pub struct StatRequest {
     pub path: String,
     /// What the caller believes about the file.
     ///
-    /// When size and modified time still match, the broker answers from
+    /// When size and modified time still match, the Gate answers from
     /// metadata alone and returns the pinned hash with `matchesPinned: true`
     /// rather than re-reading the bytes. The inventory stats every file it
     /// knows about, and re-hashing a 500 MB fetch to redraw a console row is
@@ -610,7 +610,7 @@ pub struct PublishManifest {
     pub artifacts: Vec<ArtifactManifest>,
     /// **The endpoint's view of the session's admissions**, deduped by content
     /// hash, each with its state, computed from its journal (D-018). The
-    /// broker does not record this list: it records its own admissions of the
+    /// Gate does not record this list: it records its own admissions of the
     /// session and takes only each entry's `state` from here, and refuses a
     /// declared source it did not admit itself (D-059, review R-07).
     pub lineage: Vec<LineageItem>,
@@ -622,7 +622,7 @@ pub struct PublishManifest {
 pub struct ArtifactManifest {
     /// A single file name. No directory separators, no reserved name.
     pub name: String,
-    /// What the endpoint hashed before sending. The broker re-hashes what it
+    /// What the endpoint hashed before sending. The Gate re-hashes what it
     /// received and refuses the whole publish on a mismatch: a manifest that
     /// does not describe its bytes is the one thing a provenance record must
     /// never carry.
@@ -739,15 +739,15 @@ pub struct AuditTailResponse {
 /// The capability a source kind produces, whichever verb asked.
 ///
 /// **The source decides, not the verb**, and since D-046 every source is
-/// bytes mode: the broker reads as the user and streams, so its record covers
+/// bytes mode: the Gate reads as the user and streams, so its record covers
 /// authorisation and delivery both. `sharepoint` was URL mode from M7, on the
-/// spec's ground that the broker would be the bottleneck; since the egress
+/// spec's ground that the Gate would be the bottleneck; since the egress
 /// proxy (D-035) a URL-mode download crossed a host process anyway, and URL
 /// mode put the tenant's SharePoint host on every box's list (D-044). The
 /// verb still decides the cap and where the bytes land.
 pub fn capability_for(kind: &SourceKind) -> Capability {
     match kind {
-        // Every kind since D-046: the broker on the data path, SharePoint
+        // Every kind since D-046: the Gate on the data path, SharePoint
         // included, so the trusted side records the delivery and its hash and
         // the box needs no route to the source.
         SourceKind::LocalFolder { .. }
@@ -774,7 +774,7 @@ mod tests {
             assert!(enc.bytes().all(|b| (0x21..=0x7e).contains(&b)), "{enc} is not a header value");
             assert_eq!(header::decode(&enc), v);
         }
-        // Plain ASCII passes through as written, so an older broker's raw value
+        // Plain ASCII passes through as written, so an older Gate's raw value
         // still reads correctly.
         assert_eq!(header::encode("spo/in-scope/a.txt"), "spo/in-scope/a.txt");
         assert_eq!(header::decode("bad%zz%4"), "bad%zz%4");
