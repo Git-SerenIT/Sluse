@@ -46,7 +46,7 @@ Each with its limit. The full table of what is and is not claimed is in
 ```mermaid
 flowchart LR
     subgraph BOX["the box: Hyper-V guest, no mounts"]
-        A["agent runtime<br/>Claude Code, Codex,<br/>Claude Desktop, Mistral Vibe"] -->|"stdio"| E["sluse-endpoint"]
+        A["agent runtime<br/>Claude Code, Codex,<br/>Claude Desktop, ChatGPT,<br/>Mistral Vibe"] -->|"stdio"| E["sluse-endpoint"]
     end
     SH["host shell<br/>the person's window"] -. "screen, input,<br/>clipboard text" .- BOX
     SH -->|"sign-in"| B
@@ -96,8 +96,8 @@ Claude Code and Claude Desktop end to end.
 
 Built, not yet run on a device: the Sluse log accepting writes from SYSTEM
 only, App Control on Sluse Artifacts, the check that the Windows user and
-the signed-in user are the same person, and Codex and Mistral Vibe, wired
-like the other runtimes. What is open is listed as open, in
+the signed-in user are the same person, and Codex, ChatGPT and Mistral
+Vibe, wired like the other runtimes. What is open is listed as open, in
 [GUIDE.md](GUIDE.md#known-edges-in-v01) and [SECURITY.md](SECURITY.md).
 
 ## Where this is going
@@ -110,7 +110,7 @@ until it is built and run, and then it moves to Status.
 | Sources | SharePoint, the person's OneDrive `Sluse` folder, SMB shares and a local Sluse Inputs folder, read as the person | Internal tools and APIs as sources: MCP servers and tool calls through Gate Core, scoped per operation in the config, called as the person, recorded like a file. Read only first | v0.2, first |
 | Writing back | None. The one way out is Sluse Artifacts | A writing operation only after the person confirms it in the host's window, which the agent cannot draw over | after tool calls |
 | The providers' connectors | Connectors such as Microsoft 365 in Claude, or apps in ChatGPT, read company data from the provider's cloud, around Sluse. The guide says to turn them off; Sluse cannot check | Sluse Admin reads the tenant's consent and assignment for the providers' apps and warns when they are open | v0.2 |
-| Agent runtimes | Claude Code and Claude Desktop, run end to end. Codex and Mistral Vibe installed, not checked | Both checked | when each can be tested |
+| Agent runtimes | Claude Code and Claude Desktop, run end to end. Codex, ChatGPT and Mistral Vibe installed, not checked | Both checked | when each can be tested |
 | The provider's credential | Each runtime signs in inside the box; Sluse cannot see which account | The credential held on the host, none in the box, for runtimes that take a key or a token | when a pilot needs it |
 | Egress | Default deny; the box reaches only listed hosts, by name. A listed host that takes uploads is a way out | Method and path rules on such hosts, so one like GitHub can be allowed in part. A company's own upstream proxy | when a pilot needs it |
 | Files in the box | They stay until the person clears or wipes the box | Finding admitted files moved out of the workspace, by hash (advisory). A spike on confining the command-line runtimes' writes to the workspace; a claim only if it holds | after the pilots |

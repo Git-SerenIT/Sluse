@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "about": "The egress bundles Sluse Admin offers (D-038 point 5). A config holds the bundles chosen and every host written out; only the hosts are enforced, and a newer catalog never widens a box by itself. 'measured' says what of a bundle was measured, when and how, or is null where its hosts are still the M9 draft.",
   "bundles": [
     {
@@ -49,17 +49,20 @@
     },
     {
       "id": "codex",
-      "name": "Codex",
-      "description": "OpenAI's inference and sign-in, and Codex's installer.",
+      "name": "Codex and ChatGPT",
+      "description": "OpenAI's inference and sign-in, Codex's installer, and ChatGPT's desktop app, its package repository and live connection.",
       "default": true,
       "uploads": true,
       "hosts": [
         "api.openai.com",
         "releases.openai.com",
         "auth.openai.com",
-        "chatgpt.com"
+        "chatgpt.com",
+        "ws.chatgpt.com",
+        "cdn.openai.com",
+        "persistent.oaistatic.com"
       ],
-      "measured": "2026-10-02: the Codex installer on the dev guest, behind the proxy; chatgpt.com redirects to releases.openai.com, which serves the script and the binary. First use not measured"
+      "measured": "2026-10-02: the Codex installer on the dev guest, behind the proxy; chatgpt.com redirects to releases.openai.com, which serves the script and the binary. First use not measured. ChatGPT's hosts read from its package's code, 2026-10-26, not measured; its telemetry hosts (Statsig) left out"
     },
     {
       "id": "mistral",

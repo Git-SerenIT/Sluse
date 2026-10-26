@@ -38,7 +38,26 @@ as root.
 | | | Keeping admitted files from staying in the box |
 | | | A clean box at the start of a session: what an agent changed can persist until a reset or wipe |
 | | | An envelope on a file the agent reads directly from disk |
-| | | Which AI provider account the box is signed in to |
+| | | Which AI provider account the box is signed in to: where a runtime can be held to an organisation, the runtime enforces it, not Sluse (below) |
+
+## The AI runtimes' sign-ins
+
+Each runtime signs in inside the box, to the person's own seat, and keeps
+its credential there (invariant 3 names it). Sluse never sees or records
+that account. Where a vendor offers an organisation pin, the admin sets it
+in Sluse Admin (Advanced) and Sluse writes it into the runtime's managed
+settings, root-owned in the box. **The runtime enforces the pin, not
+Sluse.** An account outside the company's organisation is not the
+company's and does not belong near company data. Since 0.1.4, not yet run
+on a device.
+
+| Runtime | Sign-in | Held to the organisation by |
+|---|---|---|
+| Claude Code | In the box. Anthropic's terms forbid a third party handling claude.ai credentials | `forceLoginOrgUUID` in its managed settings. `claude setup-token` ignores it |
+| Claude Desktop | In the box | Nothing yet |
+| Codex | In the box, by device code | `/etc/codex/requirements.toml`: ChatGPT sign-in only, to the listed workspaces |
+| ChatGPT Desktop | In the box, through Firefox | The same `requirements.toml`: it is OpenAI's Codex app. Whether its plain chat obeys the pin, not only its Codex side, is not documented |
+| Mistral Vibe | In the box, a Mistral key, Mistral's EU endpoint | Nothing: Vibe has no documented organisation pin. Which inference provider and sign-in it uses waits on Mistral's answer about its terms |
 
 ## Invariants
 

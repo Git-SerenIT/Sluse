@@ -90,6 +90,13 @@ runcmd:
   # key checked against the fingerprint Anthropic publishes. No recommended
   # packages: Cowork's QEMU needs KVM, which a Hyper-V box does not have.
   - [sh, -c, '. /etc/profile.d/sluse-proxy.sh && curl -fsSLo /usr/share/keyrings/claude-desktop-archive-keyring.asc https://downloads.claude.ai/claude-desktop/key.asc && gpg --show-keys --with-colons /usr/share/keyrings/claude-desktop-archive-keyring.asc | grep -q "^fpr:::::::::31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE:" && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" > /etc/apt/sources.list.d/claude-desktop.list && apt-get update && apt-get install -y --no-install-recommends claude-desktop']
+  # ChatGPT's desktop app, OpenAI's Linux preview (jok, 2026-10-26), through
+  # the codex bundle: OpenAI's .deb, whose own postinst adds OpenAI's apt
+  # repository and key, so it updates as Claude Desktop does. OpenAI
+  # publishes no fingerprint; the one checked is the key the package carried
+  # on 2026-10-26, so a new key leaves the app out of the base and says so
+  # below, rather than failing the build. About 1.7 GB installed.
+  - [sh, -c, '. /etc/profile.d/sluse-proxy.sh && curl -fsSLo /tmp/chatgpt.deb https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_amd64.deb && apt-get install -y --no-install-recommends /tmp/chatgpt.deb && { gpg --show-keys --with-colons /usr/share/keyrings/chatgpt-archive-keyring.gpg | grep -q "^fpr:::::::::3BFA0E4AE8B8CC16A2D9BA684A3B4A566C4660E4:" || { apt-get purge -y chatgpt; rm -f /etc/apt/sources.list.d/chatgpt.sources /usr/share/keyrings/chatgpt-archive-keyring.gpg; }; }; rm -f /tmp/chatgpt.deb']
   # Pandoc renders the agent's markdown to .docx and .pptx for a publish
   # (D-049), with no-images.lua from the bundle. No recommended packages: LaTeX is hundreds of MB, and PDF is the
   # user's own print to PDF.
@@ -137,6 +144,7 @@ runcmd:
     # then says it is not in this box.
     su - sluse -c "command -v codex" >/dev/null 2>&1 || echo "Codex was not installed: it comes through the codex bundle" > /dev/ttyS0
     test -x /usr/local/bin/vibe || echo "Mistral Vibe was not installed: it comes from PyPI, the python bundle" > /dev/ttyS0
+    test -x /usr/bin/chatgpt || echo "ChatGPT was not installed: it comes through the codex bundle, or its key was not the one checked" > /dev/ttyS0
     for p in chrony curl gnupg python3 nftables sway xwayland wayvnc foot fonts-liberation firefox pipx; do
       dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "ok installed" || m="$m $p"
     done

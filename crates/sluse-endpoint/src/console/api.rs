@@ -171,6 +171,7 @@ async fn launch(Json(body): Json<LaunchBody>) -> Response {
         "codex" => "foot --app-id=sluse-codex /usr/local/libexec/sluse/cli codex",
         "vibe" => "foot --app-id=sluse-vibe /usr/local/libexec/sluse/cli vibe",
         "claude-desktop" => "claude-desktop",
+        "chatgpt" => "/usr/local/libexec/sluse/chatgpt",
         _ => {
             return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "code": "UNKNOWN_APP" }))).into_response();
         }

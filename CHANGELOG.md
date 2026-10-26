@@ -5,6 +5,29 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.4
+
+**For the administrator**
+- **The AI runtimes' organisations** (Sluse Admin, Advanced): your
+  ChatGPT workspaces and your Claude organisation. In the box, Claude Code
+  signs in only to that organisation, and Codex only with ChatGPT, to
+  those workspaces. The runtimes enforce this from their own managed
+  settings, which Sluse writes; Sluse does not check the accounts itself.
+  An account outside your organisation is not your company's.
+- **ChatGPT's desktop app in the box**, beside Claude: OpenAI's Linux
+  preview, from the Codex egress group, which now also lists its hosts
+  (`ws.chatgpt.com`, `cdn.openai.com`, `persistent.oaistatic.com`). Sluse
+  Admin shows them as new for a configuration made earlier; publish it
+  again to apply them. It adds about 1.7 GB to the box's system. The
+  ChatGPT workspaces above hold it too, as it is OpenAI's Codex app;
+  whether its plain chat obeys them is not documented.
+
+**For the person using Sluse**
+- **ChatGPT** among the console's Open buttons. Sign in once, through
+  Firefox in the box.
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.3
 
 **For the administrator**

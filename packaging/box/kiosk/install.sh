@@ -33,7 +33,17 @@ apt-get install -y swaybg libglib2.0-bin dconf-gsettings-backend xdg-desktop-por
 apt-get install -y --no-install-recommends gnome-keyring
 
 install -d /usr/local/libexec/sluse /usr/local/lib/sluse /etc/firefox/policies
-install -m 0755 "$here/sluse-bootstrap" "$here/kiosk" "$here/vnc" "$here/home-init" "$here/browser" "$here/console-log" "$here/cli" "$here/theme" /usr/local/libexec/sluse/
+install -m 0755 "$here/sluse-bootstrap" "$here/kiosk" "$here/vnc" "$here/home-init" "$here/browser" "$here/console-log" "$here/cli" "$here/theme" "$here/chatgpt" /usr/local/libexec/sluse/
+# Firefox opens the web: ChatGPT's package registers itself for http and
+# https, and its sign-in opens the default browser, which would then be
+# ChatGPT itself. The snap's name first, the deb's after.
+install -d /etc/xdg
+cat > /etc/xdg/mimeapps.list <<'MIME'
+[Default Applications]
+x-scheme-handler/http=firefox_firefox.desktop;firefox.desktop;
+x-scheme-handler/https=firefox_firefox.desktop;firefox.desktop;
+text/html=firefox_firefox.desktop;firefox.desktop;
+MIME
 install -m 0644 "$here/sway.conf" "$here/vnc.nft" "$here/no-images.lua" /usr/local/lib/sluse/
 install -m 0644 "$here/policies.json" /etc/firefox/policies/policies.json
 install -m 0755 "$bundle/bin/sluse-endpoint" /usr/local/bin/sluse-endpoint
@@ -96,6 +106,13 @@ fi
 if as_user 'command -v codex' >/dev/null 2>&1; then
     as_user "codex mcp remove sluse >/dev/null 2>&1; codex mcp add sluse -- $mcp" \
         || echo "Codex: the sluse MCP server was not added" >&2
+fi
+# ChatGPT's desktop app reads Codex's own config (it is OpenAI's Codex app):
+# the sluse server Codex's line above added, or, without the Codex CLI, the
+# same table written here.
+if [ -x /usr/bin/chatgpt ] && ! as_user "grep -qs '^\[mcp_servers.sluse\]' ~/.codex/config.toml"; then
+    as_user "mkdir -p ~/.codex && printf '\n[mcp_servers.sluse]\ncommand = \"/usr/local/bin/sluse-endpoint\"\nargs = [\"--config\", \"%s\", \"--mcp\"]\n' '$home/Sluse/sluse.json' >> ~/.codex/config.toml" \
+        || echo "ChatGPT: the sluse MCP server was not added" >&2
 fi
 if [ -x /usr/bin/claude-desktop ]; then
     install -m 0755 "$here/claude-desktop" /usr/local/bin/claude-desktop

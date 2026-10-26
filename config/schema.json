@@ -4,8 +4,18 @@
   "description": "The authored file: what the admin decided (D-038 point 2). Identity,\npolicy and settings, and nothing about one device. **Its hash is\n`config_version`**, so every device of a deployment cites the same one.",
   "type": "object",
   "properties": {
+    "accounts": {
+      "description": "The box's size and the copy-out switch (D-038 point 7).\nWhich accounts the box's AI runtimes may sign in with (D-072).\nAbsent: any, as before.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AccountsConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "box": {
-      "description": "The box's size and the copy-out switch (D-038 point 7).",
       "$ref": "#/$defs/BoxSettings",
       "default": {
         "copyOut": true,
@@ -80,6 +90,27 @@
     "volume"
   ],
   "$defs": {
+    "AccountsConfig": {
+      "description": "The organisations the box's AI runtimes may sign in to (D-072). The\nruntimes enforce them from managed settings written in the box; Sluse\ndoes not (invariant 2). An account that fails its organisation is not\nthe company's, and does not belong near company data (jok).",
+      "type": "object",
+      "properties": {
+        "chatgptWorkspaces": {
+          "description": "ChatGPT workspace ids accepted for Codex. Empty: any.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "claudeOrganisation": {
+          "description": "The Claude organisation's UUID, for Claude Code's\n`forceLoginOrgUUID`. Claude names no account Sluse could check.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "BoxSettings": {
       "description": "The box's size and the copy-out switch.",
       "type": "object",

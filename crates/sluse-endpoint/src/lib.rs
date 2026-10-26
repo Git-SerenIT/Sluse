@@ -44,6 +44,7 @@ pub mod journal;
 pub mod kvp;
 pub mod manifest;
 pub mod render;
+pub mod runtime_policy;
 pub mod server;
 pub mod session;
 pub mod workspace;

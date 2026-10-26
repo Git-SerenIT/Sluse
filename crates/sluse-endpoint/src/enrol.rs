@@ -82,6 +82,12 @@ pub async fn run(config: &Path, pool: &Path, owner: Option<(u32, u32)>) -> Resul
     write(&sluse_proto::config::device_path(config), resp.device.as_bytes(), 0o644, owner)?;
     write(config, resp.config.as_bytes(), 0o644, owner)?;
     write(&marker, enrolled_with.as_str().as_bytes(), 0o644, owner)?;
+    // The runtimes' account pins (D-072), as root, where they read them. A
+    // test enrols as an ordinary user and writes none.
+    #[cfg(unix)]
+    if owner.is_some() {
+        crate::runtime_policy::apply(loaded.config.accounts.as_ref(), Path::new("/"))?;
+    }
     Ok(Outcome::Enrolled)
 }
 

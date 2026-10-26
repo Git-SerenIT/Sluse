@@ -69,8 +69,9 @@ given in that session. Which ones it really used is the agent's word.
   out of compliance is not yet measured.
 
 **The AI runtimes:** company seats for the runtimes in the box (Claude
-Desktop, Claude Code, Codex, Mistral Vibe). Each is signed in once inside
-the box. Mistral Vibe needs its egress group ticked, which is off by
+Desktop, Claude Code, ChatGPT, Codex, Mistral Vibe). Each is signed in once
+inside the box. ChatGPT is OpenAI's Linux preview, about 1.7 GB of the
+box's system, and comes with the Codex group. Mistral Vibe needs its egress group ticked, which is off by
 default, and an organisation account whose inputs Mistral does not train
 on: check the plan, since some train by default. Turn
 **Claude in Chrome off** for those accounts in the provider's admin
@@ -172,9 +173,10 @@ asks once each time it opens the box, and once more if a first preparation
 took long. The box shows once its console is ready.
 
 **In the box:** the Sluse console in Firefox, and the AI apps (Claude
-Desktop, Claude Code, Codex, Mistral Vibe), which the console's Open
-buttons start. Each opens as a tab along the top of the box, named Sluse
-console, Claude, Claude Code, Codex, Mistral Vibe or Terminal; switch tabs
+Desktop, ChatGPT, Claude Code, Codex, Mistral Vibe), which the console's
+Open buttons start. Each opens as a tab along the top of the box, named
+Sluse console, Claude, ChatGPT, Claude Code, Codex, Mistral Vibe or
+Terminal; switch tabs
 with the mouse, or with Ctrl+Alt+Right, which goes round from the last tab
 to the first. The box is
 drawn at the size of the window, so making the window larger gives the box
@@ -184,7 +186,8 @@ Sign each app in to your company's AI account once; it stays signed in.
 The first run of Claude Code, Codex and Mistral Vibe says how, since
 Microsoft's sign-in cannot open in the box. They start in the box's
 workspace, where the files Sluse lets in land; Claude Desktop opens a Code
-session there and asks you to confirm the folder.
+session there and asks you to confirm the folder. ChatGPT signs in through
+Firefox in the box.
 
 The console's pages: **Work** (what Sluse let in this session, its count
 for each source against the volume alert, and what was published), **Your
@@ -281,7 +284,7 @@ it reads as.
   until the client was turned off, on our test PC.
 - **The first open on a PC is slow**: the box's system is built there,
   about 20 minutes or more on our test PC. Later opens take under a minute.
-- **Hosts that accept uploads.** The AI providers' groups (Claude, Codex,
+- **Hosts that accept uploads.** The AI providers' groups (Claude, Codex and ChatGPT,
   and Mistral Vibe when ticked) take whatever the box sends them: that is
   the conversation. Claude and Codex are on by default. npm and GitHub
   serve the agent's tools and also accept uploads on the same hosts; they

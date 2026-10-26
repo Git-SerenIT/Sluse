@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# ChatGPT's desktop app from the console's button (jok, 2026-10-26). It
+# comes through the codex bundle (user-data.yaml), so a base built with that
+# off has none: say so in a window, as the CLIs do, not nothing at all.
+[ -x /usr/bin/chatgpt ] && exec /usr/bin/chatgpt "$@"
+exec foot --app-id=sluse-terminal sh -c 'printf "ChatGPT is not installed in this box. Send the details to your IT department.\nPress Enter to close this window. "; read -r _'

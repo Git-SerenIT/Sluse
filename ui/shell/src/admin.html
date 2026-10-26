@@ -338,6 +338,12 @@
       <label class="toggle"><input type="checkbox" role="switch" checked id="copy-out" aria-labelledby="c-t"><span class="toggle__track"></span><span class="toggle__state" data-on="On" data-off="Off"></span></label>
     </div>
   </section>
+  <section class="ad-sec" aria-labelledby="acc-t">
+    <div class="ad-sec__head"><h2 class="t-h3" id="acc-t">The AI runtimes' accounts</h2><span class="pill" data-status="info">Per runtime</span></div>
+    <p class="ad-sec__lead">Which organisations the agents in the box may sign in to. An account outside them is not your company's. The runtimes enforce this, not Sluse. Leave a field empty to accept any.</p>
+    <label class="field"><span class="field__label">ChatGPT workspace ids accepted</span><input class="input input--mono" type="text" id="acc-workspaces"><span class="field__hint">Separated by spaces or commas. Codex and ChatGPT's desktop app in the box sign in only with ChatGPT, to one of these workspaces. In ChatGPT's admin settings.</span></label>
+    <label class="field"><span class="field__label">Claude organisation id</span><input class="input input--mono" type="text" id="acc-claude" placeholder="00000000-0000-0000-0000-000000000000"><span class="field__hint">Claude Code in the box signs in only to this organisation. Claude Code enforces it, not Sluse. In Claude's admin settings, Organization.</span></label>
+  </section>
   <section class="ad-sec" aria-labelledby="l-t">
     <div class="togglerow">
       <span class="srccard__kind"><i data-icon="journal"></i></span>

@@ -175,9 +175,17 @@ function authored() {
       log: $('egress-log').checked ? { enabled: true, maxMB: num('egress-mb') } : undefined,
     },
     box: { memoryGB: radio('mem'), homeGB: radio('disk'), copyOut: $('copy-out').checked },
+    accounts: accountsFromForm(),
   };
   if (!a.entra.tenantId || !a.entra.clientId) delete a.entra;
   return JSON.parse(JSON.stringify(a));
+}
+
+/** The runtimes' accounts (D-072), from the Advanced step; absent when empty. */
+const words = (id) => $(id).value.split(/[\s,]+/).map((w) => w.trim()).filter(Boolean);
+function accountsFromForm() {
+  const a = { chatgptWorkspaces: words('acc-workspaces'), claudeOrganisation: $('acc-claude').value.trim() || undefined };
+  return a.chatgptWorkspaces.length || a.claudeOrganisation ? a : undefined;
 }
 
 /** The choices, by step, to tell unsaved work and which steps it touched. */
@@ -185,7 +193,7 @@ function snapshot() {
   return {
     Sources: JSON.stringify([depName(), S.sources.map(({ name, kind, scope, sensitivity }) => [name, kind, scope, sensitivity])]),
     Egress: JSON.stringify([[...S.bundles].sort(), $('own-hosts').value]),
-    Advanced: JSON.stringify(['v-files', 'v-mb', 'v-window', 'fetch-mb', 'egress-mb'].map((id) => $(id).value)
+    Advanced: JSON.stringify(['v-files', 'v-mb', 'v-window', 'fetch-mb', 'egress-mb', 'acc-workspaces', 'acc-claude'].map((id) => $(id).value)
       .concat([radio('mem'), radio('disk'), $('copy-out').checked, $('egress-log').checked])),
   };
 }
@@ -559,6 +567,8 @@ function load(a, path) {
   S.consent = { state: 'idle' };
   S.assigned = { state: 'before', list: [] };
   $('dep-name').value = a.deployment?.name ?? '';
+  $('acc-workspaces').value = (a.accounts?.chatgptWorkspaces ?? []).join(' ');
+  $('acc-claude').value = a.accounts?.claudeOrganisation ?? '';
   // A SharePoint source from a file has no library id to browse by until its
   // site is found again (Q48).
   S.sources = (a.sources ?? []).map((s) => ({ ...s, scope: s.scope ?? [], mark: ['sharepoint', 'mcp'].includes(s.kind.type) ? 'from-file' : null }));
@@ -596,6 +606,7 @@ function startNew() {
   $('v-files').value = 25; $('v-window').value = 60; $('v-mb').value = 50; $('fetch-mb').value = '';
   drawCards(6, 40);
   $('copy-out').checked = true; $('egress-log').checked = false; $('egress-mb').value = 50;
+  $('acc-workspaces').value = ''; $('acc-claude').value = '';
   buildBundles();
   drawSources(); drawAdvanced();
   setBaseline();
@@ -1501,7 +1512,7 @@ function drawAdvanced() {
   $('f-log').classList.toggle('field--invalid', zero);
   $('m-log').hidden = !zero;
 }
-for (const id of ['v-files', 'v-mb', 'v-window', 'fetch-mb', 'egress-mb']) $(id).oninput = () => { drawAdvanced(); changed(); };
+for (const id of ['v-files', 'v-mb', 'v-window', 'fetch-mb', 'egress-mb', 'acc-workspaces', 'acc-claude']) $(id).oninput = () => { drawAdvanced(); changed(); };
 for (const id of ['copy-out', 'egress-log']) $(id).onchange = () => { drawAdvanced(); changed(); };
 
 // ---- Review -------------------------------------------------------------------------

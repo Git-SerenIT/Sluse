@@ -139,6 +139,11 @@ pub struct Authored {
     pub egress: Option<EgressConfig>,
 
     /// The box's size and the copy-out switch (D-038 point 7).
+    /// Which accounts the box's AI runtimes may sign in with (D-072).
+    /// Absent: any, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accounts: Option<AccountsConfig>,
+
     #[serde(default, rename = "box")]
     pub box_settings: BoxSettings,
 }
@@ -253,6 +258,7 @@ pub struct Config {
     pub entra: Option<EntraConfig>,
     pub egress: Option<EgressConfig>,
     pub box_settings: BoxSettings,
+    pub accounts: Option<AccountsConfig>,
 }
 
 impl Config {
@@ -278,6 +284,7 @@ impl Config {
             audit: d.audit,
             entra: a.entra,
             egress: a.egress,
+            accounts: a.accounts,
             box_settings: a.box_settings,
         }
     }
@@ -373,6 +380,22 @@ pub enum Environment {
     Local,
     /// A demo-tenant workstation with a real signed-in user.
     Demo,
+}
+
+/// The organisations the box's AI runtimes may sign in to (D-072). The
+/// runtimes enforce them from managed settings written in the box; Sluse
+/// does not (invariant 2). An account that fails its organisation is not
+/// the company's, and does not belong near company data (jok).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct AccountsConfig {
+    /// ChatGPT workspace ids accepted for Codex. Empty: any.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chatgpt_workspaces: Vec<String>,
+    /// The Claude organisation's UUID, for Claude Code's
+    /// `forceLoginOrgUUID`. Claude names no account Sluse could check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claude_organisation: Option<String>,
 }
 
 /// One source: what it is called, where it is, and how much of it is in scope.
@@ -938,6 +961,15 @@ fn validate(c: &Authored) -> Result<(), ConfigError> {
 
     if let Some(bad) = c.egress.iter().flat_map(|e| &e.allow).find(|e| !valid_egress_entry(e)) {
         return Err(ConfigError::BadEgressHost(bad.clone()));
+    }
+    if let Some(a) = &c.accounts {
+        let bad = |reason: String| Err(ConfigError::Invalid(format!("accounts: {reason}")));
+        if let Some(w) = a.chatgpt_workspaces.iter().find(|w| w.is_empty() || w.chars().any(char::is_whitespace)) {
+            return bad(format!("\"{w}\" is not a ChatGPT workspace id"));
+        }
+        if let Some(o) = a.claude_organisation.as_ref().filter(|o| !is_guid(o)) {
+            return bad(format!("claudeOrganisation \"{o}\" is not a UUID"));
+        }
     }
 
     Ok(())
@@ -1568,6 +1600,28 @@ mod tests {
             "address": { "siteUrl": "http://contoso.sharepoint.com/sites/x", "library": "Documents" }
         });
         assert!(matches!(load_value(v), Err(ConfigError::SiteUrlNotHttps { .. })));
+    }
+
+    /// D-072: the accounts the runtimes may sign in with.
+    #[test]
+    fn accounts_name_workspaces_and_a_claude_organisation() {
+        let mut v = valid_json();
+        v["accounts"] = serde_json::json!({
+            "chatgptWorkspaces": ["ws-1"], "claudeOrganisation": "11111111-2222-3333-4444-555555555555"
+        });
+        let a = load_value(v).unwrap().config.accounts.unwrap();
+        assert_eq!(a.chatgpt_workspaces, ["ws-1"]);
+        let mut v = valid_json();
+        v["accounts"] = serde_json::json!({ "domains": ["serenit.dk"] });
+        assert!(load_value(v).is_err(), "no domains: nothing applies them");
+        for (field, value) in [
+            ("chatgptWorkspaces", serde_json::json!(["two words"])),
+            ("claudeOrganisation", serde_json::json!("my-org")),
+        ] {
+            let mut v = valid_json();
+            v["accounts"] = serde_json::json!({ field: value });
+            assert!(matches!(load_value(v), Err(ConfigError::Invalid(_))), "{field} {value}");
+        }
     }
 
     /// D-071: an MCP server, its tools in `scope`.
