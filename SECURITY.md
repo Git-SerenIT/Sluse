@@ -1,14 +1,16 @@
 # Security
 
-**Sluse's claim is authorised inputs with recorded provenance.** It is not a
-data validator, and it does not prevent exfiltration. This page says what
-is claimed, what is not, and every way out of the box we know of.
+**Sluse's claim is authorised inputs with recorded provenance.** It does
+not decide whether an AI model is trustworthy: it limits what the agent can
+reach and records what goes in and what comes out. It is not a data
+validator, and it does not prevent exfiltration. This page says what is
+claimed, what is not, and every way out of the box we know of.
 
 ## Reporting a vulnerability
 
 Use **Report a vulnerability** on this repository's Security tab (GitHub's
-private reporting). Please do not open a public issue for it. There is no
-release yet; reports are taken against `main`.
+private reporting). Please do not open a public issue for it. Reports are
+taken against the latest release and `main`.
 
 A known channel listed below is not a vulnerability. A way past one of the
 claims, or a channel missing from the list, is.

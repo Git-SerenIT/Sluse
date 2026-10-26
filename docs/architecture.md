@@ -171,13 +171,12 @@ carries two lists:
   one cloud-init build in a build VM. The build's last act is a verdict:
   a base without Sluse, Claude Desktop, Claude Code or the console is not
   kept; Codex and Mistral Vibe are left out when their egress groups were
-  off. That disk,
-  read-only, is the device's base.
+  off. That disk, read-only, is the device's base.
 - **One box per person,** one running at a time: a system disk on the base
   and a home disk of its own. The base has sway (in tabs), Firefox for the
   console, Claude Desktop, Claude Code, Codex, Mistral Vibe (when PyPI is
-  reachable at its build), pandoc and poppler, and the Sluse bundle. No SSH server; the desktop user has no password and no
-  sudo.
+  reachable at its build), pandoc and poppler, and the Sluse bundle. No SSH
+  server; the desktop user has no password and no sudo.
 - **Its identity, at each open:** the service writes a one-time token into
   the box's Hyper-V key-value pool; the box trades it at the broker's
   enrolment port for a certificate and the config. The broker accepts only

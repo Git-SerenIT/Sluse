@@ -167,8 +167,9 @@ took long. The box shows once its console is ready.
 **In the box:** the Sluse console in Firefox, and the AI apps (Claude
 Desktop, Claude Code, Codex, Mistral Vibe), which the console's Open
 buttons start. Each opens as a tab along the top of the box, named Sluse
-console, Claude, Claude Code, Codex, Mistral Vibe or Terminal; switch tabs with the mouse, or with
-Ctrl+Alt+Right, which goes round from the last tab to the first. The box is
+console, Claude, Claude Code, Codex, Mistral Vibe or Terminal; switch tabs
+with the mouse, or with Ctrl+Alt+Right, which goes round from the last tab
+to the first. The box is
 drawn at the size of the window, so making the window larger gives the box
 more room.
 
@@ -274,9 +275,9 @@ Hyper-V Manager each box's notes name the person it reads as.
   about 20 minutes or more on our test PC. Later opens take under a minute.
 - **Hosts that accept uploads.** The AI providers' groups (Claude, Codex,
   and Mistral Vibe when ticked) take whatever the box sends them: that is
-  the conversation. Claude and Codex are on by default. npm and GitHub serve the agent's tools and also accept
-  uploads on the same hosts; they are off by default. Turn them on in
-  Egress only if your agents need them.
+  the conversation. Claude and Codex are on by default. npm and GitHub
+  serve the agent's tools and also accept uploads on the same hosts; they
+  are off by default. Turn them on in Egress only if your agents need them.
 - **Text can be copied into the box, and out of it** while copying out is
   on (the default; Advanced turns it off). Files cannot.
 - **The `sluse:` link.** Sluse's notifications use a `sluse:` link to open

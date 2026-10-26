@@ -15,12 +15,27 @@ called **Sluse Artifacts** (`C:\Users\<person>\Sluse Artifacts`), naming the
 files the agent says it used.
 
 > [!IMPORTANT]
-> **The agent gets only what IT listed and the person could open, and every
-> file it gets is recorded:** authorised inputs with recorded provenance.
-> Sluse is **not** a data validator and **does not prevent exfiltration**: the
-> agent talks to its AI provider, and anything it was given can go into that
-> conversation. What is and is not claimed, and every known channel, is in
-> [SECURITY.md](SECURITY.md).
+> **Sluse does not decide whether an AI model is trustworthy.** It limits
+> what the agent can reach, and records every file that goes in and every
+> result that comes out: authorised inputs with recorded provenance. It is
+> **not** a data validator and **does not prevent exfiltration**: the agent
+> talks to its AI provider, and anything it was given can go into that
+> conversation. Every known channel is in [SECURITY.md](SECURITY.md).
+
+## What it addresses
+
+Each with its limit. The full table of what is and is not claimed is in
+[SECURITY.md](SECURITY.md).
+
+| Risk | What Sluse does | Where it stops |
+| --- | --- | --- |
+| **Excessive agent access** | The agent has no credential and no mount. It reaches only the folders IT listed, as the person, checked by the broker outside the box | Everything in scope is readable, and can go to the AI provider |
+| **Accidental data discovery** | Outside the listed folders, nothing exists for the agent: out of scope answers as not found | Connectors on the provider's side (Microsoft 365 in Claude, apps in ChatGPT) reach around Sluse; the guide says to turn them off |
+| **Uncontrolled file modification** | Read-only against every source. The one way out is a new folder in Sluse Artifacts, written all or nothing | Text copied out of the box, and hosts on the egress list that take uploads |
+| **Loss of provenance** | Every admitted file is hashed and recorded in the Windows Event Log, outside the box. Every published file names its sources, each checked to be one the agent was given | Which sources were really used is the agent's word; text copied out carries none |
+| **Long-lived agent credentials** | No token for company data in the box: the person's tokens stay in memory on the host, and Sluse's app registration has no secret | The AI runtime's own sign-in lives in the box |
+| **Unlisted network destinations** | The box has no route and no DNS; a proxy on the host reaches the listed hosts by name, nothing else | A listed host that takes uploads is a way out |
+| **Bulk collection** | Many files in a short time raise an alert | Detective only: the reads are not stopped |
 
 ## How it works
 
@@ -69,20 +84,18 @@ More: [docs/architecture.md](docs/architecture.md).
 | `sluse_fetch` | A copy into the box's workspace, to build or run; read back through `sluse_read`, it is enveloped again |
 | `sluse_publish` | The single write path out: a delivery into Sluse Artifacts, each file with the sources the agent declares it used |
 
-Claude Code and Claude Desktop are driven end to end on our test device.
-Codex and Mistral Vibe are installed and wired the same way and not yet
-checked.
-
 ## Status
 
 Run on a test device: install and updates through Intune; sign-in with no
 app credential; SharePoint, OneDrive and SMB read as the person (one user,
 one tenant); the egress proxy; publishing with declared sources checked
-against what was admitted; Word, PDF, spreadsheets and slides read as text.
+against what was admitted; Word, PDF, spreadsheets and slides read as text;
+Claude Code and Claude Desktop end to end.
 
 Built, not yet run on a device: the Sluse log accepting writes from SYSTEM
-only, App Control on Sluse Artifacts, and the check that the Windows user and
-the signed-in user are the same person. What is open is listed as open, in
+only, App Control on Sluse Artifacts, the check that the Windows user and
+the signed-in user are the same person, and Codex and Mistral Vibe, wired
+like the other runtimes. What is open is listed as open, in
 [GUIDE.md](GUIDE.md#known-edges-in-v01) and [SECURITY.md](SECURITY.md).
 
 ## Where this is going
@@ -100,17 +113,18 @@ until it is built and run, and then it moves to Status.
 | Egress | Default deny; the box reaches only listed hosts, by name. A listed host that takes uploads is a way out | Method and path rules on such hosts, so one like GitHub can be allowed in part. A company's own upstream proxy | when a pilot needs it |
 | Files in the box | They stay until the person clears or wipes the box | Finding admitted files moved out of the workspace, by hash (advisory). A spike on confining the command-line runtimes' writes to the workspace; a claim only if it holds | after the pilots |
 | The Sluse log | The Windows Event Log, written by SYSTEM only | A documented query for a box that reads much and publishes little | after the pilots |
-| Releases | An unsigned MSI with `SHA256SUMS` | Third-party notices in the MSI; code signing | the notices next; signing v0.2 |
+| Releases | An unsigned MSI with `SHA256SUMS`, third-party notices inside | Code signing | v0.2 |
 
 ## Install
 
-[v0.1.0](https://github.com/Git-SerenIT/Sluse/releases) is the pilot
-release. An admin sets Sluse up with **Sluse Admin** and deploys it through
-Intune; the box is built on each PC from Canonical's Ubuntu image, with no
-shipped image.
+The [latest release](https://github.com/Git-SerenIT/Sluse/releases/latest)
+is the pilot release. An admin sets Sluse up with **Sluse Admin** and
+deploys it through Intune; the box is built on each PC from Canonical's
+Ubuntu image, with no shipped image.
 
-**Needs:** Windows 11 Pro, Enterprise or Education with Hyper-V-capable
-hardware, Entra-joined and managed by Intune, 16 GB of memory or more.
+**Needs, on each host PC:** Windows 11 Pro, Enterprise or Education with
+Hyper-V-capable hardware, Entra-joined and managed by Intune, and 16 GB of
+memory or more; the box takes 6 GB of it while open, by default.
 
 Setting up, working in it, and what IT sees: [GUIDE.md](GUIDE.md).
 
