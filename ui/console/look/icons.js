@@ -5,7 +5,7 @@
    logo/ beside it, copied from docs/design/sluse-logo-kit/svg/.
 
    One ink, line icons on a 24px grid, 1.75 stroke, round ends: drawn to sit
-   beside the mark's outlined breakers without imitating the mark. Fill is
+   beside the mark's ring and storm without imitating the mark. Fill is
    used only where a shape needs a solid part (a dot, the half of "stale").
 
    Use

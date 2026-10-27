@@ -7,7 +7,7 @@
 [package]
 name = "sluse-shell"
 description = "The Sluse host shell: one window on the user's box."
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 # Measured 2026-10-05 across this workspace's own lock, as the root's is:
 # Tauri 2's crates declare 1.90. Derived, not built with 1.90.

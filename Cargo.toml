@@ -36,7 +36,7 @@ members = [
 # number is a claim about proven-ness, not a record of effort.
 #
 # Human owns version bumps (CLAUDE.md, Human-owned). Nothing automated edits this.
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 # Measured from the locked graph, never estimated from direct dependencies and
 # never copied from Chaperone (D-010 point 6). Chaperone's own MSRV line was

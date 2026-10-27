@@ -71,6 +71,10 @@
     </UI>
     <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)License.rtf" />
 
+    <!-- Installed apps' icon: the shell's, so the kit lives in one place (D-074). -->
+    <Icon Id="SluseIcon" SourceFile="$(sys.SOURCEFILEDIR)..\..\ui\shell\src-tauri\icons\icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="SluseIcon" />
+
     <!-- Installed apps' help link is the installed README (Q61), a web
          address once one exists. -->
     <SetProperty Id="ARPHELPLINK" Value="[INSTALLFOLDER]README.md" After="CostFinalize" />

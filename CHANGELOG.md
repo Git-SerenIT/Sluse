@@ -5,6 +5,16 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.5
+
+**For the administrator and the person using Sluse**
+- **Sluse's new mark**: the ring with the storm inside it, without the
+  breakers. In the Sluse window, the Start menu, the taskbar, the tray,
+  the console and the README, and now also for Sluse in Installed apps,
+  which showed Windows' default icon before. Nothing else changes.
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.4
 
 **For the administrator**

@@ -39,25 +39,7 @@ Each with its limit. The full table of what is and is not claimed is in
 
 ## How it works
 
-[![How Sluse works: the sources IT put in scope, the Gate that checks scope and reads as you, the box with the agent and its workspace, results published to Sluse Artifacts with their sources, and the Sluse log recording each file admitted, refused or published. The agent talks to its AI provider, and what it was given can go into that conversation.](docs/images/how-it-works.png)](docs/images/how-it-works.gif)
-
-*Select the picture for the animated version.*
-
-```mermaid
-flowchart LR
-    subgraph BOX["the box: Hyper-V guest, no mounts"]
-        A["agent runtime<br/>Claude Code, Codex,<br/>Claude Desktop, ChatGPT,<br/>Mistral Vibe"] -->|"stdio"| E["sluse-endpoint"]
-    end
-    SH["host shell<br/>the person's window"] -. "screen, input,<br/>clipboard text" .- BOX
-    SH -->|"sign-in"| B
-    E ==>|"capability request<br/>mTLS"| F["Gate Front<br/>no token"]
-    F ==>|"parsed request"| B["Gate Core<br/>acts as the person"]
-    B ==>|"file bytes"| S[("SharePoint, OneDrive<br/>SMB share, Sluse Inputs")]
-    B -->|"publish"| D[("Sluse Artifacts<br/>on the host PC")]
-    B --- L[("Sluse log<br/>Windows Event Log")]
-    A -->|"inference"| P["egress proxy<br/>in Gate Front"]
-    P -->|"listed hosts only"| M[("AI provider,<br/>other listed hosts")]
-```
+![How Sluse works. The box gets files, not access. On the Windows PC, the box holds the agent and Sluse tools, the agent's only way to company data. 1: the agent asks for a file through its Sluse tools, which reach Gate Front: no token, the box's TLS, every request parsed, the egress proxy. Gate Front passes the parsed request to Gate Core, which checks scope and reads as you, and holds your Microsoft sign-in, not the box. 2: Sluse Gate checks scope and reads the file as you from the sources IT listed: SharePoint, OneDrive, file shares, Sluse Inputs on your PC, tool servers (MCP). 3: every admission is recorded in the Sluse log. 4: results are published to Sluse Artifacts with the sources they used. The agent's inference goes through Gate Front to its AI provider, and what it was given can go into that conversation.](docs/images/how-it-works.png)
 
 | Component | Where | What it does |
 | --- | --- | --- |
@@ -74,7 +56,7 @@ flowchart LR
 - **Admission is the control point, not residence.** Once given, a file may
   stay on the box's disk until the person wipes the box.
 
-More: [docs/architecture.md](docs/architecture.md).
+The component diagram and more: [docs/architecture.md](docs/architecture.md).
 
 ### The agent's tools
 
