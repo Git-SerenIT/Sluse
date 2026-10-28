@@ -114,8 +114,17 @@ pub fn warnings(a: &Authored, catalog: &Catalog) -> Vec<Warning> {
             b.name
         ));
     }
+    for b in egress.bundles.iter().filter_map(|id| catalog.bundle(id)).filter(|b| b.window) {
+        say("microsoft-sign-in-window", format!(
+            "{} lets the person open Microsoft's sign-in to the box from the Sluse window, five minutes at a \
+             time. In those minutes something in the box could take the session out of it; only Conditional \
+             Access requiring a compliant device for Office 365 and Sluse Gate stops it working elsewhere.",
+            b.name
+        ));
+    }
     for b in egress.bundles.iter().filter_map(|id| catalog.bundle(id)) {
-        let gone: Vec<&String> = b.hosts.iter().filter(|h| !egress.allow.contains(h)).collect();
+        let list = if b.window { &egress.window } else { &egress.allow };
+        let gone: Vec<&String> = b.hosts.iter().filter(|h| !list.contains(h)).collect();
         if !gone.is_empty() {
             let gone: Vec<&str> = gone.iter().map(|h| h.as_str()).collect();
             say("bundle-trimmed", format!("{} is ticked without {}, so it may not work.", b.name, gone.join(", ")));
@@ -192,6 +201,10 @@ pub fn diff(old: &Authored, new: &Authored) -> Vec<String> {
     let (oh, nh) = (hosts(old), hosts(new));
     out.extend(nh.iter().filter(|h| !oh.contains(h)).map(|h| format!("the box may now reach {h}")));
     out.extend(oh.iter().filter(|h| !nh.contains(h)).map(|h| format!("the box may no longer reach {h}")));
+    let window = |a: &Authored| a.egress.as_ref().map(|e| e.window.clone()).unwrap_or_default();
+    let (ow, nw) = (window(old), window(new));
+    out.extend(nw.iter().filter(|h| !ow.contains(h)).map(|h| format!("the person may now open {h} to the box for a sign-in")));
+    out.extend(ow.iter().filter(|h| !nw.contains(h)).map(|h| format!("the person may no longer open {h} to the box")));
     let log = |a: &Authored| a.egress.as_ref().and_then(|e| e.log.clone());
     if log(old) != log(new) {
         out.push("the egress log changed".into());
@@ -253,6 +266,20 @@ mod tests {
         assert!(d.warnings.iter().any(|w| w.text.contains("intranet.contoso.com")));
     }
 
+    #[test]
+    fn the_microsoft_sign_in_window_is_warned_about_and_listed_apart() {
+        let c = Catalog::shipped();
+        let mut v = base();
+        v["egress"]["bundles"] = json!(["python", "microsoft-signin"]);
+        v["egress"]["window"] = json!(c.window(&["microsoft-signin".into()]));
+        let d = author(&authored(v.clone()), &c).unwrap();
+        let codes: Vec<&str> = d.warnings.iter().map(|w| w.code).collect();
+        assert!(codes.contains(&"microsoft-sign-in-window"), "{codes:?}");
+        assert!(!codes.contains(&"bundle-trimmed") && !codes.contains(&"microsoft-sign-in"), "on the window, not the list: {codes:?}");
+        let lines = diff(&authored(base()), &authored(v));
+        assert!(lines.contains(&"the person may now open login.microsoftonline.com to the box for a sign-in".to_owned()), "{lines:?}");
+    }
+
     /// The shape `ui/shell/src/admin.js`'s `authored()` sends, field for
     /// field, so the page and the engine cannot drift apart unseen.
     #[test]
@@ -268,7 +295,7 @@ mod tests {
             "volume": { "admissions": 25, "windowSeconds": 60, "bytes": 52428800 },
             "maxFetchBytes": 104857600,
             "egress": { "catalog": 1, "bundles": ["box-system", "python"], "allow": ["archive.ubuntu.com", "pypi.org"],
-                        "log": { "enabled": true, "maxMB": 50 } },
+                        "window": ["login.microsoftonline.com"], "log": { "enabled": true, "maxMB": 50 } },
             "box": { "memoryGB": 6, "homeGB": 80, "copyOut": false },
         });
         let d = author(&authored(page), &Catalog::shipped()).expect("the page's file loads");

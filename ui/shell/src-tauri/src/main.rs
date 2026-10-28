@@ -49,6 +49,8 @@ struct Ready {
     onedrive: bool,
     /// The config has file shares, read as the Windows user (Q8).
     shares: bool,
+    /// The config has Microsoft's sign-in as a window (D-075).
+    sign_in_window: bool,
 }
 
 /// What the bar and Copy details say around the box (Q8, Q24, Q30), asked
@@ -188,7 +190,7 @@ fn open_box(app: tauri::AppHandle, timezone: Option<String>, theme: Option<Theme
     match pipe::ask(&req, |e| {
         let _ = app.emit("progress", e);
     })? {
-        PipeEvent::Ready { vnc, password, update, problem, copy_out, config_changed, config_changes, inputs, onedrive, shares } => Ok(Ready {
+        PipeEvent::Ready { vnc, password, update, problem, copy_out, config_changed, config_changes, inputs, onedrive, shares, sign_in_window } => Ok(Ready {
             vnc,
             username: VNC_USER,
             password: password.expose().to_owned(),
@@ -200,6 +202,7 @@ fn open_box(app: tauri::AppHandle, timezone: Option<String>, theme: Option<Theme
             inputs,
             onedrive,
             shares,
+            sign_in_window,
         }),
         other => Err(Failure::from_event(other)),
     }
@@ -260,6 +263,15 @@ fn shell_log(line: String) {
 #[tauri::command(async)]
 fn sign_out() -> Result<(), Failure> {
     match pipe::ask(&PipeRequest::SignOut, |_| {})? {
+        PipeEvent::Done => Ok(()),
+        other => Err(Failure::from_event(other)),
+    }
+}
+
+/// The bar's "Allow a Microsoft sign-in" (D-075), or its "Close it now".
+#[tauri::command(async)]
+fn sign_in_window(close: bool) -> Result<(), Failure> {
+    match pipe::ask(&PipeRequest::SignInWindow { close }, |_| {})? {
         PipeEvent::Done => Ok(()),
         other => Err(Failure::from_event(other)),
     }
@@ -561,6 +573,7 @@ fn main() {
             keep_signed_in,
             shell_log,
             sign_out,
+            sign_in_window,
             set_theme,
             wait_for_console,
             close_box,
@@ -578,6 +591,7 @@ fn main() {
             admin::admin_mcp_consented,
             admin::admin_mcp_probe,
             admin::admin_connectors,
+            admin::admin_ca,
             admin::admin_connector_block,
             admin::admin_groups,
             admin::admin_assign,

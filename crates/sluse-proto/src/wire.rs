@@ -247,6 +247,10 @@ pub struct Status {
     /// alert agree. Absent from an older Gate.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub volume: Vec<SourceCount>,
+    /// A sign-in window the person opened is open now (D-075): the box's
+    /// sign-in browser lives until it closes. Absent: none open.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sign_in_window: bool,
 }
 
 /// One source's count in the volume window (Q36).

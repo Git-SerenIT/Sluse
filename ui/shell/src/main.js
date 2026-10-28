@@ -831,6 +831,7 @@ async function open(carryOn = false) {
     // The person quit, and the box came up anyway: it is closed (Q26).
     if (quitting) { await invoke('close_box').catch(() => {}); quit('the box came up after a Quit, closed'); return; }
     offerInputs(box.inputs);
+    $('ms-window').hidden = $('ms-window-sep').hidden = !box.sign_in_window;
     await getFacts();
     // Said once per window: the config notice names what changed, the wipe
     // only when what Sluse may read did (D-038 point 4, D-045 point 3, Q31).
@@ -925,6 +926,50 @@ $('artifacts').onclick = () => openFolder('artifacts');
 $('inputs').onclick = () => openFolder('inputs');
 $('close').onclick = askClose;
 $('reset').onclick = () => askReset();
+
+// ---- A Microsoft sign-in, five minutes, the person's (D-075) -----------
+// Opened only here, never from the box; the Gate closes it on time
+// whatever this window does, and this countdown only says so.
+const MS_WINDOW_MS = 5 * 60 * 1000;
+let msUntil = 0;
+let msTimer = null;
+function msTick() {
+  const left = Math.max(0, Math.round((msUntil - Date.now()) / 1000));
+  if (!left || state() !== 'running') {
+    msUntil = 0;
+    clearInterval(msTimer);
+    msTimer = null;
+    $('ms-open').hidden = true;
+    return;
+  }
+  $('ms-open-text').textContent = `Microsoft sign-in allowed, ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} left`;
+  $('ms-open').hidden = false;
+}
+async function allowMsSignIn() {
+  $('more').open = false;
+  if (await ask('ms-window-ask') !== 'ok') return;
+  try {
+    await invoke('sign_in_window', { close: false });
+    slog('sign-in window: opened, five minutes');
+    msUntil = Date.now() + MS_WINDOW_MS;
+    clearInterval(msTimer);
+    msTimer = setInterval(msTick, 1000);
+    msTick();
+  } catch (e) {
+    const f = asFailure(e);
+    message('Sluse did not allow the sign-in', f.code === 'notAllowed' ? f.message : `Try again. If it keeps happening, ${it}`, details(f.code, f.message, null));
+  }
+}
+async function closeMsSignIn() {
+  try {
+    await invoke('sign_in_window', { close: true });
+    slog('sign-in window: closed by the person');
+  } catch { /* it closes on time anyway */ }
+  msUntil = 0;
+  msTick();
+}
+$('ms-window').onclick = allowMsSignIn;
+$('ms-close').onclick = closeMsSignIn;
 $('wipe').onclick = () => askWipe();
 
 // The user's OneDrive Sluse folder (D-054): offered while it is missing, made

@@ -32,6 +32,24 @@ pub mod route {
     pub const START: &str = "/front/start";
     /// `POST`: one [`super::Claim`].
     pub const CLAIM: &str = "/front/claim";
+    /// `POST`: a [`super::WindowAsk`], answered with a [`super::WindowAnswer`]
+    /// (D-075): whether a sign-in window the person opened lets the box
+    /// reach this host now.
+    pub const WINDOW: &str = "/front/window";
+}
+
+/// Front asks for a host on `egress.window`. Front may refuse; only Core
+/// may allow (D-071, D-075).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct WindowAsk {
+    pub host: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowAnswer {
+    pub open: bool,
 }
 
 /// Everything Front runs on, from its parent at start.

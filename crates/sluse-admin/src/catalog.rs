@@ -40,6 +40,10 @@ pub struct Bundle {
     pub hosts: Vec<String>,
     /// When the hosts were measured, or `None` for the M9 draft.
     pub measured: Option<String>,
+    /// Reached only in a sign-in window the person opens (D-075): its hosts
+    /// go to `egress.window`, never to `egress.allow`.
+    #[serde(default)]
+    pub window: bool,
 }
 
 impl Catalog {
@@ -63,12 +67,24 @@ impl Catalog {
         let hosts = self
             .bundles
             .iter()
-            .filter(|b| b.locked || chosen.contains(&b.id))
+            .filter(|b| !b.window && (b.locked || chosen.contains(&b.id)))
             .flat_map(|b| b.hosts.iter().cloned())
             .chain(extra.iter().cloned());
         for h in hosts {
             if !out.contains(&h) {
                 out.push(h);
+            }
+        }
+        out
+    }
+
+    /// The hosts of the window bundles chosen (D-075), each once: the box
+    /// reaches them only while the person has a sign-in window open.
+    pub fn window(&self, chosen: &[String]) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for h in self.bundles.iter().filter(|b| b.window && chosen.contains(&b.id)).flat_map(|b| &b.hosts) {
+            if !out.contains(h) {
+                out.push(h.clone());
             }
         }
         out
@@ -102,8 +118,21 @@ mod tests {
         // D-047: the bundles that take uploads beside the inference channel's
         // start off, ticked by consent.
         assert!(!c.defaults().iter().any(|b| b == "node" || b == "github"), "{:?}", c.defaults());
-        // D-036, D-044: no bundle signs the box in to anything of Microsoft's.
-        assert!(!all.iter().any(|h| h.starts_with("login.") || h.contains("microsoftonline")), "{all:?}");
+        // D-036, D-044: no bundle puts Microsoft's sign-in on the list; since
+        // D-075 the one that names it is a window, off by default.
+        let listed: Vec<&String> = c.bundles.iter().filter(|b| !b.window).flat_map(|b| &b.hosts).collect();
+        assert!(!listed.iter().any(|h| h.starts_with("login.") || h.contains("microsoftonline")), "{listed:?}");
+        let ms = c.bundles.iter().find(|b| b.window).expect("D-075's window bundle");
+        assert!(!ms.default && !ms.locked && ms.hosts.iter().any(|h| h == "login.microsoftonline.com"));
+    }
+
+    #[test]
+    fn a_window_bundle_never_reaches_the_allow_list() {
+        let c = Catalog::shipped();
+        let chosen = vec!["microsoft-signin".to_owned()];
+        assert!(!c.allow(&chosen, &[]).iter().any(|h| h == "login.microsoftonline.com"));
+        assert!(c.window(&chosen).iter().any(|h| h == "login.microsoftonline.com"));
+        assert!(c.window(&[]).is_empty(), "not chosen, no window");
     }
 
     #[test]

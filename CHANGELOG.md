@@ -5,6 +5,29 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.9
+
+**For the administrator**
+- **Microsoft sign-in, opened by the person** (Egress, off by default):
+  for signing the AI apps in with your organisation's Microsoft account.
+  The box reaches Microsoft's sign-in only while the person opens it from
+  the Sluse window, five minutes at a time. Pair it with Conditional Access
+  requiring a compliant device for Office 365 and Sluse Gate; Sluse Admin
+  says why when you tick it. Catalog 7. **Tenant** now reads whether your
+  Conditional Access requires a compliant device and blocks device-code
+  sign-in, and says when it cannot (no Entra ID P1).
+
+**For the person using Sluse**
+- **Allow a Microsoft sign-in…** in the Sluse bar's More menu, when IT
+  turned it on: five minutes in which an AI app in your box can sign in
+  with your work account, with a countdown and Close it now. Only for a
+  sign-in you started yourself. The sign-in's browser in the box is
+  cleared when the five minutes end.
+- Links the AI apps open in the box open in a browser of their own, which
+  is cleared afterwards.
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.8
 
 **For the administrator**

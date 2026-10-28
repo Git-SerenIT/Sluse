@@ -91,7 +91,19 @@ pub enum PipeRequest {
     /// [`PipeEvent::Done`]. The shell sends it on a connection of its own and
     /// keeps the open's, so a build's progress still reaches its tray (Q71).
     Quit,
+    /// The person allows a Microsoft sign-in in their running box for
+    /// [`SIGN_IN_WINDOW_SECONDS`] (D-075), or with `close` ends one early:
+    /// the service hands a [`SignInWindow`] to the Gate, zero seconds for a
+    /// close. Only from the Sluse window, never from the box. Answered with
+    /// [`PipeEvent::Done`].
+    SignInWindow {
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        close: bool,
+    },
 }
+
+/// How long a sign-in window lasts (D-075): five minutes, never extended.
+pub const SIGN_IN_WINDOW_SECONDS: u32 = 300;
 
 /// The box's theme (Q3): Light or Dark, never "follow", which only the
 /// computer can resolve.
@@ -228,6 +240,10 @@ pub enum PipeEvent {
         /// Sluse Inputs go on reading while the cloud waits for a sign-in (Q8).
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         shares: bool,
+        /// The config has Microsoft's sign-in as a window (D-075): the shell
+        /// offers [`PipeRequest::SignInWindow`] in its bar's menu.
+        #[serde(default, rename = "signInWindow", skip_serializing_if = "std::ops::Not::not")]
+        sign_in_window: bool,
     },
     /// The answer to [`PipeRequest::Status`]. `signIn` says where to sign in
     /// when the config has an `entra` block; `signedIn` whether the caller's
@@ -318,6 +334,17 @@ pub enum PipeFailure {
     /// The person signed out in the box during this open; that holds until
     /// the next open (Q7).
     SignedOut,
+}
+
+/// A sign-in window the person opened from the Sluse window (D-075): the
+/// service hands it to Gate Core on its control channel, as a sign-in is.
+/// For `seconds` the box may reach `egress.window`'s hosts, zero closing one
+/// early; who opened it is the Windows account the service checked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct SignInWindow {
+    pub window_seconds: u32,
+    pub opened_by: String,
 }
 
 /// An authorization code the shell caught at [`crate::wire::NATIVE_REDIRECT`]
@@ -682,6 +709,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_control_channel_tells_a_window_from_a_sign_in() {
+        let sign_in = r#"{"seq":3,"code":"c","verifier":"v","redirectUri":"https://login.microsoftonline.com/common/oauth2/nativeclient","nonce":"n"}"#;
+        assert!(serde_json::from_str::<SignInWindow>(sign_in).is_err(), "a sign-in is never a window");
+        assert!(serde_json::from_str::<HostSignIn>(sign_in).is_ok());
+        let w: SignInWindow = serde_json::from_str(r#"{"windowSeconds":300,"openedBy":"S-1-12-1-1"}"#).unwrap();
+        assert_eq!((w.window_seconds, w.opened_by.as_str()), (300, "S-1-12-1-1"));
+        assert!(serde_json::from_str::<SignInWindow>(r#"{"windowSeconds":300,"openedBy":"x","code":"c"}"#).is_err());
+    }
+
+    #[test]
     fn requests_and_events_round_trip_as_json_lines() {
         for r in [
             PipeRequest::Status,
@@ -775,6 +812,7 @@ mod tests {
                 inputs: false,
                 onedrive: false,
                 shares: false,
+                sign_in_window: false,
             }
         );
     }
@@ -860,6 +898,7 @@ mod tests {
             inputs: false,
             onedrive: false,
             shares: false,
+            sign_in_window: false,
         };
         let shown = format!("{b:?} {ready:?}");
         assert!(!shown.contains(b.vnc_password.expose()) && !shown.contains(b.token.expose()), "{shown}");

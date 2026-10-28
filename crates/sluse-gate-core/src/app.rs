@@ -69,6 +69,8 @@ pub struct Core {
     pub host_sign_in: Mutex<Option<sluse_proto::HostSignInResult>>,
     /// The person signed out in the box and has not signed in since (Q7).
     pub signed_out: std::sync::atomic::AtomicBool,
+    /// The sign-in window the person opened, if one is open (D-075).
+    pub window: crate::window::Window,
 }
 
 impl Core {
@@ -104,7 +106,15 @@ impl Core {
             started: Utc::now(),
             host_sign_in: Mutex::new(None),
             signed_out: Default::default(),
+            window: Default::default(),
         }
+    }
+
+    /// Where the sign-in window's records go (D-075): the Event Log on a
+    /// device.
+    pub fn with_window(mut self, window: crate::window::Window) -> Self {
+        self.window = window;
+        self
     }
 
     /// Mirror the box's journal into `dir` (D-027 point 5).

@@ -57,6 +57,7 @@ pub mod session;
 pub mod sources;
 pub mod tls;
 pub mod volume;
+pub mod window;
 
 pub use scope::{Compiled, CompiledScope, CompiledSource, Scoped};
 pub use volume::VolumeMonitor;

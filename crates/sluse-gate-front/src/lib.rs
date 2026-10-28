@@ -57,6 +57,13 @@ pub async fn run(start: FrontStart, parent: Parent) -> Result<(), String> {
         eprintln!("egress proxy on {}: {} allowed hosts", p.listen, p.allow.allow.len());
         let mut proxy = proxy::Proxy::new(p.allow, p.about, records);
         proxy.public_only = p.public_only;
+        // A window host is the parent's to allow (D-075); a base build's
+        // parent has no window, and answers no.
+        let ask = parent.clone();
+        proxy.window = Some(Box::new(move |host| {
+            let ask = ask.clone();
+            Box::pin(async move { ask.window(host).await })
+        }));
         let proxy = Arc::new(proxy);
         tasks.spawn(async move { proxy.serve(listener).await.map_err(|e| format!("egress proxy: {e}")) });
     }

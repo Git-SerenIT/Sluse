@@ -52,6 +52,8 @@ pub struct Tenant {
     /// `/policies/authorizationPolicy`; none answers 403, as without
     /// `Policy.Read.All`.
     pub authorization_policy: Option<Value>,
+    /// Conditional Access's policies; none answers 403, as without P1.
+    pub ca_policies: Option<Vec<Value>>,
 }
 
 /// Entra and Graph, just as far as setup uses them.
@@ -217,6 +219,10 @@ async fn fake(
                 .filter(|g| g["clientId"] == client.as_str() && (!all || g["consentType"] == "AllPrincipals"))
                 .cloned().collect::<Vec<_>>() })
         }
+        ("GET", "/v1.0/identity/conditionalAccess/policies") => match &t.ca_policies {
+            Some(p) => json!({ "value": p }),
+            None => return Err(axum::http::StatusCode::FORBIDDEN),
+        },
         ("GET", "/v1.0/policies/authorizationPolicy") => match &t.authorization_policy {
             Some(p) => p.clone(),
             None => return Err(axum::http::StatusCode::FORBIDDEN),

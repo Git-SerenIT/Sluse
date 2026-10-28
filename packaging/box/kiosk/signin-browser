@@ -1,0 +1,32 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+#
+# The box's web browser for a link an app opens, a sign-in above all
+# (D-075): Firefox in a profile of its own, made empty now and deleted once
+# a sign-in window it lived through has closed, so a Microsoft session in it
+# lasts no longer than that window. Ten minutes at most when no window
+# opened. Not the console's Firefox (browser), which keeps its own profile.
+set -u
+# In the snap's own folder: confinement hides /tmp and hidden folders (kiosk).
+base="$HOME/snap/firefox/common"
+mkdir -p "$base"
+profile=$(mktemp -d "$base/sluse-signin.XXXXXX") || exit 1
+env MOZ_ENABLE_WAYLAND=1 firefox --new-instance --profile "$profile" "$@" &
+pid=$!
+# The console's state says whether the Gate holds a window open now.
+window_open() { curl -s --max-time 4 http://localhost:7582/api/state | grep -q '"signInWindow":true'; }
+opened=0
+started=$(date +%s)
+while kill -0 "$pid" 2>/dev/null; do
+    sleep 5
+    if window_open; then
+        opened=1
+    elif [ "$opened" = 1 ] || [ $(( $(date +%s) - started )) -ge 600 ]; then
+        logger -t sluse-signin-browser "ended: $([ "$opened" = 1 ] && echo "the sign-in window closed" || echo "ten minutes without one")"
+        kill "$pid" 2>/dev/null
+        break
+    fi
+done
+wait "$pid" 2>/dev/null
+rm -rf "$profile"

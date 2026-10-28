@@ -305,6 +305,9 @@ pub enum GateState {
         signed_out: bool,
         /// Sluse's count for each source in the volume window (Q36).
         volume: Vec<sluse_proto::wire::SourceCount>,
+        /// A sign-in window is open (D-075): the box's sign-in browser
+        /// (`signin-browser`) ends when it closes.
+        sign_in_window: bool,
     },
     Unreachable {
         detail: String,
@@ -323,6 +326,7 @@ async fn state_(State(c): State<Arc<Console>>) -> Json<RunState> {
             signed_in: s.signed_in,
             signed_out: s.signed_out,
             volume: s.volume,
+            sign_in_window: s.sign_in_window,
         },
         Err(e) => GateState::Unreachable { detail: e.to_string() },
     };

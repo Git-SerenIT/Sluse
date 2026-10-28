@@ -31,6 +31,7 @@ pub mod author;
 pub mod assign;
 pub mod browse;
 pub mod catalog;
+pub mod ca;
 pub mod connectors;
 pub mod consent;
 pub mod graph;

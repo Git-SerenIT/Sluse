@@ -113,6 +113,8 @@ pub enum Refusal {
     NotPublic,
     /// Not 443 for `CONNECT`, not 80 for plain HTTP.
     Port,
+    /// A host on `egress.window` while no sign-in window is open (D-075).
+    WindowClosed,
 }
 
 impl Refusal {
@@ -121,6 +123,7 @@ impl Refusal {
             Refusal::NotAllowed => "NOT_ALLOWED",
             Refusal::NotPublic => "NOT_PUBLIC",
             Refusal::Port => "PORT",
+            Refusal::WindowClosed => "WINDOW_CLOSED",
         }
     }
 }
@@ -136,8 +139,14 @@ pub struct Records {
     pub refusal: Box<dyn Fn(&Value) + Send + Sync>,
 }
 
+/// Asks the parent whether a sign-in window lets the box reach a host now
+/// (D-075). Front may refuse; only its parent may allow.
+pub type WindowAsk = Box<dyn Fn(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>> + Send + Sync>;
+
 pub struct Proxy {
     allow: EgressConfig,
+    /// None: no window is ever open, as for a base build's proxy.
+    pub window: Option<WindowAsk>,
     /// What every record carries: the box, the config, who opened it.
     about: Value,
     records: Records,
@@ -163,6 +172,7 @@ impl Proxy {
     pub fn new(allow: EgressConfig, about: Value, records: Records) -> Self {
         Proxy {
             allow,
+            window: None,
             about,
             records,
             open: AtomicUsize::new(0),
@@ -210,8 +220,22 @@ impl Proxy {
         if req.port != wanted {
             return self.refuse(&mut client, &req, Refusal::Port).await;
         }
-        if req.host.parse::<IpAddr>().is_ok() || !self.allow.allows(&req.host) {
+        if req.host.parse::<IpAddr>().is_ok() {
             return self.refuse(&mut client, &req, Refusal::NotAllowed).await;
+        }
+        if !self.allow.allows(&req.host) {
+            // A window host goes through only while the person's window is
+            // open, which the parent decides each time (D-075).
+            if !self.allow.in_window(&req.host) {
+                return self.refuse(&mut client, &req, Refusal::NotAllowed).await;
+            }
+            let open = match &self.window {
+                Some(ask) => ask(req.host.clone()).await,
+                None => false,
+            };
+            if !open {
+                return self.refuse(&mut client, &req, Refusal::WindowClosed).await;
+            }
         }
         let addrs: Vec<SocketAddr> =
             match tokio::time::timeout(UPSTREAM_TIMEOUT, tokio::net::lookup_host((req.host.as_str(), req.port))).await {
@@ -496,7 +520,11 @@ mod tests {
             connection: Box::new(move |v| c.lock().unwrap().push(v.clone())),
             refusal: Box::new(move |v| r.lock().unwrap().push(v.clone())),
         };
-        let allow = EgressConfig { allow: allow.iter().map(|s| s.to_string()).collect(), ..Default::default() };
+        let allow = EgressConfig {
+            allow: allow.iter().map(|s| s.to_string()).collect(),
+            window: vec!["window.localhost".into()],
+            ..Default::default()
+        };
         let mut p = Proxy::new(allow, json!({ "boxId": "box-test" }), records);
         p.public_only = public_only;
         (p.https_port, p.http_port) = (port, port);
@@ -548,6 +576,42 @@ mod tests {
         assert_eq!((c["host"].as_str(), c["allowed"].as_bool(), c["up"].as_u64(), c["down"].as_u64()), (Some("localhost"), Some(true), Some(5), Some(5)));
         assert_eq!(c["boxId"], "box-test");
         assert!(refusals.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_window_host_goes_through_only_while_the_parent_says_its_window_is_open() {
+        let port = echo().await;
+        let (proxy, p, _, refusals) = start(&["localhost"], port).await;
+        // No parent answer at all, as for a base build: closed.
+        let got = ask(proxy, &format!("CONNECT window.localhost:{port} HTTP/1.1\r\n\r\n")).await;
+        assert!(got.starts_with("HTTP/1.1 403"), "{got}");
+        assert!(got.contains("does not let this box connect"), "the box is told no more than for any host: {got}");
+        assert_eq!(refusals.lock().unwrap()[0]["reason"], "WINDOW_CLOSED");
+        // The parent's answer decides.
+        let open = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+        let (o, a) = (open.clone(), asked.clone());
+        drop(p);
+        // `localhost` on the window alone: Windows does not resolve names under it.
+        let window_only = EgressConfig { window: vec!["localhost".into()], ..Default::default() };
+        let mut q = Proxy::new(window_only, json!({}), Records { connection: Box::new(|_| {}), refusal: Box::new(|_| {}) });
+        q.window = Some(Box::new(move |h| {
+            a.lock().unwrap().push(h);
+            let o = o.load(std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move { o })
+        }));
+        (q.https_port, q.http_port, q.public_only) = (port, port, false);
+        let q = Arc::new(q);
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        tokio::spawn(q.serve(l));
+        let got = ask(addr, &format!("CONNECT localhost:{port} HTTP/1.1\r\n\r\nhi")).await;
+        assert!(got.starts_with("HTTP/1.1 200"), "open: {got}");
+        open.store(false, std::sync::atomic::Ordering::SeqCst);
+        assert!(ask(addr, &format!("CONNECT localhost:{port} HTTP/1.1\r\n\r\n")).await.starts_with("HTTP/1.1 403"));
+        // A host on neither list is never asked about.
+        assert!(ask(addr, &format!("CONNECT evil.example:{port} HTTP/1.1\r\n\r\n")).await.starts_with("HTTP/1.1 403"));
+        assert_eq!(*asked.lock().unwrap(), ["localhost", "localhost"]);
     }
 
     #[tokio::test]

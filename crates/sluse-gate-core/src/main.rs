@@ -258,7 +258,17 @@ fn main() -> ExitCode {
         }
     };
     let mirror = std::env::var_os("SLUSE_JOURNAL_MIRROR").map(PathBuf::from);
-    let core = Arc::new(Core::new(loaded, compiled, sink, posture).with_entra(entra).with_journal_mirror(mirror));
+    // The sign-in window's records (D-075), beside the proxy's.
+    let window = match event_writer(&loaded, sluse_gate_core::audit::SIGN_IN_WINDOW, "window") {
+        Ok(write) => sluse_gate_core::window::Window::new(
+            serde_json::json!({ "boxId": loaded.config.box_id, "configVersion": loaded.version }),
+            write,
+        ),
+        Err(code) => return code,
+    };
+    let core = Arc::new(
+        Core::new(loaded, compiled, sink, posture).with_entra(entra).with_journal_mirror(mirror).with_window(window),
+    );
 
     core.report_unavailable();
 
@@ -272,7 +282,8 @@ fn main() -> ExitCode {
     // as SYSTEM; LOCAL's `sluse start` and CI have no SYSTEM to start it so,
     // and its Front is an ordinary child (D-071).
     let local_service = core.loaded.config.environment != sluse_proto::Environment::Local;
-    let mut router = http::router(core.clone()).merge(front::routes(start, claims.clone()));
+    let mut router =
+        http::router(core.clone()).merge(front::routes(start, claims.clone())).merge(front::window_route(core.clone()));
     if let Some(e) = enrolment {
         router = router.merge(http::enrol_router(Arc::new(e)));
     }
@@ -302,6 +313,16 @@ fn run_front(router: axum::Router, claims: Arc<Claims>, core: Option<Arc<Core>>,
         };
         let mut child = started.child;
         let serving = tokio::spawn(front::serve(started.io, router));
+        // A sign-in window ends on time, asked or not (D-075).
+        if let Some(core) = core.clone() {
+            tokio::spawn(async move {
+                let mut each = tokio::time::interval(std::time::Duration::from_secs(1));
+                loop {
+                    each.tick().await;
+                    core.window.tick();
+                }
+            });
+        }
         println!("Gate Front started; it binds the box's ports and asks here");
 
         // The service's control channel (D-036): sign-ins from the host, on
@@ -336,6 +357,9 @@ fn run_front(router: axum::Router, claims: Arc<Claims>, core: Option<Arc<Core>>,
                 ExitCode::from(1)
             }
         };
+        if let Some(core) = &core {
+            core.window.stop();
+        }
         child.kill();
         code
     });
@@ -360,26 +384,39 @@ fn proxy_start(loaded: &sluse_proto::Loaded) -> Result<sluse_proto::gate::FrontP
 /// to stderr elsewhere; connections to the file the service named when the
 /// config turns that log on (D-038 point 7), capped.
 fn claims(loaded: &sluse_proto::Loaded) -> Result<Claims, ExitCode> {
-    let write: Box<dyn Fn(&serde_json::Value) + Send + Sync> = match loaded.config.audit.sink {
-        #[cfg(windows)]
-        AuditSinkKind::Eventlog => match sluse_gate_core::audit::EventLogSink::new() {
-            Ok(sink) => Box::new(move |v| {
-                if let Err(e) = sink.report(sluse_gate_core::audit::EGRESS_REFUSED, sluse_gate_core::audit::EventLevel::Warning, &v.to_string()) {
-                    eprintln!("event log: {e}");
-                }
-            }),
-            Err(e) => {
-                eprintln!("audit: {e}");
-                return Err(ExitCode::from(EX_CONFIG));
-            }
-        },
-        _ => Box::new(|v| eprintln!("refused: {v}")),
-    };
+    let write = event_writer(loaded, sluse_gate_core::audit::EGRESS_REFUSED, "refused")?;
     let log = std::env::var_os("SLUSE_EGRESS_LOG").map(|path| {
         let cap = loaded.config.egress.as_ref().and_then(|e| e.log.as_ref()).map_or(50, |l| l.max_mb);
         RollingLog::new(PathBuf::from(path), u64::from(cap) << 20)
     });
     Ok(Claims::new(Refusals::new(write), log))
+}
+
+type Writer = Box<dyn Fn(&serde_json::Value) + Send + Sync>;
+
+/// A record that is not an `AuditRecord` (the proxy's refusals, the sign-in
+/// window's): to the Event Log as `id` on a device, a refusal a warning and
+/// the rest information; to stderr, labelled, elsewhere.
+fn event_writer(loaded: &sluse_proto::Loaded, id: u32, label: &'static str) -> Result<Writer, ExitCode> {
+    match loaded.config.audit.sink {
+        #[cfg(windows)]
+        AuditSinkKind::Eventlog => match sluse_gate_core::audit::EventLogSink::new() {
+            Ok(sink) => Ok(Box::new(move |v| {
+                let level = if id % 100 == 1 { sluse_gate_core::audit::EventLevel::Warning } else { sluse_gate_core::audit::EventLevel::Information };
+                if let Err(e) = sink.report(id, level, &v.to_string()) {
+                    eprintln!("event log: {e}");
+                }
+            })),
+            Err(e) => {
+                eprintln!("audit: {e}");
+                Err(ExitCode::from(EX_CONFIG))
+            }
+        },
+        _ => {
+            let _ = id;
+            Ok(Box::new(move |v| eprintln!("{label}: {v}")))
+        }
+    }
 }
 
 /// Front's log, beside this process's own: the service gives Core a file as

@@ -166,10 +166,13 @@ const nextRevision = () => (fileDeployment()?.revision ?? 0) + 1;
 function allowList() {
   const out = [];
   const add = (h) => { if (h && !out.includes(h)) out.push(h); };
-  for (const bd of S.catalog?.bundles ?? []) if (bd.locked || S.bundles.has(bd.id)) bd.hosts.forEach(add);
+  for (const bd of S.catalog?.bundles ?? []) if (!bd.window && (bd.locked || S.bundles.has(bd.id))) bd.hosts.forEach(add);
   ownHosts().forEach(add);
   return out;
 }
+/** The hosts of a ticked window bundle (D-075): never on the allow-list,
+ * reached only while the person opens a sign-in from the Sluse window. */
+const windowList = () => [...new Set((S.catalog?.bundles ?? []).filter((bd) => bd.window && S.bundles.has(bd.id)).flatMap((bd) => bd.hosts))];
 const ownHosts = () => $('own-hosts').value.split('\n').map((h) => h.trim().toLowerCase()).filter(Boolean);
 const num = (id) => { const v = $(id).value.trim(); return v === '' ? undefined : Number(v); };
 const radio = (name) => Number(document.querySelector(`input[name="${name}"]:checked`)?.value);
@@ -189,6 +192,7 @@ function authored() {
       catalog: S.catalog.version,
       bundles: S.catalog.bundles.filter((bd) => !bd.locked && S.bundles.has(bd.id)).map((bd) => bd.id),
       allow: allowList(),
+      window: windowList().length ? windowList() : undefined,
       log: $('egress-log').checked ? { enabled: true, maxMB: num('egress-mb') } : undefined,
     },
     box: { memoryGB: radio('mem'), homeGB: radio('disk'), copyOut: $('copy-out').checked },
@@ -392,8 +396,9 @@ async function signIn(pick = false) {
     draw();
     readRoles();
     // The providers' connectors, read once a sign-in is there (D-071).
-    if (before?.tenant !== w.tenant) { PROV.state = 'idle'; PROV.report = null; }
+    if (before?.tenant !== w.tenant) { PROV.state = 'idle'; PROV.report = null; CA.state = 'idle'; CA.report = null; }
     readProviders();
+    readCa();
     return;
   } catch (e) {
     S.startError = signInError(String(e));
@@ -768,10 +773,13 @@ function drawTenant() {
   $('seq-who').dataset.seq = ready ? (S.assigned.list?.length ? 'done' : '') : 'waits';
   if (ready) { drawConsent(); drawWho(); }
   drawProviders();
+  drawCa();
 }
 
 // ---- The providers' own connectors (D-071 slice 7) ------------------------------------------
 const PROV = { state: 'idle' };
+// D-075's Conditional Access reading, beside the providers' (drawCa below).
+const CA = { state: 'idle' };
 async function readProviders() {
   if (!S.who) return;
   PROV.state = 'reading'; drawProviders();
@@ -833,6 +841,44 @@ async function blockProvider(f) {
   readProviders();
 }
 $('prov-read').onclick = readProviders;
+
+// ---- Conditional Access behind a Microsoft sign-in in the box (D-075) -----------------
+async function readCa() {
+  if (!S.who) return;
+  CA.state = 'reading'; drawCa();
+  try {
+    CA.report = await invoke('admin_ca');
+    CA.state = 'read';
+  } catch (e) {
+    CA.state = 'error'; CA.error = String(e);
+    sawError(e);
+  }
+  drawCa();
+}
+function drawCa() {
+  $('ca-read').setAttribute('aria-busy', String(CA.state === 'reading'));
+  $('ca-read').disabled = !S.who || CA.state === 'reading';
+  const r = CA.report;
+  const both = r?.state === 'read' && r.compliantDevice.length && r.deviceCodeBlocked.length;
+  fill($('ca-pill'), CA.state !== 'read' ? pill('not-checked', 'Not read') : r.state !== 'read' ? pill('warning', 'Not there') : both ? pill('done', 'Both there') : pill('warning', 'Missing'));
+  if (!S.who) { fill($('ca-body'), note('info', 'Sign in to read them.')); return; }
+  if (CA.state === 'error') { fill($('ca-body'), banner('problem', 'They could not be read.', 'Sign in again, then read them again.', { raw: CA.error })); return; }
+  if (CA.state !== 'read') { fill($('ca-body'), CA.state === 'reading' ? status('working', 'Reading your Conditional Access policies…') : null); return; }
+  if (r.state !== 'read') {
+    fill($('ca-body'), banner('warning', 'No Conditional Access could be read here.',
+      'It needs Entra ID P1, and your sign-in to read policies. Without it, the five-minute window is the only protection: a session carried out of the box in those minutes works elsewhere.', { raw: r.detail }));
+    return;
+  }
+  const names = (l) => l.map((n) => `"${n}"`).join(', ');
+  fill($('ca-body'),
+    r.compliantDevice.length ? note('done', `A compliant device is required for company data: ${names(r.compliantDevice)}. Check that it covers the people who use Sluse.`)
+      : note('warning', 'No enabled policy requires a compliant device for Office 365, Sluse Gate or all apps. Without one, a Microsoft session carried out of the box works elsewhere.'),
+    r.reportOnly.length ? note('info', `Report-only, so enforcing nothing yet: ${names(r.reportOnly)}.`) : null,
+    r.deviceCodeBlocked.length ? note('done', `Device-code sign-in is blocked: ${names(r.deviceCodeBlocked)}.`)
+      : note('warning', 'Device-code sign-in is not blocked. It is how a page in the box could ask the person to sign in on their phone for it.'),
+    note('info', "Recommended beside them: turn off \"Stay signed in?\" in your tenant's company branding."));
+}
+$('ca-read').onclick = readCa;
 
 function appResult(r) {
   const said = r.changed.map((c) => {
@@ -1477,6 +1523,7 @@ function buildBundles() {
         onchange: (e) => { if (e.target.checked) S.bundles.add(bd.id); else S.bundles.delete(bd.id); drawEgress(); changed(); } }), el('span', { class: 'check__box' })),
       el('div', { class: 'ad-bundle__body' },
         el('div', { class: 'ad-bundle__title' }, b(bd.name), bd.locked ? pill('on', 'Always on') : null, bd.uploads ? pill('warning', 'Takes uploads') : null,
+          bd.window ? pill('warning', 'Only while the person opens it') : null,
           added.length ? pill('changed', `${plural(added.length, 'host')} added`) : null),
         el('p', { class: 'ad-bundle__text' }, bd.description),
         el('details', { class: 'disclosure' }, el('summary', {}, `${plural(bd.hosts.length, 'host')}, ${measuredWords(bd.measured)}`),
@@ -1514,7 +1561,7 @@ function drawEgress() {
   $('own-from-file').hidden = !(S.file && (S.file.authored.egress?.allow ?? []).some((h) => !fromCatalog.includes(h)));
   const fileAllow = S.file?.authored.egress?.allow;
   const isNew = (h) => !!fileAllow && !fileAllow.includes(h);
-  const groups = (S.catalog?.bundles ?? []).filter((bd) => bd.locked || S.bundles.has(bd.id)).map((bd) => [bd.name, bd.hosts]);
+  const groups = (S.catalog?.bundles ?? []).filter((bd) => bd.locked || S.bundles.has(bd.id)).map((bd) => [bd.window ? `${bd.name}: only while the person opens it` : bd.name, bd.hosts]);
   if (own.length) groups.push(['Your own', own]);
   const all = allowList();
   fill($('host-count'), String(all.length));
@@ -1612,7 +1659,7 @@ async function runReview() {
 }
 
 const WARNING_STEP = { 'whole-source': 'sources', 'user-chosen': 'sources', 'mcp-server-trust': 'sources', uploads: 'egress', 'bundle-trimmed': 'egress', 'shared-wildcard': 'egress', 'sharepoint-host': 'egress',
-  'own-host': 'egress', 'microsoft-sign-in': 'egress', 'box-memory': 'advanced', 'egress-log': 'advanced', 'no-byte-alert': 'advanced' };
+  'own-host': 'egress', 'microsoft-sign-in': 'egress', 'microsoft-sign-in-window': 'egress', 'box-memory': 'advanced', 'egress-log': 'advanced', 'no-byte-alert': 'advanced' };
 const noGroup = () => S.assigned.state === 'read' && !S.assigned.list.length;
 const knowCount = () => (S.review.draft?.warnings.length ?? 0) + (noGroup() ? 1 : 0);
 
@@ -1664,7 +1711,7 @@ function drawReview() {
         row('Deployment', dep ? [el('p', {}, `${a.deployment.name || dep.name}, revision ${a.deployment.revision}.`), el('p', { class: 't-small' }, `Revision ${dep.revision} runs on devices now; this one replaces it as an update.`)]
           : el('p', {}, `${a.deployment.name || 'A deployment with no name'}, a new deployment, revision 1.`), 'sources'),
         row('What Sluse may read', S.sources.map(sourceWords), 'sources'),
-        row('Where the box may connect', el('p', {}, `${plural(all.length, 'host')}: ${plural(ticked.length, 'bundle')}${own ? ` and ${own} of your own` : ''}.${uploads ? ` ${plural(uploads, 'bundle')} ${uploads === 1 ? 'takes' : 'take'} uploads.` : ''}`), 'egress'),
+        row('Where the box may connect', el('p', {}, `${plural(all.length, 'host')}: ${plural(ticked.length, 'bundle')}${own ? ` and ${own} of your own` : ''}.${uploads ? ` ${plural(uploads, 'bundle')} ${uploads === 1 ? 'takes' : 'take'} uploads.` : ''}${windowList().length ? " Microsoft's sign-in only while the person opens it, five minutes at a time." : ''}`), 'egress'),
         row('The box', el('p', {}, `${radio('mem')} GB of memory and a ${radio('disk')} GB home disk. Copying text out is ${$('copy-out').checked ? 'on' : 'off'}. The egress log is ${$('egress-log').checked ? `on, up to ${num('egress-mb')} MB` : 'off'}.`), 'advanced'),
         row('Volume alert', [el('p', {}, volumeWords()), el('p', { class: 't-small' }, fetch ? `A single fetch larger than ${fetch} MB is refused.` : 'No limit on a single fetch.')], 'advanced')),
       // Who may sign in is Entra's assignment, not part of the configuration:

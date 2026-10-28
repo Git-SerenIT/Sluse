@@ -33,16 +33,26 @@ apt-get install -y swaybg libglib2.0-bin dconf-gsettings-backend xdg-desktop-por
 apt-get install -y --no-install-recommends gnome-keyring
 
 install -d /usr/local/libexec/sluse /usr/local/lib/sluse /etc/firefox/policies
-install -m 0755 "$here/sluse-bootstrap" "$here/kiosk" "$here/vnc" "$here/home-init" "$here/browser" "$here/console-log" "$here/cli" "$here/theme" "$here/chatgpt" /usr/local/libexec/sluse/
+install -m 0755 "$here/sluse-bootstrap" "$here/kiosk" "$here/vnc" "$here/home-init" "$here/browser" "$here/console-log" "$here/cli" "$here/theme" "$here/chatgpt" "$here/signin-browser" /usr/local/libexec/sluse/
 # Firefox opens the web: ChatGPT's package registers itself for http and
 # https, and its sign-in opens the default browser, which would then be
-# ChatGPT itself. The snap's name first, the deb's after.
+# ChatGPT itself. Through signin-browser (D-075): Firefox in a profile made
+# for the link and deleted after, so a sign-in's session does not outlive
+# its window. Firefox itself after it, the snap's name first.
+cat > /usr/share/applications/sluse-signin-browser.desktop <<'DESKTOP'
+[Desktop Entry]
+Type=Application
+Name=Browser
+Exec=/usr/local/libexec/sluse/signin-browser %u
+NoDisplay=true
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;
+DESKTOP
 install -d /etc/xdg
 cat > /etc/xdg/mimeapps.list <<'MIME'
 [Default Applications]
-x-scheme-handler/http=firefox_firefox.desktop;firefox.desktop;
-x-scheme-handler/https=firefox_firefox.desktop;firefox.desktop;
-text/html=firefox_firefox.desktop;firefox.desktop;
+x-scheme-handler/http=sluse-signin-browser.desktop;firefox_firefox.desktop;firefox.desktop;
+x-scheme-handler/https=sluse-signin-browser.desktop;firefox_firefox.desktop;firefox.desktop;
+text/html=sluse-signin-browser.desktop;firefox_firefox.desktop;firefox.desktop;
 MIME
 install -m 0644 "$here/sway.conf" "$here/vnc.nft" "$here/no-images.lua" /usr/local/lib/sluse/
 install -m 0644 "$here/policies.json" /etc/firefox/policies/policies.json

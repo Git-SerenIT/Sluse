@@ -33,6 +33,8 @@
           <div class="stack" style="--stack-gap:12px" id="who-body"></div>
         </div>
       </details>
+      <!-- A Microsoft sign-in the person allowed, and how long is left (D-075). -->
+      <span class="status" data-status="warning" id="ms-open" hidden style="gap:8px"><i data-icon="sign-in"></i><span id="ms-open-text"></span><button class="btn btn--sm btn--quiet" type="button" id="ms-close">Close it now</button></span>
     </div>
 
     <nav class="topbar__actions" aria-label="Your box">
@@ -45,6 +47,8 @@
       <details id="more" class="menu">
         <summary class="btn">More<i data-icon="chevron-down" class="icon--sm"></i></summary>
         <div class="menu__list">
+          <button class="menu__item" type="button" id="ms-window" hidden><i data-icon="sign-in"></i><span>Allow a Microsoft sign-in…<span class="menu__hint">Five minutes, for a sign-in you started in your box.</span></span></button>
+          <hr class="menu__sep" id="ms-window-sep" hidden>
           <button class="menu__item" type="button" id="reset"><i data-icon="reset"></i><span>Reset the box's system…<span class="menu__hint">Your files stay. Apps installed outside your home folder go.</span></span></button>
           <hr class="menu__sep">
           <button class="menu__item menu__item--destructive" type="button" id="wipe"><i data-icon="wipe"></i><span>Wipe the box…<span class="menu__hint">Everything in the box goes.</span></span></button>
@@ -176,6 +180,20 @@
 
   <!-- Every destructive confirm says what goes and what stays (D-026 point 2);
        Cancel takes the focus. -->
+  <dialog class="dialog" id="ms-window-ask" aria-labelledby="ms-window-ask-t">
+    <form method="dialog">
+      <div class="dialog__head"><i data-icon="sign-in"></i><h2 class="dialog__title" id="ms-window-ask-t">Allow a Microsoft sign-in in your box?</h2></div>
+      <div class="dialog__body">
+        <p>For the next five minutes your box can reach Microsoft's sign-in page, so an AI app in it can sign in with your work account.</p>
+        <p><strong>Only do this for a sign-in you started yourself.</strong> If an AI app, or anything else in your box, asks you to allow it, don't.</p>
+        <p>It closes by itself after five minutes, and Sluse records that you allowed it.</p>
+      </div>
+      <div class="dialog__actions">
+        <button class="btn" value="cancel" autofocus>Cancel</button>
+        <button class="btn btn--primary" value="ok"><i data-icon="sign-in"></i>Allow for five minutes</button>
+      </div>
+    </form>
+  </dialog>
   <dialog class="dialog" id="signout-ask" aria-labelledby="signout-ask-t" aria-describedby="signout-ask-d">
     <form method="dialog">
       <div class="dialog__head"><i data-icon="sign-out"></i><h2 class="dialog__title" id="signout-ask-t">Sign out?</h2></div>

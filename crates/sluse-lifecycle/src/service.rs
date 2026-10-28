@@ -523,6 +523,7 @@ impl Service {
             PipeRequest::SignOut => return self.sign_out(sid),
             PipeRequest::Theme { theme } => return self.theme(sid, theme),
             PipeRequest::Console => return self.console(sid),
+            PipeRequest::SignInWindow { close } => return self.sign_in_window(sid, close),
             PipeRequest::Quit => {
                 self.quit.lock().unwrap_or_else(|p| p.into_inner()).insert(sid.to_owned());
                 return PipeEvent::Done;
@@ -578,6 +579,7 @@ impl Service {
             | PipeRequest::SignOut
             | PipeRequest::Theme { .. }
             | PipeRequest::Console
+            | PipeRequest::SignInWindow { .. }
             | PipeRequest::Quit => {
                 unreachable!("answered above")
             }
@@ -623,6 +625,26 @@ impl Service {
                 PipeEvent::SignedIn { user }
             }
             Err(e) => failed(PipeFailure::SignIn, e),
+        }
+    }
+
+    /// [`PipeRequest::SignInWindow`] (D-075): the caller's own running box,
+    /// whose config has Microsoft's sign-in as a window, on the Gate's
+    /// control channel, which only this service can write. Who opened it is
+    /// the caller's Windows account, which this pipe checked.
+    fn sign_in_window(&self, sid: &str, close: bool) -> PipeEvent {
+        let mut running = self.running.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(r) = running.as_mut().filter(|r| r.sid == sid) else {
+            return failed(PipeFailure::NoBox, "Your box is not open.");
+        };
+        if !has_window(&r.loaded) {
+            return failed(PipeFailure::NotAllowed, "Your IT department has not turned on Microsoft sign-in for your box.");
+        }
+        let seconds = if close { 0 } else { sluse_proto::pipe::SIGN_IN_WINDOW_SECONDS };
+        let w = sluse_proto::pipe::SignInWindow { window_seconds: seconds, opened_by: sid.to_owned() };
+        match tell_gate(&mut r.gate, &w) {
+            Ok(()) => PipeEvent::Done,
+            Err(e) => failed(PipeFailure::Gate, e),
         }
     }
 
@@ -736,6 +758,7 @@ impl Service {
                     inputs: has_kind(&r.loaded, |k| matches!(k, SourceKind::Inputs)),
                     onedrive: has_kind(&r.loaded, |k| matches!(k, SourceKind::Onedrive)),
                     shares: has_kind(&r.loaded, |k| matches!(k, SourceKind::Smb { .. })),
+                    sign_in_window: has_window(&r.loaded),
                 };
             }
             stop_gate(&mut r.gate);
@@ -852,6 +875,7 @@ impl Service {
                 let inputs = has_kind(&loaded, |k| matches!(k, SourceKind::Inputs));
                 let onedrive = has_kind(&loaded, |k| matches!(k, SourceKind::Onedrive));
                 let shares = has_kind(&loaded, |k| matches!(k, SourceKind::Smb { .. }));
+                let sign_in_window = has_window(&loaded);
                 *running = Some(Running {
                     sid: sid.to_owned(),
                     vm: rec.vm.clone(),
@@ -874,6 +898,7 @@ impl Service {
                     inputs,
                     onedrive,
                     shares,
+                    sign_in_window,
                 }
             }
             Err(e) => {
@@ -1854,13 +1879,23 @@ pub fn run() -> std::process::ExitCode {
 /// a second or two; a code is good for minutes.
 const SIGN_IN_WAIT: Duration = Duration::from_secs(30);
 
+/// Whether the config has Microsoft's sign-in as a window (D-075).
+fn has_window(loaded: &sluse_proto::Loaded) -> bool {
+    loaded.config.egress.as_ref().is_some_and(|e| !e.window.is_empty())
+}
+
+/// One line on the Gate's control channel, its stdin (D-036, D-075).
+fn tell_gate(gate: &mut Child, message: &impl serde::Serialize) -> Result<(), String> {
+    let line = serde_json::to_string(message).map_err(|e| e.to_string())?;
+    let stdin = gate.stdin.as_mut().ok_or("the Gate has no control channel")?;
+    writeln!(stdin, "{line}").and_then(|()| stdin.flush()).map_err(|e| format!("the Gate's control channel: {e}"))
+}
+
 /// Hand a sign-in to the Gate on its stdin, numbered `seq`, and wait for
 /// its answer in `/v1/status` (D-036). The user it bound, or why not.
 fn hand_sign_in(gate: &mut Child, loaded: &sluse_proto::Loaded, seq: u64, mut s: HostSignIn) -> Result<String, String> {
     s.seq = seq;
-    let line = serde_json::to_string(&s).map_err(|e| e.to_string())?;
-    let stdin = gate.stdin.as_mut().ok_or("the Gate has no control channel")?;
-    writeln!(stdin, "{line}").and_then(|()| stdin.flush()).map_err(|e| format!("the Gate's control channel: {e}"))?;
+    tell_gate(gate, &s)?;
     let deadline = Instant::now() + SIGN_IN_WAIT;
     loop {
         if let Ok(status) = crate::probe(loaded) {
@@ -2194,6 +2229,33 @@ mod tests {
         // Nothing was done: the log holds the requests and their answers only.
         let log = std::fs::read_to_string(d.path().join("logs/actions.jsonl")).unwrap_or_default();
         assert!(log.lines().all(|l| l.contains(r#""op":"request""#) || l.contains(r#""op":"answer""#)), "{log}");
+    }
+
+    #[test]
+    fn a_sign_in_window_needs_the_callers_open_box() {
+        let (_d, s) = service();
+        let got = ask(&s, "{\"op\":\"signInWindow\"}\n", SID);
+        assert!(matches!(got.as_slice(), [PipeEvent::Failed { code: PipeFailure::NoBox, .. }]), "{got:?}");
+        let got = ask(&s, "{\"op\":\"signInWindow\",\"close\":true}\n", SID);
+        assert!(matches!(got.as_slice(), [PipeEvent::Failed { code: PipeFailure::NoBox, .. }]), "{got:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_gate_is_told_one_line_on_its_control_channel() {
+        let d = tempfile::tempdir().unwrap();
+        let out = d.path().join("stdin");
+        let mut gate = std::process::Command::new("sh")
+            .args(["-c", &format!("cat > '{}'", out.display())])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let w = sluse_proto::pipe::SignInWindow { window_seconds: 300, opened_by: SID.into() };
+        tell_gate(&mut gate, &w).unwrap();
+        drop(gate.stdin.take());
+        gate.wait().unwrap();
+        let line = std::fs::read_to_string(out).unwrap();
+        assert_eq!(line, format!("{{\"windowSeconds\":300,\"openedBy\":\"{SID}\"}}\n"));
     }
 
     #[test]

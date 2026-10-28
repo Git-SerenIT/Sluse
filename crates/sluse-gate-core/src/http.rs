@@ -356,6 +356,7 @@ async fn status(State(core): State<Arc<Core>>, headers: HeaderMap) -> Json<Statu
         environment: Some(core.loaded.config.environment),
         session_held,
         signed_out: core.signed_out.load(std::sync::atomic::Ordering::Relaxed),
+        sign_in_window: core.window.until().is_some(),
         volume: {
             let now = Utc::now();
             core

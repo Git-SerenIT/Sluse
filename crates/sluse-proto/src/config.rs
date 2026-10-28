@@ -313,6 +313,12 @@ pub struct EgressConfig {
     /// The per-connection log, `egress.jsonl`. Off when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log: Option<EgressLog>,
+    /// Hosts the box reaches **only while the person has opened a sign-in
+    /// window** from the Sluse window, five minutes at a time: Microsoft's
+    /// sign-in (D-075). Never on `allow`; Gate Core decides each connection.
+    /// Written as `allow` is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub window: Vec<String>,
 }
 
 /// The per-connection egress log (D-038 point 7). Refusals reach the Event
@@ -330,14 +336,24 @@ impl EgressConfig {
     /// Whether `host` is on the list. `host` as a client sent it: case and a
     /// trailing dot are ignored.
     pub fn allows(&self, host: &str) -> bool {
-        let host = host.trim_end_matches('.').to_ascii_lowercase();
-        self.allow.iter().any(|e| match e.strip_prefix("*.") {
-            Some(suffix) => host.len() > suffix.len() + 1
-                && host.ends_with(suffix)
-                && host.as_bytes()[host.len() - suffix.len() - 1] == b'.',
-            None => *e == host,
-        })
+        listed(&self.allow, host)
     }
+
+    /// Whether `host` is one the box reaches only in a sign-in window
+    /// (D-075), matched as [`EgressConfig::allows`] matches.
+    pub fn in_window(&self, host: &str) -> bool {
+        listed(&self.window, host)
+    }
+}
+
+fn listed(list: &[String], host: &str) -> bool {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    list.iter().any(|e| match e.strip_prefix("*.") {
+        Some(suffix) => host.len() > suffix.len() + 1
+            && host.ends_with(suffix)
+            && host.as_bytes()[host.len() - suffix.len() - 1] == b'.',
+        None => *e == host,
+    })
 }
 
 /// A host name as `egress.allow` takes it: labels of `a-z`, `0-9` and `-`,
@@ -781,6 +797,8 @@ pub enum ConfigError {
 
     #[error("egress.allow: \"{0}\" is not a host name; write host.example.com or *.example.com, lowercase, with no scheme, port, path or address")]
     BadEgressHost(String),
+    #[error("egress.window: \"{0}\" is not a host name; write host.example.com or *.example.com, lowercase, with no scheme, port, path or address")]
+    BadWindowHost(String),
 
     #[error("maxReadBytes is {0}; it must be at least 1")]
     ZeroMaxRead(u64),
@@ -961,6 +979,9 @@ fn validate(c: &Authored) -> Result<(), ConfigError> {
 
     if let Some(bad) = c.egress.iter().flat_map(|e| &e.allow).find(|e| !valid_egress_entry(e)) {
         return Err(ConfigError::BadEgressHost(bad.clone()));
+    }
+    if let Some(bad) = c.egress.iter().flat_map(|e| &e.window).find(|e| !valid_egress_entry(e)) {
+        return Err(ConfigError::BadWindowHost(bad.clone()));
     }
     if let Some(a) = &c.accounts {
         let bad = |reason: String| Err(ConfigError::Invalid(format!("accounts: {reason}")));
@@ -1525,6 +1546,19 @@ mod tests {
         }
         // Absent is nowhere, and an older file means what it meant.
         assert!(load_value(valid_json()).unwrap().config.egress.is_none());
+    }
+
+    #[test]
+    fn window_hosts_are_apart_from_the_allow_list() {
+        let mut v = valid_json();
+        v["egress"] = serde_json::json!({ "allow": ["pypi.org"], "window": ["login.microsoftonline.com", "*.msauth.net"] });
+        let egress = load_value(v).unwrap().config.egress.unwrap();
+        assert!(egress.in_window("login.microsoftonline.com") && egress.in_window("aadcdn.msauth.net"));
+        assert!(!egress.allows("login.microsoftonline.com"), "a window host is never on the list");
+        assert!(!egress.in_window("pypi.org"));
+        let mut v = valid_json();
+        v["egress"] = serde_json::json!({ "allow": [], "window": ["https://login.microsoftonline.com"] });
+        assert!(matches!(load_value(v), Err(ConfigError::BadWindowHost(_))));
     }
 
     fn entra_json() -> serde_json::Value {

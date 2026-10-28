@@ -218,6 +218,19 @@ pub fn routes(start: FrontStart, claims: std::sync::Arc<Claims>) -> Router {
         }))
 }
 
+/// Front's question for a host on `egress.window` (D-075), answered from
+/// the window Core holds against the config Core loaded itself.
+pub fn window_route(core: std::sync::Arc<crate::app::Core>) -> Router {
+    use axum::routing::post;
+    Router::new().route(route::WINDOW, post(move |axum::Json(a): axum::Json<sluse_proto::gate::WindowAsk>| {
+        let core = core.clone();
+        async move {
+            let egress = core.loaded.config.egress.clone().unwrap_or_default();
+            axum::Json(sluse_proto::gate::WindowAnswer { open: core.window.ask(&egress, &a.host) })
+        }
+    }))
+}
+
 /// Distinct refused hosts recorded one by one; past it, [`OTHER_HOSTS`].
 pub const MAX_REFUSED_HOSTS: usize = 1024;
 /// Where refusals past [`MAX_REFUSED_HOSTS`] are counted.

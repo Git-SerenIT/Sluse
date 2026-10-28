@@ -225,6 +225,11 @@ pub const POSTURE: u32 = 1400;
 /// Next on the end of the table, by the rule above (`docs/audit.md`).
 pub const EGRESS_REFUSED: u32 = 1201;
 
+/// A sign-in window (D-075): op 19, opened and closed, each its record. Not
+/// an [`AuditRecord`], as the proxy's are not: it names the box, the config,
+/// who opened it, until when, and at its close the connections made in it.
+pub const SIGN_IN_WINDOW: u32 = 1900;
+
 /// How loud an event is in Event Viewer. A refusal is a warning, not an error:
 /// it is Gate Core working. An error is Gate Core or a source failing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

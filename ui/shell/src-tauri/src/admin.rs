@@ -299,6 +299,14 @@ pub async fn admin_connectors(admin: State<'_, Admin>) -> Result<sluse_admin::co
     sluse_admin::connectors::check(&admin.graph(GRAPH)?).await
 }
 
+/// Conditional Access behind a Microsoft sign-in in the box (D-075): a
+/// compliant device for company data, device-code sign-in blocked.
+#[tauri::command]
+pub async fn admin_ca(admin: State<'_, Admin>) -> Result<sluse_admin::ca::Report, String> {
+    let gate = admin.registered.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|r| r.app_id.clone());
+    Ok(sluse_admin::ca::check(&admin.graph(GRAPH)?, gate.as_deref()).await)
+}
+
 /// Turn sign-in off for one provider's app, the admin's choice. Only an app
 /// the check just found: the page names it, this makes sure it is one.
 #[tauri::command]

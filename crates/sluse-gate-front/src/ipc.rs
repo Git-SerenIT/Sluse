@@ -60,6 +60,26 @@ impl Parent {
         serde_json::from_slice(&bytes).map_err(|e| format!("Front's start from Gate Core: {e}"))
     }
 
+    /// Whether a sign-in window lets the box reach `host` now (D-075). The
+    /// parent decides; anything but its yes is no.
+    pub async fn window(&self, host: String) -> bool {
+        let Ok(body) = serde_json::to_vec(&sluse_proto::gate::WindowAsk { host }) else { return false };
+        let Ok(req) = Request::builder()
+            .method(Method::POST)
+            .uri(route::WINDOW)
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+        else {
+            return false;
+        };
+        let Ok(res) = self.send(req).await else { return false };
+        if res.status() != StatusCode::OK {
+            return false;
+        }
+        let Ok(bytes) = res.into_body().collect().await.map(|b| b.to_bytes()) else { return false };
+        serde_json::from_slice::<sluse_proto::gate::WindowAnswer>(&bytes).is_ok_and(|a| a.open)
+    }
+
     /// Tell the parent what Front saw. Not waited on: a connection is not held
     /// up by its own record, and a parent that is gone takes Front with it.
     pub fn claim(&self, claim: Claim) {

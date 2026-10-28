@@ -200,6 +200,13 @@
               "type": "null"
             }
           ]
+        },
+        "window": {
+          "description": "Hosts the box reaches **only while the person has opened a sign-in\nwindow** from the Sluse window, five minutes at a time: Microsoft's\nsign-in (D-075). Never on `allow`; Gate Core decides each connection.\nWritten as `allow` is.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false,

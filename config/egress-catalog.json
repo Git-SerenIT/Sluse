@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "about": "The egress bundles Sluse Admin offers (D-038 point 5). A config holds the bundles chosen and every host written out; only the hosts are enforced, and a newer catalog never widens a box by itself. 'measured' says what of a bundle was measured, when and how, or is null where its hosts are still the M9 draft.",
   "bundles": [
     {
@@ -118,6 +118,24 @@
         "release-assets.githubusercontent.com"
       ],
       "measured": null
+    },
+    {
+      "id": "microsoft-signin",
+      "name": "Microsoft sign-in, opened by the person",
+      "description": "For signing the AI apps in with your organisation's Microsoft account. The box reaches these hosts only while the person opens a sign-in from the Sluse window, five minutes at a time; never otherwise. Pair it with Conditional Access requiring a compliant device for Office 365 and Sluse Gate.",
+      "default": false,
+      "uploads": false,
+      "window": true,
+      "hosts": [
+        "login.microsoftonline.com",
+        "login.microsoft.com",
+        "aadcdn.msftauth.net",
+        "aadcdn.msauth.net",
+        "logincdn.msauth.net",
+        "api.workos.com",
+        "auth.workos.com"
+      ],
+      "measured": "2026-10-05, L1: the hosts of Claude's and ChatGPT's Entra sign-in, by the proxy's refusals (D-044); WorkOS is Claude's single sign-on. Mistral's not yet measured"
     }
   ]
 }
