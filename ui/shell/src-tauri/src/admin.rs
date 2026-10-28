@@ -247,6 +247,15 @@ pub async fn admin_mcp_require(admin: State<'_, Admin>, scope: String) -> Result
     Ok(serde_json::json!({ "resource": resource, "added": added, "consented": consented }))
 }
 
+/// The delegated permissions a server's app offers, to pick from rather
+/// than guess (L1, 2026-10-28): from its id or ID URI, a scope after it or
+/// not. Makes a vendor's app's entry if the tenant has none, and says so.
+#[tauri::command]
+pub async fn admin_mcp_offered(admin: State<'_, Admin>, typed: String) -> Result<Value, String> {
+    let (name, resource, made, scopes) = sluse_admin::mcp::offered(&admin.graph(GRAPH)?, &typed).await?;
+    Ok(serde_json::json!({ "name": name, "resource": resource, "made": made, "scopes": scopes }))
+}
+
 /// Step 2, again after the admin granted it in the portal.
 #[tauri::command]
 pub async fn admin_mcp_consented(admin: State<'_, Admin>, scope: String) -> Result<bool, String> {

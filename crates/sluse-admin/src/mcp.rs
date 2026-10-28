@@ -40,6 +40,19 @@ pub struct Resource {
     pub name: String,
     pub scope: String,
     pub scope_id: String,
+    /// Its entry was not in this tenant until now: Sluse Admin made it, as
+    /// a vendor's app (Azure DevOps MCP) has none until something asks.
+    pub made: bool,
+}
+
+/// A delegated permission the server's app offers, for the admin to pick:
+/// Azure DevOps MCP's are documented nowhere (L1, 2026-10-28).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Offered {
+    pub value: String,
+    pub name: String,
+    pub description: String,
 }
 
 /// `entraScope` as its resource and its scope's value. `/.default` is not
@@ -63,16 +76,9 @@ fn is_guid(s: &str) -> bool {
 /// Find the server's app and its scope in this tenant.
 pub async fn resource(g: &Graph, entra_scope: &str) -> Result<Resource, String> {
     let (resource, value) = split_scope(entra_scope)?;
-    let found = if is_guid(resource) {
-        // A vendor's multi-tenant app may have no service principal here yet.
-        g.service_principal(resource, &mut Vec::new()).await?
-    } else {
-        g.list(format!("/servicePrincipals?$filter=servicePrincipalNames/any(n:n eq '{resource}')"))
-            .await?
-            .into_iter()
-            .next()
-            .ok_or_else(|| format!("no app in this tenant answers to {resource}; check the scope's spelling, or use the app's id"))?
-    };
+    let (found, made) = app(g, resource)
+        .await?
+        .ok_or_else(|| format!("no app in this tenant answers to {resource}; check the scope's spelling, or use the app's id"))?;
     let scopes = found["oauth2PermissionScopes"].as_array().cloned().unwrap_or_default();
     let scope_id = scopes
         .iter()
@@ -91,7 +97,50 @@ pub async fn resource(g: &Graph, entra_scope: &str) -> Result<Resource, String> 
         name: found["displayName"].as_str().unwrap_or(resource).to_owned(),
         scope: value.to_owned(),
         scope_id,
+        made,
     })
+}
+
+/// The server's app by its id, its service principal made if a vendor's has
+/// none here yet, or by a name it answers to; and whether it was made now.
+async fn app(g: &Graph, resource: &str) -> Result<Option<(Value, bool)>, String> {
+    if is_guid(resource) {
+        let mut made = Vec::new();
+        let sp = g.service_principal(resource, &mut made).await?;
+        return Ok(Some((sp, !made.is_empty())));
+    }
+    let found = g.list(format!("/servicePrincipals?$filter=servicePrincipalNames/any(n:n eq '{resource}')")).await?;
+    Ok(found.into_iter().next().map(|sp| (sp, false)))
+}
+
+/// The delegated permissions the app behind `typed` offers: `typed` is its
+/// id or a name it answers to, with or without a scope after it. The app's
+/// name, the resource as Entra knows it, whether its entry was made now,
+/// and the enabled scopes.
+pub async fn offered(g: &Graph, typed: &str) -> Result<(String, String, bool, Vec<Offered>), String> {
+    let typed = typed.trim().trim_end_matches('/');
+    let mut tries = vec![typed];
+    if let Some((left, _)) = typed.rsplit_once('/').filter(|(l, _)| !l.ends_with(':') && !l.ends_with(":/")) {
+        tries.push(left);
+    }
+    for resource in tries {
+        if let Some((sp, made)) = app(g, resource).await? {
+            let scopes = sp["oauth2PermissionScopes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|s| s["isEnabled"].as_bool() != Some(false))
+                .map(|s| Offered {
+                    value: s["value"].as_str().unwrap_or_default().to_owned(),
+                    name: s["adminConsentDisplayName"].as_str().unwrap_or_default().to_owned(),
+                    description: s["adminConsentDescription"].as_str().unwrap_or_default().to_owned(),
+                })
+                .collect();
+            let name = sp["displayName"].as_str().unwrap_or(resource).to_owned();
+            return Ok((name, resource.to_owned(), made, scopes));
+        }
+    }
+    Err(format!("no app in this tenant answers to {typed}; use the app's id, or the ID URI its documentation gives"))
 }
 
 /// The scope on Sluse Gate's registration, beside Graph's. True when it was
@@ -231,7 +280,7 @@ mod tests {
         t.lock().unwrap().sps.push(json!({
             "id": "sp-crm", "appId": "11111111-0000-4000-8000-000000000001", "displayName": "CRM MCP",
             "servicePrincipalNames": ["api://crm-mcp"],
-            "oauth2PermissionScopes": [{ "value": "Mcp.Read", "id": "scope-read" }, { "value": "Mcp.Write", "id": "scope-write" }]
+            "oauth2PermissionScopes": [{ "value": "Mcp.Read", "id": "scope-read", "adminConsentDisplayName": "Read the CRM" }, { "value": "Mcp.Write", "id": "scope-write" }]
         }));
 
         let (r, added) = require(&g, "api://crm-mcp/Mcp.Read").await.unwrap();
@@ -253,6 +302,19 @@ mod tests {
         assert!(!consented(&g, &reg.service_principal, &r).await.unwrap());
         t.lock().unwrap().grants.push(json!({ "clientId": reg.service_principal, "consentType": "AllPrincipals", "resourceId": "sp-crm", "scope": "Mcp.Read" }));
         assert!(consented(&g, &reg.service_principal, &r).await.unwrap());
+
+        // The permissions offered, from the URI with or without a scope,
+        // so the admin picks rather than guesses.
+        for typed in ["api://crm-mcp", "api://crm-mcp/Mcp.Wrong"] {
+            let (name, resource, made, scopes) = offered(&g, typed).await.unwrap();
+            assert_eq!((name.as_str(), resource.as_str(), made), ("CRM MCP", "api://crm-mcp", false), "{typed}");
+            assert_eq!(scopes.iter().map(|o| o.value.as_str()).collect::<Vec<_>>(), ["Mcp.Read", "Mcp.Write"]);
+            assert_eq!(scopes[0].name, "Read the CRM");
+        }
+        // A vendor's app by id, absent here: its entry is made, and said.
+        let (_, _, made, _) = offered(&g, "22222222-0000-4000-8000-000000000002").await.unwrap();
+        assert!(made);
+        assert!(!offered(&g, "22222222-0000-4000-8000-000000000002").await.unwrap().2, "once");
 
         let e = require(&g, "api://crm-mcp/Mcp.Delete").await.unwrap_err();
         assert!(e.contains("no delegated scope Mcp.Delete; it has: Mcp.Read"), "{e}");

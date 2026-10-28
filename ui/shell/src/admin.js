@@ -1241,6 +1241,7 @@ $('add-go').onclick = () => {
 for (const t of document.querySelectorAll('#dlg-add [data-tab]')) t.onclick = () => { ADD.tab = t.dataset.tab; drawAdd(); };
 $('site-find').onclick = findSites;
 $('mcp-read').onclick = readMcp;
+$('mcp-list').onclick = listMcp;
 $('share-path').oninput = drawAdd;
 
 // ---- A tool server (D-071) --------------------------------------------------------------
@@ -1263,6 +1264,26 @@ async function readMcp() {
     sawError(e);
     drawAdd();
   }
+}
+/** The permissions the server's app offers, to pick one (L1, 2026-10-28:
+ * Azure DevOps MCP's names are documented nowhere). */
+async function listMcp() {
+  const typed = $('mcp-scope').value.trim();
+  if (!S.who) { ADD.mcp = { ...ADD.mcp, state: 'error', error: 'not signed in' }; drawAdd(); return; }
+  if (!typed) { $('mcp-scope').focus(); return; }
+  ADD.mcp = { ...ADD.mcp, state: 'listing' }; drawAdd();
+  try {
+    ADD.mcp = { ...ADD.mcp, state: 'offered', offered: await invoke('admin_mcp_offered', { typed }) };
+  } catch (e) {
+    ADD.mcp = { ...ADD.mcp, state: 'error', error: String(e) };
+    sawError(e);
+  }
+  drawAdd();
+}
+function pickScope(o) {
+  $('mcp-scope').value = `${ADD.mcp.offered.resource}/${o.value}`;
+  ADD.mcp = { ...ADD.mcp, state: 'chosen', chosen: o.value };
+  drawAdd();
 }
 async function consentAgain() {
   ADD.mcp.state = 'requiring'; drawAdd();
@@ -1297,11 +1318,23 @@ function drawMcp() {
   const m = ADD.mcp;
   const go = $('add-go');
   $('mcp-read').setAttribute('aria-busy', String(['requiring', 'probing'].includes(m.state)));
+  $('mcp-list').setAttribute('aria-busy', String(m.state === 'listing'));
+  const made = (r) => r?.made ? note('info', `${r.name} was not in your tenant yet: Sluse Admin added it as an enterprise application, as Microsoft does the first time a vendor's app is used.`) : null;
   fill($('mcp-body'),
+    m.state === 'listing' ? status('working', "Reading the permissions the server's app offers…") : null,
+    m.state === 'offered' ? [made(m.offered),
+      m.offered.scopes.length
+        ? [el('p', { class: 't-small' }, `${m.offered.name} offers these permissions. Pick one that only reads: Sluse's app gets it, and the server lets the agent do no more than it allows.`),
+          el('ul', { class: 'rows' }, m.offered.scopes.map((o) => el('li', { class: 'row', style: 'flex-wrap: wrap' },
+            el('span', { class: 'row__main' }, mono(o.value), o.name ? ` ${o.name}` : '', o.description ? [el('br'), el('span', { class: 't-small t-muted' }, o.description)] : null),
+            btn('Use this', () => pickScope(o), { cls: 'btn--sm' }))))]
+        : note('warning', `${m.offered.name} offers no delegated permissions here. Check its documentation for the app it uses.`)] : null,
+    m.state === 'chosen' ? note('info', `${m.chosen} is filled in. Read its tools next: Sluse's app gets the permission, then waits for your admin consent.`) : null,
     m.state === 'requiring' ? status('working', "Adding the server's permission to Sluse's app…") : null,
-    m.state === 'probing' ? status('working', "Reading its tools as Sluse's app. Microsoft's sign-in may ask you to confirm.") : null,
+    m.state === 'probing' ? status('working', "Signing in as Sluse's app for this permission, then asking the server which MCP version it speaks and which tools it has. Microsoft's sign-in may ask you to confirm.") : null,
+    m.state === 'consent' ? made(m.resource) : null,
     m.state === 'consent' ? banner(m.notYet ? 'warning' : 'info', `${m.resource.name}'s ${m.resource.scope} is on Sluse's app${m.added ? ' now' : ''}, without admin consent yet.`,
-      `Grant it in the portal: API permissions, Grant admin consent for your organisation. Then check again here.${m.notYet ? ' Consent was not there yet; Entra can take a minute to show it.' : ''}`,
+      `Open the portal at Sluse Gate's API permissions and click Grant admin consent for your organisation. The line for ${m.resource.name}, ${m.resource.scope}, then says Granted. Check again here: Sluse signs in as its app for this permission, learns which MCP version the server speaks, and reads its tools.${m.notYet ? ' Consent was not there yet; Entra can take a minute to show it.' : ''}`,
       { actions: [btn('Open the portal', () => invoke('admin_open_portal', { appId: clientId() }), { cls: 'btn--sm', ico: 'external' }), btn('Check again', consentAgain, { cls: 'btn--sm btn--primary', ico: 'refresh' })] }) : null,
     m.state === 'error' ? banner('problem', m.error === 'not signed in' ? 'Sign in first.' : m.error === "Sluse's app is not set up" ? "Sluse's app is not set up yet." : 'The tool server could not be read.',
       m.error === 'not signed in' ? 'Reading a tool server checks its permission in your tenant as you.' : m.error === "Sluse's app is not set up" ? 'Make it at Tenant first: the server is read as that app.'

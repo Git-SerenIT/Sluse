@@ -116,6 +116,7 @@ pub fn show(app: &AppHandle) {
 /// Close the box from the tray or a notification: the window comes forward
 /// on its own Close confirm (Q85), never Windows' message box.
 pub fn ask_close(app: &AppHandle) {
+    crate::note("window: Close asked from the tray or a notification");
     show(app);
     let _ = app.emit_to("main", "tray-close", ());
 }
@@ -124,6 +125,7 @@ pub fn ask_close(app: &AppHandle) {
 /// reading as the person until the box is closed (D-034 point 5).
 #[tauri::command]
 pub fn leave(app: AppHandle) {
+    crate::note("window: left running, in the tray");
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
     }

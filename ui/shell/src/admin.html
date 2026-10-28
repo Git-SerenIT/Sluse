@@ -475,8 +475,8 @@
       <div class="tabpanel stack" id="pane-mcp" role="tabpanel" style="--stack-gap: var(--space-3)" hidden>
         <p class="t-small">An MCP server reached over HTTPS that takes an Entra token. Sluse calls it as each user, with Sluse's app, and only the tools you tick.</p>
         <label class="field"><span class="field__label">The server's address</span><input class="input input--mono" type="url" placeholder="https://mcp.example.com/mcp" id="mcp-url"><span class="field__hint">Its MCP endpoint, https only. The box never reaches it; Sluse on each computer does.</span></label>
-        <label class="field"><span class="field__label">The permission Sluse asks for</span><input class="input input--mono" type="text" placeholder="api://crm-mcp/Mcp.Read" id="mcp-scope" data-enter="mcp-read"><span class="field__hint">The server's delegated scope as Entra names it: its app's ID URI or app id, then the scope. Its documentation says which.</span></label>
-        <div class="btn-row"><button class="btn" type="button" id="mcp-read"><i data-icon="search"></i>Read its tools</button></div>
+        <label class="field"><span class="field__label">The permission Sluse asks for</span><input class="input input--mono" type="text" placeholder="api://crm-mcp/Mcp.Read" id="mcp-scope" data-enter="mcp-read"><span class="field__hint">The server's app, by its ID URI or app id, then the permission. Not sure of the permission's name? Type the app alone and list what it offers.</span></label>
+        <div class="btn-row"><button class="btn" type="button" id="mcp-list"><i data-icon="search"></i>List its permissions</button><button class="btn" type="button" id="mcp-read"><i data-icon="search"></i>Read its tools</button></div>
         <div id="mcp-body"></div>
       </div>
       <p class="t-small t-muted" id="add-as"></p>

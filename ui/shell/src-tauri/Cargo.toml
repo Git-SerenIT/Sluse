@@ -7,7 +7,7 @@
 [package]
 name = "sluse-shell"
 description = "The Sluse host shell: one window on the user's box."
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 # Measured 2026-10-05 across this workspace's own lock, as the root's is:
 # Tauri 2's crates declare 1.90. Derived, not built with 1.90.
@@ -26,6 +26,8 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# shell.log's time on lines from this side; already in the lock.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The pipe's types, from the core. Pure data: no runtime, no TLS.
 sluse-proto = { path = "../../../crates/sluse-proto" }
 # Sluse Admin's engine (D-039 slice 6), and the native file dialogs it picks

@@ -29,6 +29,8 @@ const it = 'send the details to your IT department.';
 // step, the viewer, the console's answers and the sign-ins, with the time.
 const slog = (...words) => invoke('shell_log', { line: `${new Date().toISOString()} ${words.join(' ')}` }).catch(() => {});
 slog('window: started');
+// Quit, with why: the line is written before the window goes.
+const quit = (why) => slog('quit:', why).then(() => invoke('quit'));
 
 /** A button, as the components draw it. */
 function button(label, { icon, cls = '', run } = {}) {
@@ -384,7 +386,7 @@ function failed(error, kind = att?.kind ?? 'open') {
   // so; a build that finished is the one thing worth telling (Q26).
   if (quitting) {
     if (/window quit/.test(f.message ?? '')) notify('built', 'Your box\'s system is ready', 'Sluse has finished preparing it. Open Sluse to start your box.', [OPEN]);
-    invoke('quit');
+    quit('the box was left closed after a Quit');
     return;
   }
   if (!att) begin(kind);
@@ -827,7 +829,7 @@ async function open(carryOn = false) {
     sentTheme = window.sluseTheme();
     box = await invoke('open_box', { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, theme: sentTheme });
     // The person quit, and the box came up anyway: it is closed (Q26).
-    if (quitting) { await invoke('close_box').catch(() => {}); invoke('quit'); return; }
+    if (quitting) { await invoke('close_box').catch(() => {}); quit('the box came up after a Quit, closed'); return; }
     offerInputs(box.inputs);
     await getFacts();
     // Said once per window: the config notice names what changed, the wipe
@@ -873,7 +875,7 @@ async function reset(wipe) {
     // Quit during the reset's build: it is done, and the box stays closed.
     if (quitting) {
       notify('built', 'Your box\'s system is ready', 'Sluse has finished preparing it. Open Sluse to start your box.', [OPEN]);
-      invoke('quit');
+      quit('the reset finished after a Quit');
       return;
     }
     await open(true);
@@ -887,6 +889,7 @@ async function reset(wipe) {
 const CLOSED_MS = 2000;
 
 async function closeBox() {
+  slog('close: the box, as asked in the window');
   stopViewer();
   begin('close');
   show('closing', 'Closing your box…');
@@ -894,7 +897,7 @@ async function closeBox() {
     await invoke('close_box');
     invoke('withdraw', { tags: ['open', 'left'] }).catch(() => {});
     show('closed');
-    setTimeout(() => invoke('quit'), CLOSED_MS);
+    setTimeout(() => quit('the box is closed'), CLOSED_MS);
   } catch (e) {
     const f = asFailure(e);
     failed(f.code === 'busy' ? f : { ...f, code: 'closeFailed' }, 'close');
@@ -980,7 +983,7 @@ listen('close-requested', async () => {
     $('leave-close').textContent = 'Keep waiting';
     $('leave-cancel').hidden = true;
   } else {
-    invoke('quit');
+    quit(`the X, with no box open (${s})`);
     return;
   }
   const v = await ask('leave');

@@ -126,6 +126,7 @@ fn window_state(state: String) {
 /// tray until the build is done; otherwise the process ends.
 #[tauri::command]
 fn quit_open(app: tauri::AppHandle, building: bool) {
+    note(format_args!("window: Quit during a wait{}", if building { ", the build goes on in the tray" } else { "" }));
     pipe::tell(&PipeRequest::Quit);
     if building {
         edges::leave(app);
@@ -232,6 +233,13 @@ fn keep_signed_in(app: tauri::AppHandle, may_ask: Option<bool>) -> Result<Option
 /// what the window did and when, which nothing else on disk records (L1,
 /// 2026-10-21: 12 minutes after the box was ready, unaccounted for; D-066).
 /// The page stamps it. Best effort; one older file kept at 1 MB.
+/// A line in `shell.log` from this side of the window, stamped as the
+/// page stamps its own: the closes and quits that happen without the page
+/// saying why (L1, 2026-10-28, a box closed five seconds after it was ready).
+pub(crate) fn note(what: impl std::fmt::Display) {
+    shell_log(format!("{} {what}", chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
+}
+
 #[tauri::command]
 fn shell_log(line: String) {
     use std::io::Write;
@@ -314,6 +322,7 @@ fn close_box(app: tauri::AppHandle) -> Result<(), Failure> {
 
 #[tauri::command]
 fn quit(app: tauri::AppHandle) {
+    note("window: quit");
     app.exit(0);
 }
 
@@ -466,7 +475,13 @@ fn close_requested(window: &tauri::Window, event: &tauri::WindowEvent) {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
     if now.saturating_sub(LAST_CLOSE.swap(now, Ordering::SeqCst)) < 5_000 {
-        match WINDOW.load(Ordering::SeqCst) {
+        let state = WINDOW.load(Ordering::SeqCst);
+        note(format_args!("window: X twice within 5 s, {}", match state {
+            RUNNING => "closes the box",
+            BUILDING => "quits, the build goes on",
+            _ => "quits",
+        }));
+        match state {
             RUNNING => pipe::tell(&PipeRequest::Close),
             BUILDING => {
                 pipe::tell(&PipeRequest::Quit);
@@ -491,11 +506,15 @@ fn main() {
             let _ = open_folder("artifacts".into());
             return;
         }
-        Some(Some(verb)) if edges::signal(verb) => return,
+        Some(Some(verb)) if edges::signal(verb) => {
+            note(format_args!("link: sluse:{verb}, passed to the running window"));
+            return;
+        }
         Some(None) => return,
         _ => {}
     }
     if already_open(admin) {
+        note(if admin { "launch: Sluse Admin is already open, shown" } else { "launch: Sluse is already open, shown" });
         return;
     }
     #[cfg(windows)]
@@ -555,6 +574,7 @@ fn main() {
             admin::admin_register,
             admin::admin_consent_missing,
             admin::admin_mcp_require,
+            admin::admin_mcp_offered,
             admin::admin_mcp_consented,
             admin::admin_mcp_probe,
             admin::admin_connectors,

@@ -35,7 +35,7 @@ use windows::Win32::System::JobObjects::{
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
 use windows::Win32::System::Pipes::{
-    ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientSessionId, ImpersonateNamedPipeClient, PIPE_READMODE_BYTE,
+    ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId, GetNamedPipeClientSessionId, ImpersonateNamedPipeClient, PIPE_READMODE_BYTE,
     PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
 };
 use windows::Win32::System::RemoteDesktop::WTSQueryUserToken;
@@ -158,6 +158,9 @@ pub fn client_identity(conn: &File) -> io::Result<crate::service::Caller> {
     let pipe = HANDLE(conn.as_raw_handle());
     let mut session = 0u32;
     unsafe { GetNamedPipeClientSessionId(pipe, &mut session) }.map_err(io::Error::other)?;
+    // For the log only; identity is the token below.
+    let mut pid = 0u32;
+    let _ = unsafe { GetNamedPipeClientProcessId(pipe, &mut pid) };
     unsafe { ImpersonateNamedPipeClient(pipe) }.map_err(io::Error::other)?;
     let mut token = HANDLE::default();
     let opened = unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, true, &mut token) };
@@ -175,7 +178,7 @@ pub fn client_identity(conn: &File) -> io::Result<crate::service::Caller> {
         let mut member = false.into();
         unsafe { CheckTokenMembership(Some(token), PSID(admins.as_mut_ptr().cast()), &mut member) }
             .map_err(io::Error::other)?;
-        Ok(crate::service::Caller { sid, admin: member.as_bool(), session })
+        Ok(crate::service::Caller { sid, admin: member.as_bool(), session, pid })
     })();
     unsafe { CloseHandle(token) }.ok();
     result

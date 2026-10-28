@@ -282,6 +282,9 @@ pub struct Caller {
     /// The logon session the caller is in, where the service takes the token
     /// the Gate writes Sluse Artifacts with (D-031).
     pub session: u32,
+    /// The client's process, for `actions.jsonl` only: which window asked.
+    /// Never identity (a pid exits and is reused); 0 when unknown.
+    pub pid: u32,
 }
 
 /// What an open was asked with.
@@ -295,6 +298,15 @@ struct Open<'a> {
     /// The shell's window has gone: a step could not be sent to it. An
     /// open whose window quit leaves the box closed (Q26, Q75).
     gone: &'a std::cell::Cell<bool>,
+}
+
+/// An answer in a word for `actions.jsonl`, a failure with its message.
+/// Never the whole event: `ready` carries the box's screen password.
+fn outcome(e: &PipeEvent) -> String {
+    match e {
+        PipeEvent::Failed { code, message } => format!("failed ({code:?}): {message}"),
+        other => serde_json::to_value(other).ok().and_then(|v| v["event"].as_str().map(str::to_owned)).unwrap_or_default(),
+    }
 }
 
 fn failed(code: PipeFailure, message: impl Into<String>) -> PipeEvent {
@@ -413,6 +425,14 @@ impl Service {
                     let mut plan = Some(self.plan(&caller.sid, &req));
                     // A write that fails is a window that has gone (Q26).
                     let gone = std::cell::Cell::new(false);
+                    // Every request but the polls, and its answer, by the
+                    // asking process: a box closed with nobody saying why
+                    // (L1, 2026-10-28) names its sender here.
+                    let op = serde_json::to_value(&req).ok().and_then(|v| v["op"].as_str().map(str::to_owned)).unwrap_or_default();
+                    let logged = !matches!(req, PipeRequest::Status | PipeRequest::Console);
+                    if logged {
+                        self.log_device("request", &format!("{op} from pid {} in session {}, {}", caller.pid, caller.session, caller.sid));
+                    }
                     let mut send = |mut e: PipeEvent| {
                         if let (PipeEvent::Progress { plan: p, .. }, Some(planned)) = (&mut e, plan.take()) {
                             *p = planned;
@@ -421,7 +441,12 @@ impl Service {
                             gone.set(true);
                         }
                     };
-                    self.answer(&caller, req, &mut send, &gone)
+                    let answer = self.answer(&caller, req, &mut send, &gone);
+                    if logged {
+                        let gone = if gone.get() { ", its window gone" } else { "" };
+                        self.log_device("answer", &format!("{op} from pid {}: {}{gone}", caller.pid, outcome(&answer)));
+                    }
+                    answer
                 }
             },
         };
@@ -1973,7 +1998,7 @@ mod tests {
 
     fn ask(service: &Service, request: &str, sid: &str) -> Vec<PipeEvent> {
         let mut conn = Conn { input: io::Cursor::new(request.as_bytes().to_vec()), output: Vec::new() };
-        let caller = Caller { sid: sid.to_owned(), admin: false, session: 0 };
+        let caller = Caller { sid: sid.to_owned(), admin: false, session: 0, pid: 0 };
         service.handle(&mut conn, move |_| Ok(caller));
         String::from_utf8(conn.output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect()
     }
@@ -2147,13 +2172,13 @@ mod tests {
         // An administrator gets past the check, to a box that is not there.
         let mut conn = Conn { input: io::Cursor::new(br#"{"op":"wipe","sid":"S-1-12-1-9"}
 "#.to_vec()), output: Vec::new() };
-        s.handle(&mut conn, |_| Ok(Caller { sid: SID.into(), admin: true, session: 0 }));
+        s.handle(&mut conn, |_| Ok(Caller { sid: SID.into(), admin: true, session: 0, pid: 0 }));
         let got: PipeEvent = serde_json::from_slice(conn.output.strip_suffix(b"\n").unwrap()).unwrap();
         assert!(matches!(got, PipeEvent::Failed { code: PipeFailure::NoBox, .. }), "{got:?}");
         // Nor can an administrator name something that is not a SID.
         let mut conn = Conn { input: io::Cursor::new(br#"{"op":"reset","sid":"..\\x"}
 "#.to_vec()), output: Vec::new() };
-        s.handle(&mut conn, |_| Ok(Caller { sid: SID.into(), admin: true, session: 0 }));
+        s.handle(&mut conn, |_| Ok(Caller { sid: SID.into(), admin: true, session: 0, pid: 0 }));
         let got: PipeEvent = serde_json::from_slice(conn.output.strip_suffix(b"\n").unwrap()).unwrap();
         assert!(matches!(got, PipeEvent::Failed { code: PipeFailure::BadRequest, .. }), "{got:?}");
     }
@@ -2166,7 +2191,23 @@ mod tests {
             let got = ask(&s, req, SID);
             assert!(matches!(got.as_slice(), [PipeEvent::Failed { code: PipeFailure::NotAllowed, .. }]), "{got:?}");
         }
-        assert!(!d.path().join("logs/actions.jsonl").exists(), "nothing was done, so nothing is logged");
+        // Nothing was done: the log holds the requests and their answers only.
+        let log = std::fs::read_to_string(d.path().join("logs/actions.jsonl")).unwrap_or_default();
+        assert!(log.lines().all(|l| l.contains(r#""op":"request""#) || l.contains(r#""op":"answer""#)), "{log}");
+    }
+
+    #[test]
+    fn every_request_but_the_polls_is_logged_with_its_sender_and_answer() {
+        let (d, s) = service();
+        for req in ["{\"op\":\"status\"}\n", "{\"op\":\"close\"}\n"] {
+            let mut conn = Conn { input: io::Cursor::new(req.as_bytes().to_vec()), output: Vec::new() };
+            s.handle(&mut conn, |_| Ok(Caller { sid: SID.into(), admin: false, session: 2, pid: 4242 }));
+        }
+        let log = std::fs::read_to_string(d.path().join("logs/actions.jsonl")).unwrap();
+        let lines: Vec<&str> = log.lines().collect();
+        assert_eq!(lines.len(), 2, "status is a poll and goes unlogged: {log}");
+        assert!(lines[0].contains("close from pid 4242 in session 2"), "{log}");
+        assert!(lines[1].contains("close from pid 4242: closed"), "{log}");
     }
 
     #[test]

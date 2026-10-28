@@ -180,8 +180,11 @@ Egress entry. To build one of your own, copy
 Azure Functions server that reads Microsoft Graph as the person.
 
 **Adding one:** Sources, Add a source, **Tool server**. Give its address
-and the scope Sluse asks for (for example
-`api://<app>/user_impersonation`), then Read its tools. Sluse Admin adds
+and the permission Sluse asks for: the server's app (its ID URI or app id)
+and the permission's name, for example `api://<app>/user_impersonation`.
+Not sure of the name? Type the app alone and **List its permissions**,
+then pick one that only reads. A vendor's app that is not in your tenant
+yet is added there, and Sluse Admin says so. Then Read its tools. Sluse Admin adds
 that scope to Sluse Gate's app; grant admin consent in the portal (the link
 is shown) and Check again. It then lists the server's tools and the MCP
 version it answers, which is kept in the configuration. **Tick only tools
@@ -204,7 +207,8 @@ Open buttons start. Each opens as a tab along the top of the box, named
 Sluse console, Claude, ChatGPT, Claude Code, Codex, Mistral Vibe or
 Terminal; switch tabs
 with the mouse, or with Ctrl+Alt+Right, which goes round from the last tab
-to the first. The box is
+to the first. Close an app's tab with a middle click on it, or Ctrl+Alt+W
+for the tab in front; the Sluse console's tab stays. The box is
 drawn at the size of the window, so making the window larger gives the box
 more room.
 

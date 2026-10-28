@@ -5,6 +5,32 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.8
+
+**For the administrator**
+- **Every request to Sluse's service is logged** in
+  `C:\ProgramData\Sluse\logs\actions.jsonl`, with the process that sent
+  it and how it was answered, and **every way the Sluse window closes the
+  box or quits** is logged in the person's `shell.log`, with why. A box
+  that closed with no one saying why (seen once, on the first open after
+  a system build) now names who asked.
+- **Adding a tool server in Sluse Admin is explained step by step.**
+  **List its permissions** shows what the server's app offers, with
+  Microsoft's descriptions, to pick one that only reads instead of
+  guessing its name. A vendor's app that was not in your tenant is said to
+  have been added; the consent step names the button and what "Granted"
+  looks like; Check again says what it does.
+
+**For the person using Sluse**
+- **Close an app's tab in the box**: a middle click on its tab, or
+  Ctrl+Alt+W for the one in front. The Sluse console's tab stays. The
+  console's Open buttons say so when you point at them.
+
+The box's system is rebuilt on the first open after this update.
+
+**Not proven:** not yet run on a device; the service's process id is read
+on Windows only.
+
 ## 0.1.7
 
 **For the administrator**
