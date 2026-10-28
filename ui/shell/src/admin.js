@@ -84,6 +84,23 @@ function toast(text, action) {
   setTimeout(() => t.remove(), action ? 8000 : 4000);
 }
 
+// A fault in the page itself is said and logged, never left as a turning
+// ring: an exception while drawing stopped Make or repair before it asked
+// anything (L1, 2026-10-28).
+function fault(e) {
+  const text = String(e?.message ?? e);
+  invoke('shell_log', { line: `${new Date().toISOString()} admin page: ${e?.stack ?? text}` }).catch(() => {});
+  problemToast(`Sluse Admin's page hit an error: ${text}. Close Sluse Admin and open it again. If it comes back, send us this text and shell.log.`);
+}
+/** A problem stays until dismissed: unlike a toast, it must be read. */
+function problemToast(text) {
+  const t = el('div', { class: 'toast', 'data-kind': 'problem' }, el('span', { style: 'flex:1' }, text),
+    el('button', { class: 'btn btn--sm btn--icon', type: 'button', 'aria-label': 'Dismiss', onclick: () => t.remove() }, icon('close')));
+  $('toasts').append(t);
+}
+window.addEventListener('error', (e) => fault(e.error ?? e.message));
+window.addEventListener('unhandledrejection', (e) => fault(e.reason));
+
 /** One question in the window's dialog; resolves with the button's value. */
 function ask({ ico = 'warning', title, body, actions, destructive = false }) {
   const d = $('dlg-ask');
@@ -810,7 +827,8 @@ async function blockProvider(f) {
     const done = await invoke('admin_connector_block', { appId: f.appId ?? null, servicePrincipal: f.servicePrincipal ?? null });
     toast(`${f.name}: ${done}.`);
   } catch (e) {
-    PROV.state = 'error'; PROV.error = String(e); sawError(e);
+    // Said here: the read again below would replace an error kept in PROV.
+    problemToast(`${f.name}'s sign-in could not be turned off: ${e}`); sawError(e);
   }
   readProviders();
 }

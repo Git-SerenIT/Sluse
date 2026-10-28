@@ -5,6 +5,30 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.6
+
+**For the administrator and the person using Sluse**
+- **A busy button's ring keeps turning** when Windows' animation effects
+  are off (Settings, Accessibility, Visual effects). It stood still
+  before, which looked as if Sluse had frozen; now it turns slowly.
+
+**For the administrator**
+- **Sluse Admin no longer waits in silence** when Microsoft Graph does not
+  answer. Each call to Graph now gives up after a minute and says which
+  one did not answer, so the step shows a problem you can act on. Before,
+  a stalled call (seen at Tenant's "Make or repair") turned for as long as
+  the window stayed open.
+- **Tenant works again in Sluse Admin.** Reading the AI providers' own
+  connectors broke the page while it drew the answer, which left "Reading
+  the providers' apps" turning and stopped "Make or repair" before it
+  asked Entra anything. An error in Sluse Admin's own page is now shown,
+  and written to `shell.log`, instead of leaving a step turning.
+- **Turning a provider's app off** says why when Entra refuses it; the
+  reason was lost before. **Review** names a change to the AI runtimes'
+  organisations (Advanced); changed alone, it read "Nothing changed".
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.5
 
 **For the administrator and the person using Sluse**

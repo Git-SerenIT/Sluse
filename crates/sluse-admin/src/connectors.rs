@@ -61,7 +61,9 @@ pub struct Finding {
 
 /// The tenant's user-consent setting.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", tag = "state")]
+/// Its `state` is the variant's own name, which the page matches (`admin.js`,
+/// CONSENT_WORDS): camelCase here broke the Tenant step (L1, 2026-10-28).
+#[serde(tag = "state")]
 pub enum UserConsent {
     /// Users cannot consent to apps themselves.
     Off,
@@ -190,6 +192,16 @@ pub async fn block(g: &Graph, app_id: Option<&str>, service_principal: Option<&s
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_consent_state_is_named_as_the_page_reads_it() {
+        let state = |c: UserConsent| serde_json::to_value(c).unwrap()["state"].as_str().unwrap().to_owned();
+        assert_eq!(state(UserConsent::Off), "Off");
+        assert_eq!(state(UserConsent::VerifiedLowRisk), "VerifiedLowRisk");
+        assert_eq!(state(UserConsent::On), "On");
+        assert_eq!(state(UserConsent::Other { policies: vec![] }), "Other");
+        assert_eq!(state(UserConsent::Unknown { detail: String::new() }), "Unknown");
+    }
 
     #[test]
     fn the_user_consent_setting_is_read_from_the_assigned_policies() {

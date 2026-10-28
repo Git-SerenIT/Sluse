@@ -183,7 +183,7 @@ pub fn save(path: &Path, d: &Draft) -> Result<(), String> {
 pub fn diff(old: &Authored, new: &Authored) -> Vec<String> {
     let mut out = Vec::new();
     let (o, n) = (serde_json::to_value(old).unwrap_or_default(), serde_json::to_value(new).unwrap_or_default());
-    for key in ["deployment", "entra", "sources", "maxFetchBytes", "volume", "box"] {
+    for key in ["deployment", "entra", "sources", "maxFetchBytes", "volume", "box", "accounts"] {
         if o.get(key) != n.get(key) {
             out.push(format!("{key} changed"));
         }
@@ -282,8 +282,10 @@ mod tests {
         v["egress"]["allow"].as_array_mut().unwrap().retain(|h| h != "files.pythonhosted.org");
         v["egress"]["allow"].as_array_mut().unwrap().push(json!("intranet.contoso.com"));
         v["volume"]["admissions"] = json!(30);
+        v["accounts"] = json!({ "claudeOrganisation": "8f0d2c1e-0000-4000-8000-000000000001" });
         let lines = diff(&old, &authored(v));
         assert!(lines.contains(&"volume changed".to_owned()));
+        assert!(lines.contains(&"accounts changed".to_owned()), "D-072's pins are a change: {lines:?}");
         assert!(lines.contains(&"the box may now reach intranet.contoso.com".to_owned()));
         assert!(lines.contains(&"the box may no longer reach files.pythonhosted.org".to_owned()));
     }

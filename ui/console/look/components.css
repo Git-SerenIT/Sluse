@@ -50,7 +50,9 @@ code, kbd, samp, pre { font-family: var(--font-mono); font-size: var(--path-size
 .icon--lg { width: 32px; height: 32px; stroke-width: 1.5; }
 .icon--spinner { animation: sl-spin 900ms linear infinite; }
 @keyframes sl-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .icon--spinner { animation: none; } }
+/* Reduced motion slows the ring, never stops it: a still ring reads as frozen
+   (jok, 2026-10-28; WebView2 reports reduce when Windows' Animation effects are off). */
+@media (prefers-reduced-motion: reduce) { .icon--spinner { animation-duration: 2400ms; } }
 
 /* ======================================================================
    Brand: app icon, tileless mark, wordmark, lockups (see icons.js SluseBrand)
@@ -157,7 +159,7 @@ code, kbd, samp, pre { font-family: var(--font-mono); font-size: var(--path-size
   animation: sl-spin 800ms linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .btn[aria-busy="true"]::after { animation: none; border-style: dotted; }
+  .btn[aria-busy="true"]::after { animation-duration: 2400ms; }
 }
 
 .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
