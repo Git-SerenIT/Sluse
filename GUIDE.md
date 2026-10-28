@@ -9,7 +9,7 @@ and **the person** who works in it. Each part says which.
 - [What to put in reach](#what-to-put-in-reach) (IT)
 - [Working in Sluse](#working-in-sluse) (the person)
 - [What IT sees](#what-it-sees) (IT)
-- [Known edges in v0.1](#known-edges-in-v01) (both)
+- [Known edges](#known-edges) (both)
 - [Telling us what happened](#telling-us-what-happened) (both)
 
 ## What Sluse is, and is not
@@ -101,8 +101,9 @@ check it against (`Get-FileHash Sluse.msi`); it is not signed yet.
    Microsoft's tool for everyone in the tenant.
 2. **Tenant:** Sluse Admin makes one app registration, "Sluse Gate". It
    has no secret and no certificate, and reads only: Graph's
-   `Files.Read.All` and `Sites.Read.All`, delegated, so it can never reach
-   more than the signed-in person can. Grant admin consent in the portal
+   `Files.Read.All` and `Sites.Read.All`, delegated, and the delegated
+   scope of each tool server you add, so it can never reach more than the
+   signed-in person can. Grant admin consent in the portal
    (the link is shown), then pick the group of people who may sign in.
 3. **Sources:** what the agent may read, below.
 4. **Egress:** which groups of hosts the box may reach (the AI providers,
@@ -151,6 +152,7 @@ Each source has a name the agent sees and a sensitivity you choose.
 | **SMB share** | The folders you pick on a `\\server\share` | the person's Windows logon |
 | **The person's OneDrive `Sluse` folder** | Only that folder, at the top of their OneDrive | the person, through their Entra sign-in |
 | **Sluse Inputs** | A folder on the PC, `C:\Users\<person>\Sluse Inputs` | the person's Windows logon |
+| **Tool server (MCP)** | The tools you tick on a remote MCP server, below | the person, through their Entra sign-in, as far as the server goes |
 
 **Scope is enforced outside the box.** Sluse refuses anything outside the
 folders you picked, and the source's own permissions have the last word: a
@@ -162,6 +164,30 @@ as coming from that PC and nothing more, so it is off unless you add it.
 Shortcuts in OneDrive ("Add shortcut to My files") are out of reach: a
 shortcut to a folder is not shown to the agent at all, and a shortcut to a
 file is read as the link it is, never as the file it points to.
+
+### Tool servers
+
+A tool server is a remote MCP server that the agent calls through Sluse,
+as the person. **Built, not yet run on a device.** It must:
+- answer MCP over HTTPS, in version 2025-11-25 or 2026-07-28;
+- accept an Entra token for a delegated scope of its own app registration,
+  in your tenant. A server with its own sign-in or an API key cannot be
+  added.
+
+The box never reaches the server: Sluse on the PC calls it, so it needs no
+Egress entry. To build one of your own, copy
+[`examples/mcp-reference-server/`](examples/mcp-reference-server/), an
+Azure Functions server that reads Microsoft Graph as the person.
+
+**Adding one:** Sources, Add a source, **Tool server**. Give its address
+and the scope Sluse asks for (for example
+`api://<app>/user_impersonation`), then Read its tools. Sluse Admin adds
+that scope to Sluse Gate's app; grant admin consent in the portal (the link
+is shown) and Check again. It then lists the server's tools and the MCP
+version it answers, which is kept in the configuration. **Tick only tools
+that read.** A tool's "read only" mark is the server's own claim; Sluse
+cannot see what a tool does. You may fix an argument of a tool: the value
+you set replaces whatever the agent sends.
 
 ## Working in Sluse
 
@@ -213,7 +239,12 @@ folder by folder) and **Record**.
   colours until you open it again.
 
 **Asking the agent:** ask in plain words. It lists and reads files through
-Sluse's tools, and only the files IT put in reach. When it publishes, it
+Sluse's tools, and only the files IT put in reach. If IT added a tool
+server, its tools are there too, each named after the source; an answer
+from one is saved in the box's workspace as a file the agent was given.
+Opened before signing in, the tools appear within about 15 seconds of the
+sign-in; an app that still does not show them shows them once you open it
+again. When it publishes, it
 names the files it used; the console's provenance card shows them for each
 document. Sluse checks each one against its own record of what it gave the
 agent in that session; it cannot check that the agent used it.
@@ -246,6 +277,9 @@ agent in that session; it cannot check that the agent used it.
 | 1000 | A sign-in |
 | 1303 | A folder in the configuration is not there for this person (or they cannot open it), or a file share could not be reached when Sluse started. The other sources still work; that one stays unavailable until the box is opened again |
 | 1201 | The box tried a host it may not reach |
+| 1700 | A tool server's tool called: the tool, the server, the hash of the answer. The arguments are not recorded |
+| 1701, 1702 | A tool call refused (a tool not ticked, no sign-in, the server refusing the person), or the server unreachable or failing |
+| 1801, 1802 | A tool server's list of tools could not be had |
 | 803 | Many files in a short time (the volume alert) |
 
 A record of something done for the person names them by their Entra
@@ -266,7 +300,7 @@ rule is "Sluse boxes: Sluse Gate (host-only)", in group Sluse, for
 `sluse-gate-front.exe`. In Hyper-V Manager each box's notes name the person
 it reads as.
 
-## Known edges in v0.1
+## Known edges
 
 - **Encrypted, labelled files cannot be read in the box.** A file with a
   Purview label that encrypts it arrives encrypted, and nothing in the box
@@ -295,6 +329,10 @@ it reads as.
   Sluse, bring up its Close confirm, or open Sluse Artifacts. Any web page
   or program can follow that link too; it does nothing else, and closing
   the box still asks the person first.
+- **A tool server reads as the person only as far as the server does.**
+  Sluse calls it with the person's token; a server that reads its own back
+  end with a service account answers with what that account sees, and
+  Sluse cannot tell. Which tools are read only is the server's word.
 - **The AI provider keeps the conversations** in its account, readable from
   any device signed in to it.
 - **On a PC that several people sign in to at once** (switching users,
@@ -305,7 +343,8 @@ it reads as.
 - **Proven on our test PC only:** SharePoint, OneDrive and SMB read as the
   person, for one user in one tenant (SMB: one domain, the whole share in
   scope). **Built, not yet run on any device:** the App Control policy on
-  Sluse Artifacts, and that the Sluse log takes writes only from the system.
+  Sluse Artifacts, that the Sluse log takes writes only from the system,
+  and tool servers.
 
 ## Telling us what happened
 

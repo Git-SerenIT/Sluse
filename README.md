@@ -80,7 +80,7 @@ Built, not yet run on a device: the Sluse log accepting writes from SYSTEM
 only, App Control on Sluse Artifacts, the check that the Windows user and
 the signed-in user are the same person, and Codex, ChatGPT and Mistral
 Vibe, wired like the other runtimes. What is open is listed as open, in
-[GUIDE.md](GUIDE.md#known-edges-in-v01) and [SECURITY.md](SECURITY.md).
+[GUIDE.md](GUIDE.md#known-edges) and [SECURITY.md](SECURITY.md).
 
 ## Where this is going
 

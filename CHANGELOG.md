@@ -159,4 +159,4 @@ The first release, for a small group of pilot companies. Not signed: check
 **Not yet proven on a device:** that the Sluse log takes writes from
 SYSTEM only, the App Control policy, the check that the Windows user and
 the signed-in user are the same person, Conditional Access cutting off a
-box, and Codex. The known edges are in [GUIDE.md](GUIDE.md#known-edges-in-v01).
+box, and Codex. The known edges are in [GUIDE.md](GUIDE.md#known-edges).
