@@ -73,13 +73,17 @@ pub async fn resource(g: &Graph, entra_scope: &str) -> Result<Resource, String> 
             .next()
             .ok_or_else(|| format!("no app in this tenant answers to {resource}; check the scope's spelling, or use the app's id"))?
     };
-    let scope_id = found["oauth2PermissionScopes"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let scopes = found["oauth2PermissionScopes"].as_array().cloned().unwrap_or_default();
+    let scope_id = scopes
+        .iter()
         .find(|s| s["value"] == value)
         .and_then(|s| s["id"].as_str())
-        .ok_or_else(|| format!("{} has no delegated scope {value}", found["displayName"].as_str().unwrap_or(resource)))?
+        .ok_or_else(|| {
+            // The names it has, so a wrong guess is fixed here, not in the
+            // portal (Azure DevOps MCP's are documented nowhere; L1, 2026-10-28).
+            let has: Vec<&str> = scopes.iter().filter_map(|s| s["value"].as_str()).collect();
+            format!("{} has no delegated scope {value}; it has: {}", found["displayName"].as_str().unwrap_or(resource), has.join(", "))
+        })?
         .to_owned();
     Ok(Resource {
         app_id: found["appId"].as_str().unwrap_or_default().to_owned(),
@@ -250,7 +254,8 @@ mod tests {
         t.lock().unwrap().grants.push(json!({ "clientId": reg.service_principal, "consentType": "AllPrincipals", "resourceId": "sp-crm", "scope": "Mcp.Read" }));
         assert!(consented(&g, &reg.service_principal, &r).await.unwrap());
 
-        assert!(require(&g, "api://crm-mcp/Mcp.Delete").await.unwrap_err().contains("no delegated scope Mcp.Delete"));
+        let e = require(&g, "api://crm-mcp/Mcp.Delete").await.unwrap_err();
+        assert!(e.contains("no delegated scope Mcp.Delete; it has: Mcp.Read"), "{e}");
         assert!(require(&g, "api://nothing/Read").await.unwrap_err().contains("no app in this tenant"));
     }
 }

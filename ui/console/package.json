@@ -1,6 +1,6 @@
 {
   "name": "sluse-console",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "The Sluse console: what crossed the boundary, and whether it is still true.",
   "type": "module",

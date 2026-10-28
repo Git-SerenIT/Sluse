@@ -42,8 +42,8 @@ param identityType string = 'UserAssigned'
 @description('Token exchange audience for sovereign cloud deployments (optional)')
 param tokenExchangeAudience string = ''
 
-@description('Client application IDs to pre-authorize for the default scope')
-param preAuthorizedClientIds array = []
+@description('Client application IDs Easy Auth accepts calls from, besides the server\'s own')
+param allowedClientIds array = []
 
 var applicationInsightsIdentity = 'ClientId=${identityClientId};Authorization=AAD'
 var kind = 'functionapp,linux'
@@ -181,7 +181,7 @@ resource authSettings 'Microsoft.Web/sites/config@2023-12-01' = if (!empty(authC
           ]
           defaultAuthorizationPolicy: {
             allowedPrincipals: {}
-            allowedApplications: union([authClientId], preAuthorizedClientIds)
+            allowedApplications: union([authClientId], allowedClientIds)
           }
         }
         isAutoProvisioned: false

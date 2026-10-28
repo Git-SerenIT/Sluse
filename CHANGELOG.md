@@ -5,6 +5,22 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.7
+
+**For the administrator**
+- **A tool server's scope, mistyped,** is refused with the names the
+  server's app does offer, so the right one can be picked without the
+  portal. Azure DevOps's remote MCP server documents none.
+- **Mistral Vibe's and ChatGPT's sign-in hosts** are in their egress
+  groups (catalog 6): `auth.mistral.ai` and `v2.auth.mistral.ai`, and
+  `auth-cdn.oaistatic.com`,
+  where OpenAI's sign-in page gets its styles and scripts. Without them,
+  Vibe's sign-in was refused and OpenAI's page showed unstyled with no
+  working buttons. Sluse Admin
+  shows it as new for a configuration made earlier: publish it again.
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.6
 
 **For the administrator and the person using Sluse**

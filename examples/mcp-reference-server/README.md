@@ -41,12 +41,22 @@ azd auth login --tenant-id <tenant>
 azd env new sluse-mcp-reference
 azd env set AZURE_LOCATION swedencentral
 azd env set VNET_ENABLED false     # true adds a VNet and a private endpoint for storage
+azd env set ALLOWED_CLIENT_IDS <Sluse Gate's client ID>
 azd up
 ```
 
-Optional: `azd env set PRE_AUTHORIZED_CLIENT_IDS <Sluse's client ID>` before
-`azd up` pre-authorizes Sluse's app, so no consent for the server's scope is
-needed. Without it, the admin consents when adding the server in Sluse Admin.
+**`ALLOWED_CLIENT_IDS` is required for Sluse.** App Service Authentication
+answers 403 to any client it does not list, whatever Entra consented, and
+the template listed only the server's own app and the pre-authorized ones.
+Sluse Gate's client ID is in Entra admin center, **App registrations → Sluse
+Gate → Overview**. On a server already deployed, the same list is in the
+portal: **the Function App → Authentication → Microsoft → Edit → Client
+application requirement**.
+
+Optional: `azd env set PRE_AUTHORIZED_CLIENT_IDS <Sluse Gate's client ID>`
+instead pre-authorizes Sluse's app and lists it, so no consent for the
+server's scope is needed. Without it, the admin consents when adding the
+server in Sluse Admin.
 
 The endpoint is `https://<function-app>.azurewebsites.net/mcp`; `azd env get-values`
 shows `ENTRA_IDENTIFIER_URI`.

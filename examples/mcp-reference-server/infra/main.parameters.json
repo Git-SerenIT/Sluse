@@ -20,6 +20,9 @@
      "preAuthorizedClientIds": {
       "value": "${PRE_AUTHORIZED_CLIENT_IDS}"
     },
+    "allowedClientIds": {
+      "value": "${ALLOWED_CLIENT_IDS}"
+    },
     "tokenExchangeAudience": {
       "value": "${TOKEN_EXCHANGE_AUDIENCE}"
     }

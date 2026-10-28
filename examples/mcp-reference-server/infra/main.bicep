@@ -11,6 +11,9 @@ param serviceManagementReference string = ''
 @description('Comma-separated list of client application IDs to pre-authorize for accessing the MCP API (optional)')
 param preAuthorizedClientIds string = ''
 
+@description('Comma-separated list of client application IDs allowed to call the MCP API after consent, without pre-authorization: Sluse Gate\'s client ID')
+param allowedClientIds string = ''
+
 @description('OAuth2 delegated permissions for App Service Authentication login flow')
 param delegatedPermissions array = ['User.Read']
 
@@ -79,6 +82,7 @@ var deploymentStorageContainerName = 'app-package-${take(functionAppName, 32)}-$
 
 // Convert comma-separated string to array for pre-authorized client IDs
 var preAuthorizedClientIdsArray = !empty(preAuthorizedClientIds) ? map(split(preAuthorizedClientIds, ','), clientId => trim(clientId)) : []
+var allowedClientIdsArray = !empty(allowedClientIds) ? map(split(allowedClientIds, ','), clientId => trim(clientId)) : []
 
 // Organize resources in a resource group
 resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
@@ -149,7 +153,9 @@ module mcp './app/mcp.bicep' = {
     deploymentStorageContainerName: deploymentStorageContainerName
     identityId: mcpUserAssignedIdentity.outputs.resourceId
     identityClientId: mcpUserAssignedIdentity.outputs.clientId
-    preAuthorizedClientIds: preAuthorizedClientIdsArray
+    // Easy Auth refuses (403) any client not listed, consented or not:
+    // the template listed only pre-authorized ones (Sluse, 2026-10-28).
+    allowedClientIds: union(preAuthorizedClientIdsArray, allowedClientIdsArray)
     appSettings: {
       AzureWebJobsFeatureFlags: 'EnableMcpCustomHandlerPreview'
     }

@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "about": "The egress bundles Sluse Admin offers (D-038 point 5). A config holds the bundles chosen and every host written out; only the hosts are enforced, and a newer catalog never widens a box by itself. 'measured' says what of a bundle was measured, when and how, or is null where its hosts are still the M9 draft.",
   "bundles": [
     {
@@ -60,9 +60,10 @@
         "chatgpt.com",
         "ws.chatgpt.com",
         "cdn.openai.com",
-        "persistent.oaistatic.com"
+        "persistent.oaistatic.com",
+        "auth-cdn.oaistatic.com"
       ],
-      "measured": "2026-10-02: the Codex installer on the dev guest, behind the proxy; chatgpt.com redirects to releases.openai.com, which serves the script and the binary. First use not measured. ChatGPT's hosts read from its package's code, 2026-10-26, not measured; its telemetry hosts (Statsig) left out"
+      "measured": "2026-10-02: the Codex installer on the dev guest, behind the proxy; chatgpt.com redirects to releases.openai.com, which serves the script and the binary. First use not measured. ChatGPT's hosts read from its package's code, 2026-10-26, not measured; its telemetry hosts (Statsig) left out. 2026-10-28, L1: OpenAI's sign-in page loads its styles and scripts from auth-cdn.oaistatic.com (refused, the page unstyled and dead); refused and left out: chat.openai.com, ab.chatgpt.com, files.openai.com, web-sandbox.oaiusercontent.com, Google's and GitHub's sign-in hosts"
     },
     {
       "id": "mistral",
@@ -72,9 +73,11 @@
       "uploads": true,
       "hosts": [
         "api.eu.mistral.ai",
+        "auth.mistral.ai",
+        "v2.auth.mistral.ai",
         "console.mistral.ai"
       ],
-      "measured": null
+      "measured": "2026-10-28, L1: Vibe's sign-in needs auth.mistral.ai and v2.auth.mistral.ai, which the bundle lacked (refused by the proxy). The rest of its hosts not yet measured"
     },
     {
       "id": "python",
