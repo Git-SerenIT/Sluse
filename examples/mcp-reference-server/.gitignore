@@ -1,0 +1,2 @@
+# azd's environment: the subscription, tenant and outputs of a deploy.
+.azure/

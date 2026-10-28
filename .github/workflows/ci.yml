@@ -239,50 +239,136 @@ jobs:
           path: dist/sluse-*-x86_64-pc-windows-msvc/
           retention-days: 1
 
-  install:
-    name: Windows — assemble the package and install it
+  # **Signing (D-071 point 8):** Azure Artifact Signing, on a push to `main` in
+  # the public repository, once the repository variable `SIGNING` is `on`
+  # (set when the certificate profile exists). Skipped, as on every pull
+  # request, `install` builds the MSI unsigned. The five binaries are signed,
+  # the MSI built from them and signed; `install` tests that MSI, so the one
+  # released is the one tested. The environment `signing` admits `main` only,
+  # and Entra's federated credential admits only a job in that environment of
+  # this repository, by its id: no secret exists. Third-party actions pinned
+  # by commit.
+  sign:
+    name: Windows — sign the binaries and the MSI
+    if: github.repository == 'Git-SerenIT/Sluse' && github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.SIGNING == 'on'
     runs-on: windows-latest
-    # Every other job, green. A package built from a red tree is a package
-    # somebody will install, so this is the only job that publishes one.
     needs: [windows, console, guest, package]
+    environment: signing
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      # For packaging/msi/Sluse.wxs.
+      # For packaging/build-msi.ps1 and packaging/msi/Sluse.wxs.
       - uses: actions/checkout@v5
 
-      # The upload's root is `dist/` (the directory before its wildcard), so
-      # this lands as dist/sluse-<version>-<target>/, the name it was built as.
       - uses: actions/download-artifact@v7
         with:
           name: staged-package
           path: dist
 
-      # The box's bundle from the Linux job: the package carries it in box\,
-      # and the base's build puts it on the seed disk (slice 3).
       - uses: actions/download-artifact@v7
         with:
           name: sluse-box-linux
           path: dist
 
-      - name: Assemble the package
-        shell: pwsh
-        run: |
-          $pkg = (Get-ChildItem dist -Directory | Where-Object Name -like 'sluse-*-x86_64-pc-windows-msvc')
-          if (@($pkg).Count -ne 1) { Get-ChildItem dist -Recurse -Depth 1; throw "expected one staged package in dist, found $(@($pkg).Count)" }
-          New-Item -ItemType Directory -Force (Join-Path $pkg.FullName 'box') | Out-Null
-          Copy-Item dist\sluse-box-linux.tar.gz (Join-Path $pkg.FullName 'box')
+      # OIDC: GitHub's token for this job, exchanged at Entra for the app's.
+      # The two ids are the environment's variables, not secrets.
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
 
-      # The MSI (slice 5): WiX v5, the .NET tool; the toolset is a build
-      # tool, never shipped. Built from the assembled package, bundle included.
+      # Every exe in the staged package: the four in the workspace and the
+      # shell. Timestamped by the action's default TSA, which is what keeps a
+      # signature valid past its certificate's 72 hours. The action's
+      # dependency cache is off: a cache is not a security boundary.
+      - name: Sign the binaries
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: https://neu.codesigning.azure.net/
+          signing-account-name: serenit-signing
+          certificate-profile-name: sluse
+          files-folder: ${{ github.workspace }}\dist
+          files-folder-filter: exe
+          files-folder-recurse: true
+          description: Sluse
+          description-url: https://github.com/Git-SerenIT/Sluse
+          correlation-id: ${{ github.run_id }}
+          cache-dependencies: false
+
       - name: Build the MSI
         shell: pwsh
+        run: .\packaging\build-msi.ps1
+
+      # The description is the name UAC shows for an MSI.
+      - name: Sign the MSI
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: https://neu.codesigning.azure.net/
+          signing-account-name: serenit-signing
+          certificate-profile-name: sluse
+          files: ${{ github.workspace }}\dist\Sluse.msi
+          description: Sluse
+          description-url: https://github.com/Git-SerenIT/Sluse
+          correlation-id: ${{ github.run_id }}
+          cache-dependencies: false
+
+      - name: Every signature valid
+        shell: pwsh
         run: |
-          dotnet tool install --global wix --version 5.0.2
-          # The feature tree that is the MSI's two modes (D-039 slice 6).
-          wix extension add -g WixToolset.UI.wixext/5.0.2
-          $pkg = (Get-ChildItem dist -Directory | Where-Object Name -like 'sluse-*-x86_64-pc-windows-msvc')[0].FullName
-          $version = (Get-Content "$pkg\VERSION.txt" | Select-String '^version').Line -replace '^version\s+', ''
-          wix build packaging\msi\Sluse.wxs -ext WixToolset.UI.wixext -arch x64 -d "Stage=$pkg" -d "Version=$version" -o dist\Sluse.msi
-          if ($LASTEXITCODE -ne 0) { throw "wix build failed with $LASTEXITCODE" }
+          $files = @(Get-ChildItem dist -Recurse -Filter *.exe) + @(Get-Item dist\Sluse.msi)
+          if ($files.Count -ne 6) { $files.FullName; throw "expected five exes and the MSI, found $($files.Count) files" }
+          $sigs = $files | Get-AuthenticodeSignature
+          $sigs | ForEach-Object { "{0}  {1}  {2}" -f (Split-Path $_.Path -Leaf), $_.Status, $_.SignerCertificate.Subject }
+          if ($sigs | Where-Object Status -ne 'Valid') { throw 'a file is unsigned or its signature is not valid' }
+
+      # The upload's root is `dist/`: dist/sluse-<version>-<target>/ and
+      # dist/Sluse.msi, as `install` expects them.
+      - uses: actions/upload-artifact@v6
+        with:
+          name: signed-package
+          path: |
+            dist/sluse-*-x86_64-pc-windows-msvc/
+            dist/Sluse.msi
+          retention-days: 1
+
+  install:
+    name: Windows — assemble the package and install it
+    runs-on: windows-latest
+    # Every other job, green. A package built from a red tree is a package
+    # somebody will install, so this is the only job that publishes one.
+    # `sign` skipped is normal (pull requests, and until signing is on), so
+    # the condition is spelt out: nothing failed, and the package was built.
+    needs: [windows, console, guest, package, sign]
+    if: ${{ !cancelled() && !failure() && needs.package.result == 'success' }}
+    steps:
+      # For packaging/build-msi.ps1 and packaging/msi/Sluse.wxs.
+      - uses: actions/checkout@v5
+
+      # The upload's root is `dist/` (the directory before its wildcard), so
+      # this lands as dist/sluse-<version>-<target>/, the name it was built as.
+      # Signed, it brings dist/Sluse.msi with it.
+      - uses: actions/download-artifact@v7
+        with:
+          name: ${{ needs.sign.result == 'success' && 'signed-package' || 'staged-package' }}
+          path: dist
+
+      # The box's bundle from the Linux job: the package carries it in box\,
+      # and the base's build puts it on the seed disk (slice 3).
+      - uses: actions/download-artifact@v7
+        if: needs.sign.result != 'success'
+        with:
+          name: sluse-box-linux
+          path: dist
+
+      # The MSI (slice 5): WiX v5, the .NET tool; the toolset is a build
+      # tool, never shipped. Built from the assembled package, bundle
+      # included; by `sign` when signing ran.
+      - name: Build the MSI
+        if: needs.sign.result != 'success'
+        shell: pwsh
+        run: .\packaging\build-msi.ps1
 
       # **Installability is the claim** (`prototype/README.md`), and a runner is
       # the cheapest machine on which to find out that the installer is broken.
