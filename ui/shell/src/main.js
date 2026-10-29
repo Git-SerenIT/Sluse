@@ -84,7 +84,7 @@ const NAME = {
 };
 const BUILD = ['download', 'convert', 'install', 'make'];
 const OPENING = ['sign-in', 'check', 'start', 'gate', 'wait', 'connect', 'console'];
-const SLOW = 'The first time on this computer takes a long while, often more than a quarter of an hour.';
+const SLOW = "The first time on this computer, Sluse prepares your box's system first.";
 // Q26: closing the window during a build finishes it and leaves the box closed.
 const SAFE = {
   open: "You can close this window: Sluse finishes preparing your box's system without it and leaves your box closed. Windows tells you when it is ready.",
@@ -660,7 +660,7 @@ function renderWho() {
     val.textContent = facts.windows_user ?? '';
     $('who-title').textContent = 'Sluse reads files as your Windows account';
     $('who-body').replaceChildren(dl(fact('Windows account on this computer', facts.windows_user ?? '', true)),
-      p("Sluse reads files as your Windows account on this computer. This box's sources need no work account, so there is no sign-in."),
+      p("Sluse reads files as your Windows account on this computer. This box's sources need no Microsoft sign-in."),
       p(`${SCOPE} Closing the box stops it.`, 't-muted'));
   } else if (signState.cause === 'ok' && facts.user) {
     val.textContent = facts.user;
@@ -978,6 +978,8 @@ function msTick() {
 }
 async function allowMsSignIn() {
   $('more').open = false;
+  // The account by its address where Sluse is signed in (copy review C-02).
+  $('ms-window-who').textContent = facts.entra && facts.user ? `your Microsoft account, ${facts.user}` : "your organisation's Microsoft account";
   if (await ask('ms-window-ask') !== 'ok') return;
   try {
     await invoke('sign_in_window', { close: false });
@@ -1032,8 +1034,7 @@ const LEAVE = {
 function leaveText() {
   const idn = identity();
   return idn === 'windows' ? 'Left running, your box goes on reading files as your Windows account until you close it. Opening Sluse again takes you straight back to it.'
-    : idn === 'mixed' ? 'Left running, your box goes on reading files as you until you close it. Signing out in its console stops only SharePoint and OneDrive. Opening Sluse again takes you straight back to it.'
-      : 'Left running, your box goes on reading files as you until you close it or sign out in its console. Opening Sluse again takes you straight back to it.';
+    : 'Left running, your box goes on reading files as you until you close it. Opening Sluse again takes you straight back to it.';
 }
 
 listen('close-requested', async () => {

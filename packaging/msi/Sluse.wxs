@@ -98,7 +98,7 @@
         <File Id="SluseExe" Source="$(var.Stage)\bin\sluse.exe" KeyPath="yes" />
         <!-- The lifecycle service (D-027): SYSTEM, automatic. -->
         <ServiceInstall Name="Sluse"
-                        DisplayName="Sluse lifecycle service"
+                        DisplayName="Sluse service"
                         Description="Opens each user's Sluse box and runs Sluse Gate."
                         Type="ownProcess" Start="auto" Account="LocalSystem" ErrorControl="normal"
                         Arguments="service" />
@@ -182,7 +182,7 @@
     </ComponentGroup>
 
     <Feature Id="Core" Title="Sluse" Level="1" Display="expand" AllowAbsent="no"
-             Description="The shell, the configuration's schema and the egress catalog.">
+             Description="The Sluse window, the configuration's schema and the egress catalog.">
       <ComponentGroupRef Id="Shell" />
       <ComponentGroupRef Id="Rest" />
       <Feature Id="Device" Title="Sluse on this computer" Level="1"
@@ -193,7 +193,7 @@
       </Feature>
       <!-- Off by default (above INSTALLLEVEL 1), so a quiet install is a device. -->
       <Feature Id="Admin" Title="Sluse Admin" Level="1000"
-               Description="For your tenant's administrator: Sluse's app registration, the configuration, and publishing to Intune.">
+               Description="For your tenant's admin: Sluse's app registration, the configuration, and publishing to Intune.">
         <ComponentGroupRef Id="AdminShortcut" />
       </Feature>
     </Feature>

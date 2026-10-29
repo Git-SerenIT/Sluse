@@ -32,10 +32,10 @@ export function renderGate(target: Element, d: Data, state: "waiting" | "signing
         el("h1", { class: "passage__title" }, waiting ? "Waiting for Sluse" : "Signing you in"),
         el("p", { class: "passage__text" }, waiting
           ? "Your box is up. Sluse on your computer has not answered yet. This page asks again every few seconds and goes on by itself."
-          : "The Sluse window on your computer signs you in with your work account, so Sluse can read files as you and never more than you can open yourself."),
+          : "The Sluse window on your computer signs you in with your Microsoft account, so Sluse can read files as you and never more than you can open yourself."),
         waiting ? null : el("p", { class: "passage__text t-muted" }, onlyOneDrive
-          ? "This box's only source is your Sluse folder in OneDrive, which needs your work account."
-          : `This box's sources are ${cloud(d).join(" and ")}, and they need your work account.`)),
+          ? "This box's only source is your Sluse folder in OneDrive, which needs your Microsoft account."
+          : `This box's sources are ${cloud(d).join(" and ")}, and they need your Microsoft account.`)),
       el("p", { class: "bigclock" }, el("span", { class: "bigclock__label" }, "Elapsed"),
         el("span", { class: "bigclock__num" }, `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`)),
       lost ? null : el("div", { class: "progress", "data-indeterminate": "", role: "progressbar", "aria-label": "Under way" }, el("div", { class: "progress__fill" })),

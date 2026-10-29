@@ -93,7 +93,7 @@ fn connect() -> Result<std::fs::File, String> {
         .access_mode(0x0012_008b)
         .security_qos_flags(SECURITY_SQOS_PRESENT.0 | SECURITY_IDENTIFICATION.0)
         .open(sluse_proto::pipe::PIPE_NAME)
-        .map_err(|e| format!("The Sluse service is not running ({e}). Ask your administrator."))?;
+        .map_err(|e| format!("The Sluse service is not running ({e})."))?;
 
     // The pipe's owner, read from the handle we hold (READ_CONTROL). Not the
     // server process's token: a standard user may not open SYSTEM's, which

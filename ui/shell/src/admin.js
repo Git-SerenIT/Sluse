@@ -6,7 +6,7 @@
 // src-tauri/src/admin.rs over sluse-admin; this page holds the admin's
 // choices and draws them. Text from Graph and from files is set as text,
 // never as markup. Errors stay in the step that made them, with the raw
-// text under "For whoever supports Sluse".
+// text under "Details for us".
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -34,7 +34,7 @@ const status = (kind, ...t) => el('p', { class: 'status', 'data-status': kind },
 const note = (kind, ...t) => el('p', { class: 'note', 'data-kind': kind }, el('span', {}, ...t));
 const chip = (text, label, copy) => el('span', { class: 'chip-mono', title: text },
   el('code', {}, text), el('button', { class: 'chip-mono__copy', type: 'button', 'data-copy': copy ?? text, 'aria-label': label }, icon('copy')));
-const tech = (raw, label = 'For whoever supports Sluse') => el('div', { class: 'techdetails' },
+const tech = (raw, label = 'Details for us') => el('div', { class: 'techdetails' },
   el('div', { class: 'techdetails__bar' }, el('span', { class: 't-label' }, label), el('button', { class: 'btn btn--sm btn--quiet', type: 'button', 'data-copy': raw }, 'Copy details')),
   el('pre', {}, raw));
 function banner(kind, title, text, { raw, actions, more, label } = {}) {
@@ -419,8 +419,8 @@ function signInError(e) {
   if (said) return { kind: 'problem', title: 'Microsoft did not complete the sign-in.', text: `Microsoft said: ${said[1]} Sign in again; each try gets a new code.`, raw };
   if (/WebView2|sign-in's browser|LOCALAPPDATA|the sign-in window:/.test(e)) return { kind: 'problem', title: 'The sign-in window could not open.', text: "Sluse Admin shows Microsoft's sign-in through the Microsoft Edge WebView2 Runtime, which did not start. Install or repair the WebView2 Runtime, then sign in again.", raw };
   if (e.includes('Windows only')) return { kind: 'problem', title: 'Signing in needs Windows.', text: 'On this computer you can open a saved configuration, change it and save it. Signing in, reading an MSI and publishing need Windows.', raw };
-  if (/JWT|base64|has no tid/.test(e)) return { kind: 'problem', title: "Microsoft's answer could not be read.", text: 'The sign-in finished, but the token Microsoft returned names no tenant. Sign in again; if it repeats, copy the details for whoever supports Sluse.', raw };
-  return { kind: 'problem', title: 'The sign-in did not finish.', text: 'Sign in again; if it repeats, copy the details for whoever supports Sluse.', raw };
+  if (/JWT|base64|has no tid/.test(e)) return { kind: 'problem', title: "Microsoft's answer could not be read.", text: 'The sign-in finished, but the token Microsoft returned names no tenant. Sign in again; if it repeats, copy the details and tell us what happened.', raw };
+  return { kind: 'problem', title: 'The sign-in did not finish.', text: 'Sign in again; if it repeats, copy the details and tell us what happened.', raw };
 }
 
 async function readRoles() {
@@ -569,7 +569,7 @@ function openError(e, path) {
   if (e.includes('not valid JSON')) return { title: `${name} is not a Sluse configuration.`, text: 'It is not valid JSON. Open the file you saved from Sluse Admin.', raw };
   if (e.includes('no numeric schemaVersion')) return { title: 'This file names no schema version.', text: 'Every configuration Sluse Admin saves names one. Open the file you saved from Sluse Admin.', raw };
   const old = /schemaVersion (\d+), which this build no longer accepts/.exec(e);
-  if (old) return { title: 'This configuration was saved by an older Sluse Admin.', text: `It is schema ${old[1]}. Since schema 3 the file holds only what you decide, and each device writes its own half. Build it again here and publish it.`, raw };
+  if (old) return { title: 'This configuration was saved by an older Sluse Admin.', text: `It is schema ${old[1]}. Build it again here and publish it.`, raw };
   const newer = /schemaVersion (\d+) is unknown; this build understands (\d+)/.exec(e);
   if (newer) return { title: 'This configuration is newer than this Sluse Admin.', text: `It is schema ${newer[1]}, and this Sluse Admin understands ${newer[2]}. Open it with a Sluse Admin of the same release or later.`, raw };
   if (e.includes('does not match schema')) return { title: 'This file does not match schema 3.', text: 'A field is not what schema 3 expects. Fix the field named in the details, or open the copy you saved from Sluse Admin.', raw };
@@ -910,8 +910,8 @@ function appProblem(e) {
   }
   if (expired(e)) return banner('warning', 'Your sign-in has expired.', "Sign in again, then make or repair Sluse's app.", { raw, actions: [btn('Sign in again', () => signIn(false), { cls: 'btn--sm btn--primary', ico: 'sign-in' })] });
   if (/: 403\b/.test(e)) return banner('problem', 'Entra refused to make or change the app registration.', 'This needs an Application Administrator, a Cloud Application Administrator or a Global Administrator. Ask someone with one of those roles to run this step; the other steps work without it.', { raw });
-  if (/no delegated scope/.test(e)) return banner('problem', "Microsoft Graph does not offer a permission Sluse's app needs.", 'Nothing was changed. This is not expected; copy the details for whoever supports Sluse.', { raw });
-  return banner('problem', "Sluse's app could not be made or repaired.", 'Run this again; if it repeats, copy the details for whoever supports Sluse.', { raw });
+  if (/no delegated scope/.test(e)) return banner('problem', "Microsoft Graph does not offer a permission Sluse's app needs.", 'Nothing was changed. This is not expected; copy the details and tell us what happened.', { raw });
+  return banner('problem', "Sluse's app could not be made or repaired.", 'Run this again; if it repeats, copy the details and tell us what happened.', { raw });
 }
 
 function drawConsent() {
@@ -919,7 +919,7 @@ function drawConsent() {
   const t = tenantWord() ?? 'your tenant';
   const granted = c.state === 'granted';
   fill($('consent-pill'), granted ? pill('granted', 'Granted') : c.state === 'error' ? pill('stale', 'Not checking') : pill('waiting', 'Waiting'));
-  fill($('consent-lead'), `Sluse's app reads files as each signed-in user, never more than they can open. An administrator grants that once for ${t}, in the Azure portal. This page sees it by itself.`);
+  fill($('consent-lead'), `Sluse's app reads files as each signed-in user, never more than they can open. An admin grants that once for ${t}, in the Azure portal. This page sees it by itself.`);
   $('consent-how').hidden = granted;
   $('portal-url').textContent = `https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/CallAnAPI/appId/${S.app.result.appId}`;
   $('portal-url').parentElement.title = $('portal-url').textContent;
@@ -954,7 +954,7 @@ function drawWho() {
   $('assigned-again').hidden = as.state === 'loading';
   fill($('assigned'),
     as.state === 'loading' ? status('working', "Reading the groups assigned to Sluse's app…") : null,
-    as.state === 'error' ? banner('warning', "The groups assigned to Sluse's app could not be read.", 'Assigning a group below still works. Read them again, or see them in the Entra admin center: Enterprise applications, Sluse broker, Users and groups.',
+    as.state === 'error' ? banner('warning', "The groups assigned to Sluse's app could not be read.", 'Assigning a group below still works. Read them again, or see them in the Entra admin center: Enterprise applications, Sluse Gate, Users and groups.',
       { raw: `Reading assignments: ${as.error}`, actions: [btn('Read again', readAssigned, { cls: 'btn--sm', ico: 'refresh' })] }) : null,
     as.state === 'read' && list.length ? el('ul', { class: 'rows ad-assigned', 'aria-labelledby': 'as-t' }, list.map((g) => el('li', { class: 'row' }, icon('group'),
       el('span', { class: 'row__main' }, b(g.name), el('br'), el('span', { class: 't-small t-muted' },
@@ -994,7 +994,7 @@ function drawWho() {
     r.state === 'done' ? r.result.warnings.map((w) => note('warning', w)) : null,
     r.state === 'error' ? banner('problem', `Entra refused to assign ${r.group.name}.`, /: 403\b/.test(r.error)
       ? 'Assigning a group needs an Application Administrator, a Cloud Application Administrator or a Global Administrator. Ask someone with one of those roles to run this step.'
-      : 'Try again; if it repeats, copy the details for whoever supports Sluse.', { raw: `Assigning ${r.group.name}: ${r.error}` }) : null);
+      : 'Try again; if it repeats, copy the details and tell us what happened.', { raw: `Assigning ${r.group.name}: ${r.error}` }) : null);
 }
 
 // ---- Sources ----------------------------------------------------------------------
@@ -1018,7 +1018,7 @@ function drawSources() {
     { actions: [goBtn('Go to Tenant', 'tenant'), el('button', { class: 'btn btn--sm btn--quiet', type: 'button', 'data-act': 'open-file' }, icon('folder-open'), 'Open a saved configuration…')] }) : null);
   fill($('sources'), company.length ? company.map(srcCard) : el('div', { class: 'empty' }, el('span', { class: 'empty__icon' }, icon('source')),
     el('p', { class: 'empty__title' }, 'No sources yet'),
-    el('p', { class: 'empty__text' }, 'A source is a SharePoint library or a file share. Add one, then pick the folders in reach. Without a source, or a folder each user fills below, the box can admit nothing.'),
+    el('p', { class: 'empty__text' }, 'A source is a SharePoint library, a file share or a tool server. Add one, then pick what is in reach. Without a source, or one of the user-specific folders you can set below, the box can admit nothing.'),
     el('div', { class: 'empty__action' }, el('button', { class: 'btn btn--primary', type: 'button', 'data-act': 'add-source' }, icon('plus'), 'Add a source'))));
   for (const row of document.querySelectorAll('[data-uf]')) {
     const type = row.dataset.uf;
@@ -1539,7 +1539,7 @@ function hostHint(h) {
     return ['problem', ['Not a host name. Write ', mono(clean), '; the box refuses a scheme or a path.']];
   }
   if (/^\d+\.\d+\.\d+\.\d+$/.test(h) || h.includes(':')) return ['problem', "An address, not a host name. The box refuses addresses; write the host's name."];
-  if (SIGN_IN.includes(h)) return ['warning', "Microsoft's sign-in. With it, something in the box can get the user's own SharePoint token and use it past the scopes and the record of admissions. The AI apps sign in on the computer instead."];
+  if (SIGN_IN.includes(h)) return ['warning', "Microsoft's sign-in. With it, something in the box can get the user's own SharePoint token and use it past the scopes and the record of admissions. For the AI apps' sign-in, tick Microsoft sign-in, opened by the person, which opens it five minutes at a time."];
   if (sharepoint.includes(h) || /\.sharepoint\.com$/.test(h) && !h.startsWith('*.')) return ['warning', 'Your SharePoint, which the box does not need: Sluse brings its files. On the list, it is a way around the scopes for anything in the box with a token.'];
   if (h.startsWith('*.') && SHARED.some((s) => h.slice(2) === s || h.slice(2).endsWith(`.${s}`))) return ['warning', 'A name many organisations share: the box can reach whatever any of them hosts there.'];
   return ['info', 'Your own addition, not from a bundle.'];
@@ -1988,7 +1988,7 @@ function drawPub() {
       { raw: p.raw, actions: [btn('Try deleting it again', deleteAgain, { cls: 'btn--sm', ico: 'refresh' })] }) : null,
     p.state === 'error' ? (/: 403\b/.test(p.raw) && !p.appId
       ? banner('problem', 'Intune refused: your account cannot add apps.', 'Publishing needs an Intune Administrator or a Global Administrator. Hand the .intunewin and the settings above to someone with one of those roles. Nothing was made in Intune.', { raw: p.raw })
-      : banner('problem', 'Publishing to Intune did not finish.', p.appId ? 'The app was made and its package uploaded; a later step stopped. Look in the Intune admin center under Apps, Windows; the details say where it stopped.' : 'Nothing was made in Intune. Publish again when you are ready; if it repeats, copy the details for whoever supports Sluse.', { raw: p.raw })) : null,
+      : banner('problem', 'Publishing to Intune did not finish.', p.appId ? 'The app was made and its package uploaded; a later step stopped. Look in the Intune admin center under Apps, Windows; the details say where it stopped.' : 'Nothing was made in Intune. Publish again when you are ready; if it repeats, copy the details and tell us what happened.', { raw: p.raw })) : null,
     p.state === 'published' ? publishedPart() : null);
 }
 

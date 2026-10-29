@@ -33,7 +33,7 @@ Each with its limit. The full table of what is and is not claimed is in
 | **Accidental data discovery** | Outside the listed folders, nothing exists for the agent: out of scope answers as not found | Connectors on the provider's side (Microsoft 365 in Claude, apps in ChatGPT) reach around Sluse; the guide says to turn them off |
 | **Uncontrolled file modification** | Read-only against every source. The one way out is a new folder in Sluse Artifacts, written all or nothing | Text copied out of the box, and hosts on the egress list that take uploads |
 | **Loss of provenance** | Every admitted file is hashed and recorded in the Windows Event Log, outside the box. Every published file names its sources, each checked to be one the agent was given | Which sources were really used is the agent's word; text copied out carries none |
-| **Long-lived agent credentials** | No token for company data in the box: the person's tokens stay in memory on the host, and Sluse's app registration has no secret | The AI runtime's own sign-in lives in the box |
+| **Long-lived agent credentials** | No token for company data in the box: the person's tokens stay in memory on the host, and Sluse's app registration has no secret | The AI app's own sign-in lives in the box. Where IT turns on Microsoft sign-in, a Microsoft session can too, in the minutes the person opens it; outside the box only Conditional Access refuses it |
 | **Unlisted network destinations** | The box has no route and no DNS; a proxy on the host reaches the listed hosts by name, nothing else | A listed host that takes uploads is a way out |
 | **Bulk collection** | Many files in a short time raise an alert | Detective only: the reads are not stopped |
 
@@ -44,7 +44,7 @@ Each with its limit. The full table of what is and is not claimed is in
 | Component | Where | What it does |
 | --- | --- | --- |
 | `sluse-endpoint` | the box | The agent's only tools for company data, as an MCP server over stdio. Journals every admission. Holds no token, only its own mTLS key. |
-| `sluse-gate-front` | the host, as LocalService | Gate Front, one per box: everything the box can reach. Ends the box's mTLS, parses every request before Gate Core sees it, runs the egress proxy. Holds no token and reads no file; it may refuse, only Gate Core may allow. Its start as LocalService is built, not yet run on a device. |
+| `sluse-gate-front` | the host, as LocalService | Gate Front, one per box: everything the box can reach. Ends the box's mTLS, parses every request before Gate Core sees it, runs the egress proxy. Holds no token and reads no file; it may refuse, only Gate Core may allow. |
 | `sluse-gate-core` | the host, as SYSTEM | Gate Core: checks every path against the admin's config (**enforcing**), reads every file as the person, writes publishes into Sluse Artifacts, records to the Sluse log, with what only Gate Front saw recorded as Front's claim. Holds the person's tokens in memory only. No network listener of its own. |
 | lifecycle service | the host, as SYSTEM | Checks the PC's posture, builds the box on the device, opens, closes, resets and wipes it. |
 | host shell | the host, as the person | The one window: the box's screen, input and clipboard text, no file channel. Signs the person in, so no token enters the box. |
@@ -74,12 +74,12 @@ Run on a test device: install and updates through Intune; sign-in with no
 app credential; SharePoint, OneDrive and SMB read as the person (one user,
 one tenant); the egress proxy; publishing with declared sources checked
 against what was admitted; Word, PDF, spreadsheets and slides read as text;
-Claude Code and Claude Desktop end to end.
+Claude Code, Claude Desktop, ChatGPT and Codex end to end; a tool server
+called as the person.
 
 Built, not yet run on a device: the Sluse log accepting writes from SYSTEM
 only, App Control on Sluse Artifacts, the check that the Windows user and
-the signed-in user are the same person, and Codex, ChatGPT and Mistral
-Vibe, wired like the other runtimes. What is open is listed as open, in
+the signed-in user are the same person, and Mistral Vibe. What is open is listed as open, in
 [GUIDE.md](GUIDE.md#known-edges) and [SECURITY.md](SECURITY.md).
 
 ## Where this is going

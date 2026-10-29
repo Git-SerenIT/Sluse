@@ -184,7 +184,7 @@
     <form method="dialog">
       <div class="dialog__head"><i data-icon="sign-in"></i><h2 class="dialog__title" id="ms-window-ask-t">Allow a Microsoft sign-in in your box?</h2></div>
       <div class="dialog__body">
-        <p>For the next five minutes your box can reach Microsoft's sign-in page, so an AI app in it can sign in with your work account.</p>
+        <p>For the next five minutes your box can reach Microsoft's sign-in page, so an AI app in it can sign in with <span id="ms-window-who">your organisation's Microsoft account</span>.</p>
         <p><strong>Only do this for a sign-in you started yourself.</strong> If an AI app, or anything else in your box, asks you to allow it, don't.</p>
         <p>It closes by itself after five minutes, and Sluse records that you allowed it.</p>
       </div>
@@ -206,7 +206,7 @@
   </dialog>
   <dialog class="dialog dialog--wide" id="reset-ask" aria-labelledby="reset-ask-t">
     <form method="dialog">
-      <div class="dialog__head"><i data-icon="reset"></i><h2 class="dialog__title" id="reset-ask-t">Reset the box's system, keep my files?</h2></div>
+      <div class="dialog__head"><i data-icon="reset"></i><h2 class="dialog__title" id="reset-ask-t">Reset the box's system?</h2></div>
       <div class="dialog__body">
         <p id="reset-update">This applies the update for your box.</p>
         <p>Your box starts again from a fresh system. It closes and opens again. Apps open in the box now are closed.</p>
@@ -250,7 +250,7 @@
         <span class="chip-mono" id="message-address" hidden><code>https://www.microsoft365.com/onedrive</code><button class="chip-mono__copy" type="button" id="copy-address" aria-label="Copy the address"><i data-icon="copy"></i></button></span>
         <div class="techdetails"><div class="techdetails__bar"><span class="t-label">For your IT department</span><button class="btn btn--sm btn--quiet" type="button" id="copy-message"><i data-icon="copy"></i><span>Copy details</span></button></div><pre id="message-raw"></pre></div>
       </div>
-      <div class="dialog__actions"><button class="btn btn--primary" value="ok" autofocus>OK</button></div>
+      <div class="dialog__actions"><button class="btn btn--primary" value="ok" autofocus>Close</button></div>
     </form>
   </dialog>
 </body>

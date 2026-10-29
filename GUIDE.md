@@ -1,6 +1,6 @@
 # Using Sluse
 
-For two readers: **the IT administrator** who sets Sluse up and watches it,
+For two readers: **the IT admin** who sets Sluse up and watches it,
 and **the person** who works in it. Each part says which.
 
 - [What Sluse is, and is not](#what-sluse-is-and-is-not)
@@ -68,7 +68,7 @@ given in that session. Which ones it really used is the agent's word.
   Sluse's app. Whether it cuts off a box already open on a PC that falls
   out of compliance is not yet measured.
 
-**The AI runtimes:** company seats for the runtimes in the box (Claude
+**The AI apps:** company seats for the AI apps in the box (Claude
 Desktop, Claude Code, ChatGPT, Codex, Mistral Vibe). Each is signed in once
 inside the box. ChatGPT is OpenAI's Linux preview, about 1.7 GB of the
 box's system, and comes with the Codex group. Mistral Vibe needs its egress group ticked, which is off by
@@ -90,12 +90,12 @@ it cannot see that.
 
 ## Setting it up
 
-All of it in **Sluse Admin**, on the administrator's own PC (install
+All of it in **Sluse Admin**, on the admin's own PC (install
 `Sluse.msi` and tick "Sluse Admin"). It never needs to run on a user's PC.
 `Sluse.msi` is on the repository's Releases page, with a `SHA256SUMS` to
 check it against (`Get-FileHash Sluse.msi`); it is not signed yet.
 
-1. **Sign in** as the tenant administrator. Microsoft's consent page asks
+1. **Sign in** as the tenant's admin. Microsoft's consent page asks
    for what setup does as you. **Leave "Consent on behalf of your
    organization" unticked**: ticked, it grants those permissions to
    Microsoft's tool for everyone in the tenant.
@@ -175,7 +175,7 @@ file is read as the link it is, never as the file it points to.
 ### Tool servers
 
 A tool server is a remote MCP server that the agent calls through Sluse,
-as the person. **Built, not yet run on a device.** It must:
+as the person. **Run on our test PC, one server, as one person.** It must:
 - answer MCP over HTTPS, in version 2025-11-25 or 2026-07-28;
 - accept an Entra token for a delegated scope of its own app registration,
   in your tenant. A server with its own sign-in or an API key cannot be
@@ -202,8 +202,8 @@ you set replaces whatever the agent sends.
 ## Working in Sluse
 
 For the person. **Open "Sluse"** from the Start menu. The first time on a
-PC, Sluse prepares the box's system, which takes a while; after that it
-opens in under a minute. If the preparation fails, Sluse says so and offers
+PC, Sluse prepares the box's system first, about 20 minutes on our test PC;
+after that it opens in under a minute. If the preparation fails, Sluse says so and offers
 Try again. Sign in when asked, with the account you use for Windows: Sluse
 asks once each time it opens the box, and once more if a first preparation
 took long. The box shows once its console is ready.
@@ -222,12 +222,10 @@ Shift+Insert: only then does what you copied on the PC go in, and each
 paste is recorded. A paste from a menu inside the box pastes the text you
 last pasted with the keys.
 
-Sign each app in to your company's AI account once; it stays signed in.
-The first run of Claude Code, Codex and Mistral Vibe says how, since
-Microsoft's sign-in cannot open in the box. They start in the box's
-workspace, where the files Sluse lets in land; Claude Desktop opens a Code
-session there and asks you to confirm the folder. ChatGPT signs in through
-Firefox in the box.
+Sign each app in to your organisation's account once; it stays signed in.
+The first run of Claude Code, Codex and Mistral Vibe says how. They start
+in the box's workspace, where the files Sluse lets in land; Claude Desktop
+opens a Code session there and asks you to confirm the folder.
 
 The console's pages: **Work** (what Sluse let in this session, its count
 for each source against the volume alert, and what was published), **Your
@@ -236,7 +234,7 @@ sources the agent declared), **Copies in the box** (with Check against the
 sources and Delete the copies), **Sources** (what the agents can see,
 folder by folder) and **Record**.
 
-**Signing the AI apps in with your work account.** If IT turned it on, the
+**Signing the AI apps in with your organisation's Microsoft account.** If IT turned it on, the
 Sluse bar's **More** menu has **Allow a Microsoft sign-in…**. Use it when an
 AI app in your box asks you to sign in with Microsoft: for the next five
 minutes your box can reach Microsoft's sign-in page, and the bar counts
@@ -280,7 +278,7 @@ agent in that session; it cannot check that the agent used it.
   is still opening leaves it closed; quitting while its system is still
   being prepared lets the preparation finish in the notification area,
   says when it is ready, and leaves the box closed.
-- **Reset the system, keep my files** gives the box a fresh system,
+- **Reset the box's system** (under More) gives the box a fresh system,
   including Sluse's updates; your files in the box stay.
 - **Wipe the box** removes everything in it. Use it when you are done with
   a piece of work: files given to the agent stay in the box until you do.
@@ -381,9 +379,9 @@ it reads as.
   signed in at a time is not affected.
 - **Proven on our test PC only:** SharePoint, OneDrive and SMB read as the
   person, for one user in one tenant (SMB: one domain, the whole share in
-  scope). **Built, not yet run on any device:** the App Control policy on
-  Sluse Artifacts, that the Sluse log takes writes only from the system,
-  and tool servers.
+  scope), and one tool server, called as the person. **Built, not yet run
+  on any device:** the App Control policy on Sluse Artifacts, and that the
+  Sluse log takes writes only from the system.
 
 ## Telling us what happened
 

@@ -5,6 +5,24 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.11
+
+Every text a person or an admin reads, reviewed against one style: one word
+for each thing, the account named, no line that adds little.
+
+**For the administrator**
+- Sluse Admin says Sluse Gate, not broker; admin and device throughout;
+  its error messages end at what to copy and send us.
+- The Windows service shows as **Sluse service**.
+
+**For the person using Sluse**
+- The first run of Claude Code, Codex and Mistral Vibe says which account
+  to sign in with and starts with the sign-in in the box's browser.
+- Your Microsoft account by name where a sign-in asks for it, no "work
+  account"; dialogs close with **Close**.
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.10
 
 **For the administrator**

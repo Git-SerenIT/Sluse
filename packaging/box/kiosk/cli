@@ -65,33 +65,32 @@ if [ -e "$seen" ]; then
     printf '%s%s, in %s%s\n%s\n\n' "$dim" "$name" "$folder" "$off" "$rule"
 else
     if [ "$1" = codex ]; then
-        how="Microsoft's sign-in page cannot open in your box. When Codex asks you to
-sign in, choose the device code, and enter the code in your browser on Windows."
+        how="When Codex asks you to sign in, choose Sign in with ChatGPT and finish in
+the browser that opens. Signed in to the ChatGPT app in this box, Codex is
+too. If the page does not load, choose the device code instead and enter it
+in your browser on Windows."
     elif [ "$1" = vibe ]; then
         # Vibe's browser sign-in polls Mistral from the box (D-070): the
         # address is opened elsewhere and nothing is pasted back.
         if [ "$(cat /run/sluse/copy-out 2>/dev/null)" = off ]; then
-            how="Microsoft's sign-in page cannot open in your box, and copying text out of it
-is turned off. When Mistral Vibe asks you to sign in, choose the browser, type
-the address it shows into your browser on Windows, and sign in there. Vibe
-carries on by itself. If that is not practical, send the details to your IT
-department."
+            how="When Mistral Vibe asks you to sign in, choose the browser and finish in the
+one that opens. If the page does not load, type the address it shows into
+your browser on Windows and sign in there; Vibe carries on by itself."
         else
-            how="Microsoft's sign-in page cannot open in your box. When Mistral Vibe asks you
-to sign in, choose the browser, copy the address it shows, open it in your
-browser on Windows and sign in there. Vibe carries on by itself."
+            how="When Mistral Vibe asks you to sign in, choose the browser and finish in the
+one that opens. If the page does not load, open the address it shows in your
+browser on Windows and sign in there; Vibe carries on by itself."
         fi
     elif [ "$(cat /run/sluse/copy-out 2>/dev/null)" = off ]; then
-        how="Microsoft's sign-in page cannot open in your box, and copying text out of it
-is turned off. If Claude Code shows an address to sign in with, type it into
-your browser on Windows, and paste the code you get back here. If that is not
-practical, send the details to your IT department."
+        how="When Claude Code asks you to sign in, finish in the browser that opens. If
+the page does not load, type the address it shows into your browser on
+Windows, and paste the code you get back here."
     else
-        how="Microsoft's sign-in page cannot open in your box. If Claude Code shows an
-address to sign in with, copy it, open it in your browser on Windows, and
-paste the code you get back here."
+        how="When Claude Code asks you to sign in, finish in the browser that opens. If
+the page does not load, copy the address it shows, open it in your browser on
+Windows, and paste the code you get back here."
     fi
-    printf '%s%s, in your box.%s\n%sWorking folder  %s\n\nSign in once; your box keeps it.\n%s%s\n%s\n\n' \
+    printf '%s%s, in your box.%s\n%sWorking folder  %s\n\nSign in once, with your organisation'\''s account. Your box keeps it.\n%s%s\n%s\n\n' \
         "$bold" "$name" "$off" "$dim" "$folder" "$how" "$off" "$rule"
     mkdir -p "$(dirname "$seen")" && : > "$seen"
 fi
