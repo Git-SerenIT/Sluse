@@ -18,7 +18,10 @@ use crate::graph::Graph;
 
 /// What the tenant's Conditional Access says, as far as D-075 needs.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", tag = "state")]
+// `rename_all` names the variants; the fields need `rename_all_fields`, or the
+// page reads `compliantDevice` from a `compliant_device` (since 0.1.9; found
+// on jok's tenant, 2026-10-29).
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "state")]
 pub enum Report {
     /// The policies were read.
     Read {
@@ -104,5 +107,14 @@ mod tests {
         );
         t.lock().unwrap().ca_policies = Some(vec![]);
         assert_eq!(check(&g, None).await, Report::Read { compliant_device: vec![], report_only: vec![], device_code_blocked: vec![] });
+    }
+
+    /// The shape `ui/shell/src/admin.js`'s `drawCa()` reads.
+    #[test]
+    fn the_report_is_what_the_page_reads() {
+        let r = Report::Read { compliant_device: vec!["a".into()], report_only: vec![], device_code_blocked: vec![] };
+        assert_eq!(serde_json::to_value(&r).unwrap(), serde_json::json!({ "state": "read", "compliantDevice": ["a"], "reportOnly": [], "deviceCodeBlocked": [] }));
+        let u = Report::Unreadable { detail: "no P1".into() };
+        assert_eq!(serde_json::to_value(&u).unwrap(), serde_json::json!({ "state": "unreadable", "detail": "no P1" }));
     }
 }

@@ -5,6 +5,16 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.13
+
+**For the administrator**
+- **Sluse Admin no longer stops after you sign in** with "Cannot read
+  properties of undefined (reading 'length')", on a tenant whose
+  Conditional Access it can read (Entra ID P1). The Tenant step's reading
+  of it shows as intended. Since 0.1.9.
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.12
 
 **For the administrator**
