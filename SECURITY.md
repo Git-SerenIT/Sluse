@@ -55,8 +55,8 @@ on a device.
 |---|---|---|
 | Claude Code | In the box. Anthropic's terms forbid a third party handling claude.ai credentials | `forceLoginOrgUUID` in its managed settings. `claude setup-token` ignores it |
 | Claude Desktop | In the box | Nothing yet |
-| Codex | In the box, by device code | `/etc/codex/requirements.toml`: ChatGPT sign-in only, to the listed workspaces |
-| ChatGPT Desktop | In the box, through Firefox | The same `requirements.toml`: it is OpenAI's Codex app. Whether its plain chat obeys the pin, not only its Codex side, is not documented |
+| Codex | In the box, in its browser, with ChatGPT's sign-in; a device code optional | `/etc/codex/requirements.toml`: ChatGPT sign-in only, to the listed workspaces |
+| ChatGPT Desktop | In the box, in its browser | The same `requirements.toml`: it is OpenAI's Codex app. Whether its plain chat obeys the pin, not only its Codex side, is not documented |
 | Mistral Vibe | In the box, a Mistral key, Mistral's EU endpoint | Nothing: Vibe has no documented organisation pin. Which inference provider and sign-in it uses waits on Mistral's answer about its terms |
 
 ## Invariants

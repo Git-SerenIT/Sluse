@@ -5,6 +5,17 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.12
+
+**For the administrator**
+- **Microsoft sign-in, opened by the person** is on by default in a new
+  configuration: it is the standard way the AI apps sign in. Turned off,
+  they fall back to their own device codes or emailed codes. Pair it with
+  Conditional Access requiring a compliant device for Office 365 and Sluse
+  Gate, and device-code sign-in blocked; Tenant reads whether you have them.
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.11
 
 Every text a person or an admin reads, reviewed against one style: one word

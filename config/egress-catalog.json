@@ -123,7 +123,7 @@
       "id": "microsoft-signin",
       "name": "Microsoft sign-in, opened by the person",
       "description": "For signing the AI apps in with your organisation's Microsoft account. The box reaches these hosts only while the person opens a sign-in from the Sluse window, five minutes at a time; never otherwise. Pair it with Conditional Access requiring a compliant device for Office 365 and Sluse Gate.",
-      "default": false,
+      "default": true,
       "uploads": false,
       "window": true,
       "hosts": [

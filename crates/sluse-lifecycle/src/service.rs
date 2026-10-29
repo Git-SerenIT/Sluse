@@ -642,7 +642,7 @@ impl Service {
             return failed(PipeFailure::NoBox, "Your box is not open.");
         };
         if !has_window(&r.loaded) {
-            return failed(PipeFailure::NotAllowed, "Your IT department has not turned on Microsoft sign-in for your box.");
+            return failed(PipeFailure::NotAllowed, "Your IT department has turned off Microsoft sign-in for your box.");
         }
         let seconds = if close { 0 } else { sluse_proto::pipe::SIGN_IN_WINDOW_SECONDS };
         let w = sluse_proto::pipe::SignInWindow { window_seconds: seconds, opened_by: sid.to_owned() };

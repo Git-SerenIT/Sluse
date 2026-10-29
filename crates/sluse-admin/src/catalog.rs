@@ -119,11 +119,11 @@ mod tests {
         // start off, ticked by consent.
         assert!(!c.defaults().iter().any(|b| b == "node" || b == "github"), "{:?}", c.defaults());
         // D-036, D-044: no bundle puts Microsoft's sign-in on the list; since
-        // D-075 the one that names it is a window, off by default.
+        // D-075 the one that names it is a window, on by default (jok, 2026-10-29).
         let listed: Vec<&String> = c.bundles.iter().filter(|b| !b.window).flat_map(|b| &b.hosts).collect();
         assert!(!listed.iter().any(|h| h.starts_with("login.") || h.contains("microsoftonline")), "{listed:?}");
         let ms = c.bundles.iter().find(|b| b.window).expect("D-075's window bundle");
-        assert!(!ms.default && !ms.locked && ms.hosts.iter().any(|h| h == "login.microsoftonline.com"));
+        assert!(ms.default && !ms.locked && ms.hosts.iter().any(|h| h == "login.microsoftonline.com"));
     }
 
     #[test]

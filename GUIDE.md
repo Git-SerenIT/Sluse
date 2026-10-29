@@ -108,12 +108,13 @@ check it against (`Get-FileHash Sluse.msi`); it is not signed yet.
 3. **Sources:** what the agent may read, below.
 4. **Egress:** which groups of hosts the box may reach (the AI providers,
    package registries), each saying whether it also accepts uploads.
-   **Microsoft sign-in, opened by the person** lets the AI apps sign in
-   with your organisation's Microsoft account: the box reaches Microsoft's
-   sign-in only while the person opens it from the Sluse window, five
-   minutes at a time. Turn it on only with Conditional Access requiring a
+   **Microsoft sign-in, opened by the person**, on by default, lets the AI
+   apps sign in with your organisation's Microsoft account: the box reaches
+   Microsoft's sign-in only while the person opens it from the Sluse window,
+   five minutes at a time. Pair it with Conditional Access requiring a
    compliant device for Office 365 and Sluse Gate, and device-code sign-in
-   blocked; Tenant reads whether you have them. Also recommended: "Stay
+   blocked; Tenant reads whether you have them. Turned off, the apps fall
+   back to their own codes: a device code, or one sent by email. Also recommended: "Stay
    signed in?" off in your company branding.
 5. **Advanced:** the volume alert, the largest fetch, the box's memory and
    disk, copying text out, the egress log.
@@ -234,7 +235,7 @@ sources the agent declared), **Copies in the box** (with Check against the
 sources and Delete the copies), **Sources** (what the agents can see,
 folder by folder) and **Record**.
 
-**Signing the AI apps in with your organisation's Microsoft account.** If IT turned it on, the
+**Signing the AI apps in with your organisation's Microsoft account.** Unless IT turned it off, the
 Sluse bar's **More** menu has **Allow a Microsoft sign-in…**. Use it when an
 AI app in your box asks you to sign in with Microsoft: for the next five
 minutes your box can reach Microsoft's sign-in page, and the bar counts
