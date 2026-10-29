@@ -14,7 +14,7 @@
 
 use std::sync::Arc;
 
-use sluse_proto::pipe::{HostSignIn, SignInWindow};
+use sluse_proto::pipe::{Clipboard, HostSignIn, SignInWindow};
 use sluse_proto::{HostSignInResult, Op, Outcome, SessionId, SluseError, SourceKind};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};
 
@@ -28,10 +28,15 @@ pub const HOST_SESSION: &str = "sess-host";
 pub async fn run<R: AsyncBufRead + Unpin>(core: Arc<Core>, input: R) {
     let mut lines = input.lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        // A sign-in window the person opened (D-075). Tried first: its fields
-        // are its own, so a sign-in never parses as one.
+        // A sign-in window the person opened (D-075), or clipboard text the
+        // window carried (D-076). Tried first: their fields are their own, so
+        // a sign-in never parses as either.
         if let Ok(w) = serde_json::from_str::<SignInWindow>(&line) {
             core.window.open(&w.opened_by, w.window_seconds);
+            continue;
+        }
+        if let Ok(c) = serde_json::from_str::<Clipboard>(&line) {
+            (core.clipboard)(&clip_record(&core, &c));
             continue;
         }
         match serde_json::from_str::<HostSignIn>(&line) {
@@ -42,6 +47,23 @@ pub async fn run<R: AsyncBufRead + Unpin>(core: Arc<Core>, input: R) {
             Err(e) => eprintln!("control: a line that is not a sign-in ({e})"),
         }
     }
+}
+
+/// A clipboard transfer's record: the box, the config, and what the shell
+/// said of the text.
+pub fn clip_record(core: &Core, c: &Clipboard) -> serde_json::Value {
+    serde_json::json!({
+        "op": "clipboard",
+        "ts": chrono::Utc::now(),
+        "outcome": "admitted",
+        "boxId": core.loaded.config.box_id,
+        "configVersion": core.loaded.version,
+        "direction": c.direction,
+        "bytes": c.bytes,
+        "sha256": c.sha256,
+        "head": c.head,
+        "by": c.by,
+    })
 }
 
 /// Redeem one sign-in, record it, and publish its outcome.

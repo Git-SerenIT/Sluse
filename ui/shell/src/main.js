@@ -519,17 +519,48 @@ function connect() {
   });
   // Clipboard text, both ways, and nothing else (D-025 point 3). Out of the
   // box only where the config allows it (D-038 point 7): that stops copy
-  // and paste out, not retyping or a photo of the screen.
+  // and paste out, not retyping or a photo of the screen. Each transfer is
+  // recorded (D-076); into the box only on the paste keystroke, below.
   if (box.copy_out !== false) {
-    rfb.addEventListener('clipboard', (e) => clip.writeText(e.detail.text).catch(() => {}));
+    let last = null;
+    rfb.addEventListener('clipboard', (e) => {
+      const text = e.detail.text;
+      clip.writeText(text).catch(() => {});
+      // The same text announced again is not a second transfer.
+      if (text && text !== last) record('out', text);
+      last = text;
+    });
   }
-  window.onfocus = async () => {
-    try {
-      const text = await clip.readText();
-      if (text) rfb.clipboardPasteFrom(text);
-    } catch { /* nothing on the clipboard, or not text */ }
-  };
 }
+
+// ---- Clipboard into the box, on the paste keystroke (D-076) -------------
+// Only Ctrl+V, Ctrl+Shift+V and Shift+Insert send the host's clipboard in,
+// so what the person copied for something else stays out of the box. The
+// keystroke is held while the text goes, then sent, in that order on the one
+// connection. Its release reaches noVNC, which drops a key it never saw go
+// down. ponytail: a paste from a menu in the box pastes the last text sent;
+// add a menu item in the bar if people miss it.
+function record(direction, text) {
+  invoke('clipboard', { direction, text }).catch(() => { /* no box, or the service's to log */ });
+}
+const PASTE = { KeyV: (e) => e.ctrlKey && !e.altKey && !e.metaKey, Insert: (e) => e.shiftKey && !e.ctrlKey && !e.altKey };
+window.addEventListener('keydown', async (e) => {
+  const rfb = viewer;
+  // Only a keystroke on its way to the box's screen; the bar's fields paste as usual.
+  if (!rfb || !PASTE[e.code]?.(e) || !$('screen').contains(e.target)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  try {
+    const text = await clip.readText();
+    if (text && viewer === rfb) {
+      rfb.clipboardPasteFrom(text);
+      record('in', text);
+    }
+  } catch { /* nothing on the clipboard, or not text */ }
+  if (viewer !== rfb) return;
+  if (e.code === 'Insert') rfb.sendKey(0xff63, 'Insert');
+  else rfb.sendKey(e.shiftKey ? 0x56 : 0x76, 'KeyV');
+}, true);
 
 // ---- Who Sluse reads as, and the sign-in (D-036, Q7, Q8, Q22) ----------
 // The open asks the person at most once; from the moment the box is open,

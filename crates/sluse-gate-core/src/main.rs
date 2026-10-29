@@ -266,8 +266,14 @@ fn main() -> ExitCode {
         ),
         Err(code) => return code,
     };
+    // The clipboard's records (D-076), from the control channel.
+    let clipboard = match event_writer(&loaded, sluse_gate_core::audit::CLIPBOARD, "clipboard") {
+        Ok(write) => write,
+        Err(code) => return code,
+    };
     let core = Arc::new(
-        Core::new(loaded, compiled, sink, posture).with_entra(entra).with_journal_mirror(mirror).with_window(window),
+        Core::new(loaded, compiled, sink, posture).with_entra(entra).with_journal_mirror(mirror).with_window(window)
+            .with_clipboard(clipboard),
     );
 
     core.report_unavailable();

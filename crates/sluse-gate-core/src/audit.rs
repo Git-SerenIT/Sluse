@@ -230,6 +230,12 @@ pub const EGRESS_REFUSED: u32 = 1201;
 /// who opened it, until when, and at its close the connections made in it.
 pub const SIGN_IN_WINDOW: u32 = 1900;
 
+/// Clipboard text the Sluse window carried (D-076): op 20, one record a
+/// transfer, with its direction, size, hash and first 40 characters. Not an
+/// [`AuditRecord`]: it is the shell's word, which runs as the person, passed
+/// on by the service, who names the account it checked.
+pub const CLIPBOARD: u32 = 2000;
+
 /// How loud an event is in Event Viewer. A refusal is a warning, not an error:
 /// it is Gate Core working. An error is Gate Core or a source failing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

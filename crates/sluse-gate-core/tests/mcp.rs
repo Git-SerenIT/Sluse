@@ -46,6 +46,7 @@ struct Fx {
     stand_in: entra_mock::Running,
     calls: Calls,
     tokens: Arc<Mutex<Vec<String>>>,
+    clipboard: Arc<Mutex<Vec<Value>>>,
 }
 
 async fn fx(protocol: &str) -> Fx {
@@ -96,8 +97,14 @@ async fn fx_scoped(protocol: &str, entra_scope: &str) -> Fx {
     let base = stand_in.base.clone();
     let entra = Entra::new(loaded.config.entra.as_ref().unwrap(), &base, &format!("{base}/v1.0")).unwrap();
     let sink = Arc::new(MemorySink::new());
-    let core = Arc::new(Core::new(loaded, compiled, sink.clone(), posture).with_entra(Some(entra)));
-    Fx { _dir: dir, router: http::router(core.clone()), core, sink, stand_in, calls, tokens }
+    let clipboard = Arc::new(Mutex::new(Vec::new()));
+    let clip = clipboard.clone();
+    let core = Arc::new(
+        Core::new(loaded, compiled, sink.clone(), posture)
+            .with_entra(Some(entra))
+            .with_clipboard(Box::new(move |v| clip.lock().unwrap().push(v.clone()))),
+    );
+    Fx { _dir: dir, router: http::router(core.clone()), core, sink, stand_in, calls, tokens, clipboard }
 }
 
 impl Fx {
@@ -184,6 +191,24 @@ async fn the_legacy_handshake_lists_and_calls_as_the_person() {
 #[tokio::test]
 async fn the_stateless_version_lists_and_calls_as_the_person() {
     lists_and_calls_as_the_person("2026-07-28").await;
+}
+
+/// D-076: clipboard text the window carried, from the service on the
+/// control channel, is one record each with the box and the person, and is
+/// neither a sign-in nor a sign-in window.
+#[tokio::test]
+async fn a_clipboard_transfer_on_the_control_channel_is_one_record() {
+    let fx = fx("2025-11-25").await;
+    let line = r#"{"direction":"out","bytes":5,"sha256":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824","head":"hello","by":"S-1-12-1-1"}"#;
+    control::run(fx.core.clone(), format!("{line}\nnot json\n").as_bytes()).await;
+    let recs = fx.clipboard.lock().unwrap().clone();
+    assert_eq!(recs.len(), 1, "{recs:?}");
+    let r = &recs[0];
+    assert_eq!((r["op"].as_str(), r["direction"].as_str(), r["head"].as_str(), r["by"].as_str()), (Some("clipboard"), Some("out"), Some("hello"), Some("S-1-12-1-1")));
+    assert_eq!(r["bytes"], 5);
+    assert!(r["boxId"].is_string() && r["configVersion"].is_string(), "{r}");
+    assert!(fx.core.window.until().is_none(), "no window opened");
+    assert!(fx.sink.records().is_empty(), "no sign-in attempted");
 }
 
 /// The config's list decides, not the server's: a tool the server has and

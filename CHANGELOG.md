@@ -5,6 +5,25 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.10
+
+**For the administrator**
+- **The clipboard is recorded, both ways** (event 2000): each paste into a
+  box and each text a box puts on the PC's clipboard, with its size, hash,
+  first 40 characters and the Windows account. Always on. The first 40
+  characters are company text in the Event Log. The records are the Sluse
+  window's word, which runs as the person.
+- Prompts are not logged by Sluse: they go from the AI app to its provider.
+  GUIDE points to the provider's own audit and compliance logs.
+
+**For the person using Sluse**
+- **Text goes into the box when you paste it** with Ctrl+V, Ctrl+Shift+V
+  or Shift+Insert, no longer whenever the window comes to the front, so
+  something you copied for elsewhere stays out of the box. A paste from a
+  menu inside the box pastes the text you last pasted with the keys.
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.9
 
 **For the administrator**

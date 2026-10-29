@@ -71,6 +71,9 @@ pub struct Core {
     pub signed_out: std::sync::atomic::AtomicBool,
     /// The sign-in window the person opened, if one is open (D-075).
     pub window: crate::window::Window,
+    /// Where a clipboard transfer's record goes (D-076): the Event Log on a
+    /// device.
+    pub clipboard: Box<dyn Fn(&serde_json::Value) + Send + Sync>,
 }
 
 impl Core {
@@ -107,6 +110,7 @@ impl Core {
             host_sign_in: Mutex::new(None),
             signed_out: Default::default(),
             window: Default::default(),
+            clipboard: Box::new(|v| eprintln!("clipboard: {v}")),
         }
     }
 
@@ -114,6 +118,12 @@ impl Core {
     /// device.
     pub fn with_window(mut self, window: crate::window::Window) -> Self {
         self.window = window;
+        self
+    }
+
+    /// Where the clipboard's records go (D-076).
+    pub fn with_clipboard(mut self, write: Box<dyn Fn(&serde_json::Value) + Send + Sync>) -> Self {
+        self.clipboard = write;
         self
     }
 

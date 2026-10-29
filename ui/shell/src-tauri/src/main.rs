@@ -24,7 +24,7 @@ mod signin;
 
 use pipe::Failure;
 use serde::Serialize;
-use sluse_proto::pipe::{BoxState, HostSignIn, Phase, PipeEvent, PipeRequest, Theme, VNC_USER};
+use sluse_proto::pipe::{BoxState, ClipDirection, Clipboard, HostSignIn, Phase, PipeEvent, PipeRequest, Theme, CLIP_HEAD, VNC_USER};
 use tauri::{Emitter, Manager};
 
 #[derive(Serialize)]
@@ -272,6 +272,23 @@ fn sign_out() -> Result<(), Failure> {
 #[tauri::command(async)]
 fn sign_in_window(close: bool) -> Result<(), Failure> {
     match pipe::ask(&PipeRequest::SignInWindow { close }, |_| {})? {
+        PipeEvent::Done => Ok(()),
+        other => Err(Failure::from_event(other)),
+    }
+}
+
+/// Clipboard text the window carried (D-076), for the Event Log: its size,
+/// hash and first [`CLIP_HEAD`] characters; the rest goes nowhere.
+#[tauri::command(async)]
+fn clipboard(direction: ClipDirection, text: String) -> Result<(), Failure> {
+    let c = Clipboard {
+        direction,
+        bytes: text.len() as u64,
+        sha256: sluse_proto::ContentHash::of(text.as_bytes()),
+        head: text.chars().take(CLIP_HEAD).collect(),
+        by: String::new(),
+    };
+    match pipe::ask(&PipeRequest::Clipboard(c), |_| {})? {
         PipeEvent::Done => Ok(()),
         other => Err(Failure::from_event(other)),
     }
@@ -574,6 +591,7 @@ fn main() {
             shell_log,
             sign_out,
             sign_in_window,
+            clipboard,
             set_theme,
             wait_for_console,
             close_box,

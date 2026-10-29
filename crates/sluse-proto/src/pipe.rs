@@ -100,6 +100,41 @@ pub enum PipeRequest {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         close: bool,
     },
+    /// Clipboard text the window carried into or out of the caller's running
+    /// box (D-076): the service hands it to the Gate, which records it.
+    /// Answered with [`PipeEvent::Done`].
+    Clipboard(Clipboard),
+}
+
+/// How much of a clipboard text its record carries (D-076): the first 40
+/// characters, enough to recognise a paste, not to be the copy.
+pub const CLIP_HEAD: usize = 40;
+
+/// Which way a clipboard text went (D-076).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ClipDirection {
+    /// Pasted into the box: the person's paste keystroke in the window.
+    In,
+    /// Put on the host's clipboard by the box, which may do so without the
+    /// person copying anything (review R-49).
+    Out,
+}
+
+/// One clipboard transfer, as the shell saw it (D-076): its size in UTF-8
+/// bytes, its SHA-256 and its first [`CLIP_HEAD`] characters. The shell's
+/// word, which runs as the person. `by` is the Windows account the service
+/// checked, set by the service on its way to the Gate; the shell's own is
+/// overwritten.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct Clipboard {
+    pub direction: ClipDirection,
+    pub bytes: u64,
+    pub sha256: ContentHash,
+    pub head: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub by: String,
 }
 
 /// How long a sign-in window lasts (D-075): five minutes, never extended.
@@ -716,6 +751,16 @@ mod tests {
         let w: SignInWindow = serde_json::from_str(r#"{"windowSeconds":300,"openedBy":"S-1-12-1-1"}"#).unwrap();
         assert_eq!((w.window_seconds, w.opened_by.as_str()), (300, "S-1-12-1-1"));
         assert!(serde_json::from_str::<SignInWindow>(r#"{"windowSeconds":300,"openedBy":"x","code":"c"}"#).is_err());
+        // D-076: a clipboard record is neither, and neither is one.
+        let c = serde_json::to_string(&Clipboard { by: "S-1-12-1-1".into(), ..clip() }).unwrap();
+        assert!(serde_json::from_str::<SignInWindow>(&c).is_err() && serde_json::from_str::<HostSignIn>(&c).is_err());
+        assert_eq!(serde_json::from_str::<Clipboard>(&c).unwrap().by, "S-1-12-1-1");
+        assert!(serde_json::from_str::<Clipboard>(sign_in).is_err());
+        assert!(serde_json::from_str::<Clipboard>(r#"{"windowSeconds":300,"openedBy":"x"}"#).is_err());
+    }
+
+    fn clip() -> Clipboard {
+        Clipboard { direction: ClipDirection::In, bytes: 5, sha256: ContentHash::of(b"hello"), head: "hello".into(), by: String::new() }
     }
 
     #[test]
@@ -735,6 +780,7 @@ mod tests {
             PipeRequest::Wipe { sid: Some("S-1-5-21-1".into()) },
             PipeRequest::Theme { theme: Theme::Light },
             PipeRequest::Console,
+            PipeRequest::Clipboard(clip()),
         ] {
             let line = serde_json::to_string(&r).unwrap();
             assert!(!line.contains('\n'));

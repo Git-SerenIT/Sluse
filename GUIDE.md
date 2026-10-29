@@ -217,7 +217,10 @@ with the mouse, or with Ctrl+Alt+Right, which goes round from the last tab
 to the first. Close an app's tab with a middle click on it, or Ctrl+Alt+W
 for the tab in front; the Sluse console's tab stays. The box is
 drawn at the size of the window, so making the window larger gives the box
-more room.
+more room. Paste text into the box with Ctrl+V, Ctrl+Shift+V or
+Shift+Insert: only then does what you copied on the PC go in, and each
+paste is recorded. A paste from a menu inside the box pastes the text you
+last pasted with the keys.
 
 Sign each app in to your company's AI account once; it stays signed in.
 The first run of Claude Code, Codex and Mistral Vibe says how, since
@@ -301,12 +304,22 @@ agent in that session; it cannot check that the agent used it.
 | 1701, 1702 | A tool call refused (a tool not ticked, no sign-in, the server refusing the person), or the server unreachable or failing |
 | 1801, 1802 | A tool server's list of tools could not be had |
 | 803 | Many files in a short time (the volume alert) |
+| 2000 | Text pasted into the box, or put on the PC's clipboard by the box: its size, hash and first 40 characters, and the Windows account |
 
 A record of something done for the person names them by their Entra
 account once they have signed in. Some do not: a record from before the
 first sign-in, or after a sign-out, names the PC's own Sluse service; the
 proxy's refusals (1201) carry the Windows account's SID the box was opened
 for; the PC check at start (1400, 1401) names no one.
+
+**The clipboard's records (2000)** are the Sluse window's word: it runs
+as the person, so they can be tampered with by them, and retyping or a
+photo of the screen leaves none. Their first 40 characters are company text
+in the log, forwarded wherever the log goes.
+
+**Prompts are not in it.** A prompt goes from the AI app to its provider,
+and Sluse does not see it. Logging prompts is the provider's: look in its
+admin console for audit and compliance logs, which depend on the plan.
 
 **Posture:** at each open Sluse records how the PC is set up (Hyper-V,
 the person not an administrator, enhanced session off, and more) and starts
@@ -344,7 +357,8 @@ it reads as.
   serve the agent's tools and also accept uploads on the same hosts; they
   are off by default. Turn them on in Egress only if your agents need them.
 - **Text can be copied into the box, and out of it** while copying out is
-  on (the default; Advanced turns it off). Files cannot.
+  on (the default; Advanced turns it off). Files cannot. Each transfer is
+  recorded (2000), not stopped.
 - **The `sluse:` link.** Sluse's notifications use a `sluse:` link to open
   Sluse, bring up its Close confirm, or open Sluse Artifacts. Any web page
   or program can follow that link too; it does nothing else, and closing

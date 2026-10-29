@@ -30,7 +30,7 @@ use std::time::{Duration, Instant};
 
 use sluse_proto::pipe::{
     Phase,
-    valid_layout, BoxState, Bootstrap, PipeEvent, PipeFailure, PipeRequest, PlannedStep, Theme, KVP_KEY, THEME_KEY,
+    valid_layout, BoxState, Bootstrap, Clipboard, CLIP_HEAD, PipeEvent, PipeFailure, PipeRequest, PlannedStep, Theme, KVP_KEY, THEME_KEY,
     VNC_PORT,
 };
 use sluse_proto::pipe::HostSignIn;
@@ -429,7 +429,9 @@ impl Service {
                     // asking process: a box closed with nobody saying why
                     // (L1, 2026-10-28) names its sender here.
                     let op = serde_json::to_value(&req).ok().and_then(|v| v["op"].as_str().map(str::to_owned)).unwrap_or_default();
-                    let logged = !matches!(req, PipeRequest::Status | PipeRequest::Console);
+                    // The clipboard's record is the Event Log's (D-076), not
+                    // this log's.
+                    let logged = !matches!(req, PipeRequest::Status | PipeRequest::Console | PipeRequest::Clipboard(_));
                     if logged {
                         self.log_device("request", &format!("{op} from pid {} in session {}, {}", caller.pid, caller.session, caller.sid));
                     }
@@ -524,6 +526,7 @@ impl Service {
             PipeRequest::Theme { theme } => return self.theme(sid, theme),
             PipeRequest::Console => return self.console(sid),
             PipeRequest::SignInWindow { close } => return self.sign_in_window(sid, close),
+            PipeRequest::Clipboard(c) => return self.clipboard(sid, c),
             PipeRequest::Quit => {
                 self.quit.lock().unwrap_or_else(|p| p.into_inner()).insert(sid.to_owned());
                 return PipeEvent::Done;
@@ -580,6 +583,7 @@ impl Service {
             | PipeRequest::Theme { .. }
             | PipeRequest::Console
             | PipeRequest::SignInWindow { .. }
+            | PipeRequest::Clipboard(_)
             | PipeRequest::Quit => {
                 unreachable!("answered above")
             }
@@ -643,6 +647,26 @@ impl Service {
         let seconds = if close { 0 } else { sluse_proto::pipe::SIGN_IN_WINDOW_SECONDS };
         let w = sluse_proto::pipe::SignInWindow { window_seconds: seconds, opened_by: sid.to_owned() };
         match tell_gate(&mut r.gate, &w) {
+            Ok(()) => PipeEvent::Done,
+            Err(e) => failed(PipeFailure::Gate, e),
+        }
+    }
+
+    /// [`PipeRequest::Clipboard`]: clipboard text the caller's window carried
+    /// to or from their running box (D-076), handed to the Gate, which writes
+    /// it to the Event Log as 2000. Who sent it is the account checked here;
+    /// a head longer than [`CLIP_HEAD`] is refused, so the record never holds
+    /// more of the text than D-076 allows.
+    fn clipboard(&self, sid: &str, mut c: Clipboard) -> PipeEvent {
+        if c.head.chars().count() > CLIP_HEAD || ContentHash::from_hex(c.sha256.as_str()).is_none() {
+            return failed(PipeFailure::BadRequest, "a clipboard record holds a SHA-256 and at most 40 characters");
+        }
+        let mut running = self.running.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(r) = running.as_mut().filter(|r| r.sid == sid) else {
+            return failed(PipeFailure::NoBox, "Your box is not open.");
+        };
+        c.by = sid.to_owned();
+        match tell_gate(&mut r.gate, &c) {
             Ok(()) => PipeEvent::Done,
             Err(e) => failed(PipeFailure::Gate, e),
         }
@@ -2238,6 +2262,19 @@ mod tests {
         assert!(matches!(got.as_slice(), [PipeEvent::Failed { code: PipeFailure::NoBox, .. }]), "{got:?}");
         let got = ask(&s, "{\"op\":\"signInWindow\",\"close\":true}\n", SID);
         assert!(matches!(got.as_slice(), [PipeEvent::Failed { code: PipeFailure::NoBox, .. }]), "{got:?}");
+    }
+
+    #[test]
+    fn a_clipboard_record_needs_the_callers_open_box_and_no_more_than_its_head() {
+        let (d, s) = service();
+        let hash = sluse_proto::ContentHash::of(b"x");
+        let req = |head: &str| format!("{{\"op\":\"clipboard\",\"direction\":\"in\",\"bytes\":1,\"sha256\":\"{}\",\"head\":\"{head}\"}}\n", hash.as_str());
+        let got = ask(&s, &req("x"), SID);
+        assert!(matches!(got.as_slice(), [PipeEvent::Failed { code: PipeFailure::NoBox, .. }]), "{got:?}");
+        let got = ask(&s, &req(&"x".repeat(CLIP_HEAD + 1)), SID);
+        assert!(matches!(got.as_slice(), [PipeEvent::Failed { code: PipeFailure::BadRequest, .. }]), "{got:?}");
+        let log = std::fs::read_to_string(d.path().join("logs/actions.jsonl")).unwrap_or_default();
+        assert!(!log.contains("clipboard"), "the Event Log is its record, not this log: {log}");
     }
 
     #[cfg(unix)]
