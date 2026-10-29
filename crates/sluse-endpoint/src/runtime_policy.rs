@@ -14,16 +14,23 @@
 //!
 //! **The runtimes enforce these, not Sluse** (invariant 2): something root in
 //! the box could rewrite them, and `claude setup-token` ignores Claude's.
+//!
+//! - Mistral Vibe's models, from the config's `vibe` (D-070, amended
+//!   2026-10-29): `/etc/sluse/vibe.toml`, which the box's launcher puts into
+//!   Vibe's user config (`packaging/box/kiosk/cli`). Vibe reads no system
+//!   file, so this is what it offers, **not a limit**: the user can edit
+//!   their own config. Mistral's managed config is the organisation's limit.
 
 use std::path::Path;
 
 use serde_json::Value;
-use sluse_proto::AccountsConfig;
+use sluse_proto::{AccountsConfig, VibeConfig};
 
-/// Write both, under `root` (`/` in the box; a temporary directory in tests).
-pub fn apply(accounts: Option<&AccountsConfig>, root: &Path) -> Result<(), String> {
+/// Write all three, under `root` (`/` in the box; a temporary directory in tests).
+pub fn apply(accounts: Option<&AccountsConfig>, vibe_models: Option<&VibeConfig>, root: &Path) -> Result<(), String> {
     claude(accounts.and_then(|a| a.claude_organisation.as_deref()), root)?;
-    codex(accounts.map(|a| a.chatgpt_workspaces.as_slice()).unwrap_or_default(), root)
+    codex(accounts.map(|a| a.chatgpt_workspaces.as_slice()).unwrap_or_default(), root)?;
+    vibe(vibe_models, root)
 }
 
 fn claude(organisation: Option<&str>, root: &Path) -> Result<(), String> {
@@ -63,6 +70,46 @@ fn codex(workspaces: &[String], root: &Path) -> Result<(), String> {
     write(&path, text.as_bytes())
 }
 
+/// TOML's basic string; the config held these to no quote, backslash or
+/// control character, escaped anyway.
+fn quoted(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn vibe(v: Option<&VibeConfig>, root: &Path) -> Result<(), String> {
+    let path = root.join("etc/sluse/vibe.toml");
+    let models: Vec<(&str, &str)> = v
+        .map(|v| v.models.iter().map(|m| ("mistral", m.as_str())).chain(v.provider.iter().flat_map(|p| p.models.iter().map(|m| (p.name.as_str(), m.as_str())))).collect())
+        .unwrap_or_default();
+    let Some(&(_, first)) = models.first() else {
+        return match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(format!("{}: {e}", path.display())),
+        };
+    };
+    // Top-level keys before any table, so the launcher can put this between
+    // its own keys and its own tables.
+    let names = models.iter().map(|(_, m)| quoted(m)).collect::<Vec<_>>().join(", ");
+    let mut text = format!(
+        "# Written by Sluse at enrolment, from the deployment's vibe (D-070).\nactive_model = {}\nallowed_models = [{names}]\n",
+        quoted(first)
+    );
+    if let Some(p) = v.and_then(|v| v.provider.as_ref()) {
+        let key = format!("{}_API_KEY", p.name.to_ascii_uppercase().replace('-', "_"));
+        text += &format!(
+            "\n[[providers]]\nname = {}\napi_base = {}\napi_key_env_var = {}\nbackend = \"generic\"\n",
+            quoted(&p.name),
+            quoted(&p.api_base),
+            quoted(&key)
+        );
+    }
+    for (provider, m) in &models {
+        text += &format!("\n[[models]]\nname = {0}\nprovider = {1}\nalias = {0}\n", quoted(m), quoted(provider));
+    }
+    write(&path, text.as_bytes())
+}
+
 fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let err = |e: std::io::Error| format!("{}: {e}", path.display());
     if let Some(parent) = path.parent() {
@@ -93,7 +140,7 @@ mod tests {
             chatgpt_workspaces: vec!["ws-1".into(), "ws-2".into()],
             claude_organisation: Some("11111111-2222-3333-4444-555555555555".into()),
         };
-        apply(Some(&a), root.path()).unwrap();
+        apply(Some(&a), None, root.path()).unwrap();
         let s: Value = serde_json::from_slice(&std::fs::read(&claude).unwrap()).unwrap();
         assert_eq!(s["forceLoginOrgUUID"], "11111111-2222-3333-4444-555555555555");
         assert_eq!(s["env"]["DISABLE_TELEMETRY"], "1", "the image's settings kept");
@@ -101,9 +148,33 @@ mod tests {
         assert!(req.contains(r#"allowed_login_methods = ["chatgpt"]"#) && req.contains(r#"allowed_chatgpt_workspaces = ["ws-1", "ws-2"]"#), "{req}");
 
         // A revision without them takes them back.
-        apply(None, root.path()).unwrap();
+        apply(None, None, root.path()).unwrap();
         let s: Value = serde_json::from_slice(&std::fs::read(&claude).unwrap()).unwrap();
         assert!(s.get("forceLoginOrgUUID").is_none() && s["env"]["DISABLE_TELEMETRY"] == "1");
         assert!(!root.path().join("etc/codex/requirements.toml").exists());
+    }
+
+    #[test]
+    fn vibes_models_are_written_and_taken_back() {
+        let root = tempfile::tempdir().unwrap();
+        let v = VibeConfig {
+            models: vec!["mistral-medium-latest".into(), "devstral-latest".into()],
+            provider: Some(sluse_proto::VibeProvider {
+                name: "tensor-x".into(),
+                api_base: "https://api.tensorx.ai/v1".into(),
+                models: vec!["z-ai/glm-5.3".into()],
+            }),
+        };
+        apply(None, Some(&v), root.path()).unwrap();
+        let path = root.path().join("etc/sluse/vibe.toml");
+        let t = std::fs::read_to_string(&path).unwrap();
+        assert!(t.contains("active_model = \"mistral-medium-latest\"\nallowed_models = [\"mistral-medium-latest\", \"devstral-latest\", \"z-ai/glm-5.3\"]"), "{t}");
+        assert!(t.contains("api_key_env_var = \"TENSOR_X_API_KEY\"\nbackend = \"generic\""), "{t}");
+        assert!(t.contains("[[models]]\nname = \"z-ai/glm-5.3\"\nprovider = \"tensor-x\"\nalias = \"z-ai/glm-5.3\""), "{t}");
+        // The keys come before the first table.
+        assert!(t.find("allowed_models").unwrap() < t.find("[[").unwrap());
+
+        apply(None, Some(&VibeConfig::default()), root.path()).unwrap();
+        assert!(!path.exists(), "no models, Vibe's own");
     }
 }

@@ -28,19 +28,22 @@ if ! bash -lc "command -v $1" >/dev/null 2>&1; then
     read -r _
     exit 127
 fi
-# Vibe reads its user config only, so Sluse writes it here, at launch, once:
-# a box's home outlives the base it was made from, and a later run keeps the
-# user's own. Mistral's EU endpoint, which the mistral bundle lists; the
-# global one has no location commitment. Restating the provider replaces
-# Vibe's built-in one whole, so its sign-in addresses are restated too.
-# Telemetry, updates and Mistral's hosted connectors off: their hosts are not
-# listed, and each refusal would be an Event Log record (D-070).
-if [ "$1" = vibe ] && [ ! -e "$HOME/.vibe/config.toml" ]; then
-    mkdir -p "$HOME/.vibe" && cat > "$HOME/.vibe/config.toml" <<TOML
+# Vibe reads its user config only, so Sluse writes it here, at launch, and
+# again whenever what Sluse would write changes (a new revision's models);
+# otherwise the user's own edits stay. Mistral's EU endpoint for a key; a
+# signed-in account uses the global one (D-070, amended). The models are the
+# deployment's, from /etc/sluse/vibe.toml (written at enrolment): what Vibe
+# offers, not a limit, since this file is the user's. Without them Vibe has
+# its one built-in model. Telemetry, updates and Mistral's hosted connectors
+# off: their hosts are not listed, and each refusal would be an Event Log
+# record (D-070).
+if [ "$1" = vibe ]; then
+    want=$(cat <<TOML
 enable_telemetry = false
 enable_update_checks = false
 enable_auto_update = false
 enable_connectors = false
+$(cat /etc/sluse/vibe.toml 2>/dev/null)
 
 [[providers]]
 name = "mistral"
@@ -56,6 +59,12 @@ transport = "stdio"
 command = "/usr/local/bin/sluse-endpoint"
 args = ["--config", "$HOME/Sluse/sluse.json", "--mcp"]
 TOML
+)
+    sum=$(printf '%s\n' "$want" | sha256sum | cut -d' ' -f1)
+    stamp="$HOME/.vibe/.sluse-written"
+    if [ "$(cat "$stamp" 2>/dev/null)" != "$sum" ]; then
+        mkdir -p "$HOME/.vibe" && printf '%s\n' "$want" > "$HOME/.vibe/config.toml" && printf '%s\n' "$sum" > "$stamp"
+    fi
 fi
 if cd "$HOME/Sluse/workspace" 2>/dev/null; then folder="~/Sluse/workspace"; else cd "$HOME"; folder="~"; fi
 seen="${XDG_CONFIG_HOME:-$HOME/.config}/sluse/$1-seen"

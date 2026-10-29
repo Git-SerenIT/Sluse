@@ -197,6 +197,7 @@ function authored() {
     },
     box: { memoryGB: radio('mem'), homeGB: radio('disk'), copyOut: $('copy-out').checked },
     accounts: accountsFromForm(),
+    vibe: vibeFromForm(),
   };
   if (!a.entra.tenantId || !a.entra.clientId) delete a.entra;
   return JSON.parse(JSON.stringify(a));
@@ -209,12 +210,19 @@ function accountsFromForm() {
   return a.chatgptWorkspaces.length || a.claudeOrganisation ? a : undefined;
 }
 
+/** Mistral Vibe's models (D-070, amended), from the Advanced step; absent when empty. */
+function vibeFromForm() {
+  const name = $('vibe-p-name').value.trim(), apiBase = $('vibe-p-base').value.trim(), models = words('vibe-p-models');
+  const v = { models: words('vibe-models'), provider: name || apiBase || models.length ? { name, apiBase, models } : undefined };
+  return v.models.length || v.provider ? v : undefined;
+}
+
 /** The choices, by step, to tell unsaved work and which steps it touched. */
 function snapshot() {
   return {
     Sources: JSON.stringify([depName(), S.sources.map(({ name, kind, scope, sensitivity }) => [name, kind, scope, sensitivity])]),
     Egress: JSON.stringify([[...S.bundles].sort(), $('own-hosts').value]),
-    Advanced: JSON.stringify(['v-files', 'v-mb', 'v-window', 'fetch-mb', 'egress-mb', 'acc-workspaces', 'acc-claude'].map((id) => $(id).value)
+    Advanced: JSON.stringify(['v-files', 'v-mb', 'v-window', 'fetch-mb', 'egress-mb', 'acc-workspaces', 'acc-claude', 'vibe-models', 'vibe-p-name', 'vibe-p-base', 'vibe-p-models'].map((id) => $(id).value)
       .concat([radio('mem'), radio('disk'), $('copy-out').checked, $('egress-log').checked])),
   };
 }
@@ -591,6 +599,10 @@ function load(a, path) {
   $('dep-name').value = a.deployment?.name ?? '';
   $('acc-workspaces').value = (a.accounts?.chatgptWorkspaces ?? []).join(' ');
   $('acc-claude').value = a.accounts?.claudeOrganisation ?? '';
+  $('vibe-models').value = (a.vibe?.models ?? []).join(' ');
+  $('vibe-p-name').value = a.vibe?.provider?.name ?? '';
+  $('vibe-p-base').value = a.vibe?.provider?.apiBase ?? '';
+  $('vibe-p-models').value = (a.vibe?.provider?.models ?? []).join(' ');
   // A SharePoint source from a file has no library id to browse by until its
   // site is found again (Q48).
   S.sources = (a.sources ?? []).map((s) => ({ ...s, scope: s.scope ?? [], mark: ['sharepoint', 'mcp'].includes(s.kind.type) ? 'from-file' : null }));
@@ -629,6 +641,7 @@ function startNew() {
   drawCards(6, 40);
   $('copy-out').checked = true; $('egress-log').checked = false; $('egress-mb').value = 50;
   $('acc-workspaces').value = ''; $('acc-claude').value = '';
+  for (const id of ['vibe-models', 'vibe-p-name', 'vibe-p-base', 'vibe-p-models']) $(id).value = '';
   buildBundles();
   drawSources(); drawAdvanced();
   setBaseline();
@@ -1610,7 +1623,7 @@ function drawAdvanced() {
   $('f-log').classList.toggle('field--invalid', zero);
   $('m-log').hidden = !zero;
 }
-for (const id of ['v-files', 'v-mb', 'v-window', 'fetch-mb', 'egress-mb', 'acc-workspaces', 'acc-claude']) $(id).oninput = () => { drawAdvanced(); changed(); };
+for (const id of ['v-files', 'v-mb', 'v-window', 'fetch-mb', 'egress-mb', 'acc-workspaces', 'acc-claude', 'vibe-models', 'vibe-p-name', 'vibe-p-base', 'vibe-p-models']) $(id).oninput = () => { drawAdvanced(); changed(); };
 for (const id of ['copy-out', 'egress-log']) $(id).onchange = () => { drawAdvanced(); changed(); };
 
 // ---- Review -------------------------------------------------------------------------

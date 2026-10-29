@@ -81,7 +81,7 @@ pub use audit::{
     PostureSnapshot, UserKind, UserRef, Writer,
 };
 pub use config::{
-    AccountsConfig, AuditConfig, AuditSinkKind, Authored, BoxSettings, GateConfig, Config, ConfigError, Deployment, Device,
+    AccountsConfig, VibeConfig, VibeProvider, AuditConfig, AuditSinkKind, Authored, BoxSettings, GateConfig, Config, ConfigError, Deployment, Device,
     EgressConfig, EgressLog, EndpointConfig, EntraConfig, Environment, Loaded, McpProtocol, SensitivityLevel,
     SourceConfig, SourceKind, VolumeConfig, SCHEMA_VERSION,
 };

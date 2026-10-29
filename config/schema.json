@@ -78,6 +78,17 @@
         "$ref": "#/$defs/SourceConfig"
       }
     },
+    "vibe": {
+      "description": "The models Mistral Vibe offers in the box (D-070, amended\n2026-10-29). Absent: Vibe's one built-in model.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VibeConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "volume": {
       "description": "When to raise a bulk-admission alert.",
       "$ref": "#/$defs/VolumeConfig"
@@ -467,6 +478,56 @@
     "SourceName": {
       "description": "A source's name in the config, which is also the first segment of every\nrequest path. Validate with [`SourceName::parse`]; `new_unchecked` is for\nvalues the loader has already accepted.",
       "type": "string"
+    },
+    "VibeConfig": {
+      "description": "The models Mistral Vibe offers (D-070, amended 2026-10-29): Mistral's,\nand one OpenAI-compatible provider's beside them. Written into Vibe's\nuser config, which the box's user can edit: what is offered, **not a\nlimit**. A limit is Mistral's managed config, the organisation's.",
+      "type": "object",
+      "properties": {
+        "models": {
+          "description": "Mistral's model ids, as its API names them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VibeProvider"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "VibeProvider": {
+      "description": "One OpenAI-compatible inference provider (TensorX, say). Its key is the\nperson's, in `<NAME>_API_KEY`; its host goes on `egress.allow`.",
+      "type": "object",
+      "properties": {
+        "apiBase": {
+          "description": "`https://host/path`, e.g. `https://api.tensorx.ai/v1`.",
+          "type": "string"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "description": "Lowercase letters, digits and hyphens; not `mistral` or `llamacpp`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "apiBase",
+        "models"
+      ]
     },
     "VolumeConfig": {
       "description": "Bulk-admission alerting.\n\nDetective, not preventive: the alert is raised and the admission proceeds\n(`docs/threat-model.md`). Semantics are provisional — count of *distinct\ncontent hashes* per session per source in a sliding window — and are one of\nthe things `docs/config.md` lists as unspecified.",

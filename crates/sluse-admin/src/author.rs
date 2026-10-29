@@ -130,6 +130,18 @@ pub fn warnings(a: &Authored, catalog: &Catalog) -> Vec<Warning> {
             say("bundle-trimmed", format!("{} is ticked without {}, so it may not work.", b.name, gone.join(", ")));
         }
     }
+    // D-070, amended: a provider the box cannot reach offers models that fail.
+    if let Some(p) = a.vibe.as_ref().and_then(|v| v.provider.as_ref()) {
+        if !egress.allow.iter().any(|h| h == p.host()) {
+            say("vibe-provider-unreachable", format!(
+                "Mistral Vibe's provider {} is at {}, which is not on the box's egress list, so its models will not answer. Add the host under Egress, Your own hosts.",
+                p.name, p.host()
+            ));
+        }
+    }
+    if a.vibe.is_some() {
+        say("vibe-models-offered", "Mistral Vibe offers the models you named, but the box's user can change Vibe's own settings. To limit the models, set them in Mistral's admin console for your organisation.".to_owned());
+    }
     let from_catalog = catalog.allow(&egress.bundles, &[]);
     for h in &egress.allow {
         if let Some(suffix) = h.strip_prefix("*.") {
@@ -192,7 +204,7 @@ pub fn save(path: &Path, d: &Draft) -> Result<(), String> {
 pub fn diff(old: &Authored, new: &Authored) -> Vec<String> {
     let mut out = Vec::new();
     let (o, n) = (serde_json::to_value(old).unwrap_or_default(), serde_json::to_value(new).unwrap_or_default());
-    for key in ["deployment", "entra", "sources", "maxFetchBytes", "volume", "box", "accounts"] {
+    for key in ["deployment", "entra", "sources", "maxFetchBytes", "volume", "box", "accounts", "vibe"] {
         if o.get(key) != n.get(key) {
             out.push(format!("{key} changed"));
         }
@@ -267,6 +279,18 @@ mod tests {
     }
 
     #[test]
+    fn vibes_models_are_offered_not_limited_and_an_unreachable_provider_is_warned_about() {
+        let c = Catalog::shipped();
+        let mut v = base();
+        v["vibe"] = json!({ "models": ["mistral-medium-latest"], "provider": { "name": "tensorx", "apiBase": "https://api.tensorx.ai/v1", "models": ["z-ai/glm-5.3"] } });
+        let codes = |v: serde_json::Value| author(&authored(v), &c).unwrap().warnings.iter().map(|w| w.code).collect::<Vec<_>>();
+        let got = codes(v.clone());
+        assert!(got.contains(&"vibe-models-offered") && got.contains(&"vibe-provider-unreachable"), "{got:?}");
+        v["egress"]["allow"].as_array_mut().unwrap().push(json!("api.tensorx.ai"));
+        assert!(!codes(v).contains(&"vibe-provider-unreachable"));
+    }
+
+    #[test]
     fn the_microsoft_sign_in_window_is_warned_about_and_listed_apart() {
         let c = Catalog::shipped();
         let mut v = base();
@@ -297,9 +321,11 @@ mod tests {
             "egress": { "catalog": 1, "bundles": ["box-system", "python"], "allow": ["archive.ubuntu.com", "pypi.org"],
                         "window": ["login.microsoftonline.com"], "log": { "enabled": true, "maxMB": 50 } },
             "box": { "memoryGB": 6, "homeGB": 80, "copyOut": false },
+            "vibe": { "models": ["mistral-medium-latest"], "provider": { "name": "tensorx", "apiBase": "https://api.tensorx.ai/v1", "models": ["z-ai/glm-5.3"] } },
         });
         let d = author(&authored(page), &Catalog::shipped()).expect("the page's file loads");
         assert!(d.text.contains("\"memoryGB\": 6") && d.text.contains("\"copyOut\": false"));
+        assert!(d.text.contains("\"apiBase\": \"https://api.tensorx.ai/v1\""), "vibeFromForm()'s shape");
     }
 
     #[test]

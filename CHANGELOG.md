@@ -5,17 +5,28 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.15
+
+**For the administrator**
+- **Mistral Vibe's models** in Advanced: Mistral's model ids, and
+  optionally one OpenAI-compatible provider with its models (TensorX, say;
+  its host under Egress, each person's own key). Without them Vibe offers
+  only Mistral Medium 3.5. What Vibe offers, not a limit: the box's user can
+  change Vibe's settings; limit the models in Mistral's admin console.
+  Review warns when the provider's host is not on the egress list.
+- `login.live.com` is out of the Microsoft sign-in window again (catalog
+  9): it is the sign-in for personal Microsoft accounts only. ChatGPT signs
+  in by its device code.
+
+**Not proven:** not yet run on a device.
+
 ## 0.1.14
 
 **For the administrator**
 - **Microsoft sign-in, opened by the person** now includes
   `sso.claude.com`, which Claude's sign-in with Microsoft needs, and
-  `login.live.com`, without which ChatGPT's Continue with Microsoft does not
-  finish. `login.live.com` is also where personal Microsoft accounts sign
-  in: in a window they reach Microsoft's sign-in too. An app's organisation
-  pin keeps them out of your seats where the app has one: Claude Code and
-  Codex do, Claude Desktop does not, ChatGPT's plain chat is not documented
-  (SECURITY.md).
+  `login.live.com`, for ChatGPT's Continue with Microsoft (taken out again
+  in 0.1.15).
 - **Mistral Vibe's group** adds `api.mistral.ai` and `chat.mistral.ai`:
   signed in with a Mistral account, Vibe sends its prompts there, Mistral's
   global endpoint, not the EU one.

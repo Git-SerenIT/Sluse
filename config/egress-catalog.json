@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "about": "The egress bundles Sluse Admin offers (D-038 point 5). A config holds the bundles chosen and every host written out; only the hosts are enforced, and a newer catalog never widens a box by itself. 'measured' says what of a bundle was measured, when and how, or is null where its hosts are still the M9 draft.",
   "bundles": [
     {
@@ -136,10 +136,9 @@
         "logincdn.msauth.net",
         "api.workos.com",
         "auth.workos.com",
-        "sso.claude.com",
-        "login.live.com"
+        "sso.claude.com"
       ],
-      "measured": "2026-10-05, L1: the hosts of Claude's and ChatGPT's Entra sign-in, by the proxy's refusals (D-044); WorkOS is Claude's single sign-on. 2026-10-29, L1: Claude's sign-in with Microsoft needs sso.claude.com; ChatGPT's (Continue with Microsoft) does not finish without login.live.com, which is also where personal Microsoft accounts sign in. Mistral's not yet measured"
+      "measured": "2026-10-05, L1: the hosts of Claude's and ChatGPT's Entra sign-in, by the proxy's refusals (D-044); WorkOS is Claude's single sign-on. 2026-10-29, L1: Claude's sign-in with Microsoft needs sso.claude.com; ChatGPT's Continue with Microsoft goes to login.live.com, personal accounts only, left out (jok): ChatGPT signs in by device code. Mistral's not yet measured"
     }
   ]
 }

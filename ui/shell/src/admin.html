@@ -352,6 +352,14 @@
     <label class="field"><span class="field__label">ChatGPT workspace ids accepted</span><input class="input input--mono" type="text" id="acc-workspaces"><span class="field__hint">Separated by spaces or commas. Codex and ChatGPT's desktop app in the box sign in only with ChatGPT, to one of these workspaces. In ChatGPT's admin settings.</span></label>
     <label class="field"><span class="field__label">Claude organisation id</span><input class="input input--mono" type="text" id="acc-claude" placeholder="00000000-0000-0000-0000-000000000000"><span class="field__hint">Claude Code in the box signs in only to this organisation. In Claude's admin settings, Organization.</span></label>
   </section>
+  <section class="ad-sec" aria-labelledby="vibe-t">
+    <div class="ad-sec__head"><h2 class="t-h3" id="vibe-t">Mistral Vibe's models</h2></div>
+    <p class="ad-sec__lead">The models Vibe offers in the box, the first as its default. Empty, Vibe offers only its own Mistral Medium 3.5. The box's user can change Vibe's settings, so this is what is offered, not a limit: to limit the models, set them in Mistral's admin console.</p>
+    <label class="field"><span class="field__label">Mistral's models</span><input class="input input--mono" type="text" id="vibe-models"><span class="field__hint">Model ids as Mistral's API names them, separated by spaces or commas. Mistral Medium 3.5 is mistral-vibe-cli-latest.</span></label>
+    <label class="field"><span class="field__label">Another provider's name</span><input class="input input--mono" type="text" id="vibe-p-name" placeholder="tensorx"><span class="field__hint">Optional: one OpenAI-compatible provider beside Mistral. Lowercase letters, digits and hyphens. Each person enters their own key for it.</span></label>
+    <label class="field"><span class="field__label">Its address</span><input class="input input--mono" type="text" id="vibe-p-base" placeholder="https://api.tensorx.ai/v1"><span class="field__hint">Its host goes under Egress, Your own hosts.</span></label>
+    <label class="field"><span class="field__label">Its models</span><input class="input input--mono" type="text" id="vibe-p-models"><span class="field__hint">Model ids as the provider names them, separated by spaces or commas.</span></label>
+  </section>
   <section class="ad-sec" aria-labelledby="l-t">
     <div class="togglerow">
       <span class="srccard__kind"><i data-icon="journal"></i></span>

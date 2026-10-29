@@ -144,6 +144,11 @@ pub struct Authored {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accounts: Option<AccountsConfig>,
 
+    /// The models Mistral Vibe offers in the box (D-070, amended
+    /// 2026-10-29). Absent: Vibe's one built-in model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vibe: Option<VibeConfig>,
+
     #[serde(default, rename = "box")]
     pub box_settings: BoxSettings,
 }
@@ -259,6 +264,7 @@ pub struct Config {
     pub egress: Option<EgressConfig>,
     pub box_settings: BoxSettings,
     pub accounts: Option<AccountsConfig>,
+    pub vibe: Option<VibeConfig>,
 }
 
 impl Config {
@@ -285,6 +291,7 @@ impl Config {
             entra: a.entra,
             egress: a.egress,
             accounts: a.accounts,
+            vibe: a.vibe,
             box_settings: a.box_settings,
         }
     }
@@ -396,6 +403,39 @@ pub enum Environment {
     Local,
     /// A demo-tenant workstation with a real signed-in user.
     Demo,
+}
+
+/// The models Mistral Vibe offers (D-070, amended 2026-10-29): Mistral's,
+/// and one OpenAI-compatible provider's beside them. Written into Vibe's
+/// user config, which the box's user can edit: what is offered, **not a
+/// limit**. A limit is Mistral's managed config, the organisation's.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct VibeConfig {
+    /// Mistral's model ids, as its API names them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<VibeProvider>,
+}
+
+/// One OpenAI-compatible inference provider (TensorX, say). Its key is the
+/// person's, in `<NAME>_API_KEY`; its host goes on `egress.allow`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct VibeProvider {
+    /// Lowercase letters, digits and hyphens; not `mistral` or `llamacpp`.
+    pub name: String,
+    /// `https://host/path`, e.g. `https://api.tensorx.ai/v1`.
+    pub api_base: String,
+    pub models: Vec<String>,
+}
+
+impl VibeProvider {
+    /// The host in `api_base`, for egress.
+    pub fn host(&self) -> &str {
+        self.api_base.trim_start_matches("https://").split(['/', ':']).next().unwrap_or_default()
+    }
 }
 
 /// The organisations the box's AI runtimes may sign in to (D-072). The
@@ -990,6 +1030,25 @@ fn validate(c: &Authored) -> Result<(), ConfigError> {
         }
         if let Some(o) = a.claude_organisation.as_ref().filter(|o| !is_guid(o)) {
             return bad(format!("claudeOrganisation \"{o}\" is not a UUID"));
+        }
+    }
+    if let Some(v) = &c.vibe {
+        let bad = |reason: String| Err(ConfigError::Invalid(format!("vibe: {reason}")));
+        let model_id = |m: &String| !m.is_empty() && m.len() <= 200 && !m.chars().any(|c| c.is_whitespace() || c.is_control() || c == '"' || c == '\\');
+        let models = v.models.iter().chain(v.provider.iter().flat_map(|p| &p.models));
+        if let Some(m) = models.clone().find(|m| !model_id(m)) {
+            return bad(format!("\"{m}\" is not a model id"));
+        }
+        if let Some(p) = &v.provider {
+            if p.name.is_empty() || !p.name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') || p.name == "mistral" || p.name == "llamacpp" {
+                return bad(format!("provider name \"{}\": lowercase letters, digits and hyphens, not mistral or llamacpp", p.name));
+            }
+            if !p.api_base.starts_with("https://") || !valid_egress_entry(p.host()) || p.host().starts_with("*.") || p.api_base.chars().any(|c| c.is_whitespace() || c == '"' || c == '\\') {
+                return bad(format!("provider apiBase \"{}\" is not an https address", p.api_base));
+            }
+            if p.models.is_empty() {
+                return bad(format!("provider {} names no models", p.name));
+            }
         }
     }
 
@@ -1655,6 +1714,29 @@ mod tests {
             let mut v = valid_json();
             v["accounts"] = serde_json::json!({ field: value });
             assert!(matches!(load_value(v), Err(ConfigError::Invalid(_))), "{field} {value}");
+        }
+    }
+
+    /// D-070, amended 2026-10-29: Vibe's models, Mistral's and one provider's.
+    #[test]
+    fn vibe_names_models_and_one_provider() {
+        let mut v = valid_json();
+        v["vibe"] = serde_json::json!({
+            "models": ["mistral-medium-latest", "devstral-latest"],
+            "provider": { "name": "tensorx", "apiBase": "https://api.tensorx.ai/v1", "models": ["z-ai/glm-5.3"] }
+        });
+        let vibe = load_value(v).unwrap().config.vibe.unwrap();
+        assert_eq!(vibe.provider.unwrap().host(), "api.tensorx.ai");
+        for bad in [
+            serde_json::json!({ "models": ["two words"] }),
+            serde_json::json!({ "provider": { "name": "mistral", "apiBase": "https://a.example/v1", "models": ["m"] } }),
+            serde_json::json!({ "provider": { "name": "x", "apiBase": "http://a.example/v1", "models": ["m"] } }),
+            serde_json::json!({ "provider": { "name": "x", "apiBase": "https://10.0.0.1/v1", "models": ["m"] } }),
+            serde_json::json!({ "provider": { "name": "x", "apiBase": "https://a.example/v1", "models": [] } }),
+        ] {
+            let mut v = valid_json();
+            v["vibe"] = bad.clone();
+            assert!(matches!(load_value(v), Err(ConfigError::Invalid(_))), "{bad}");
         }
     }
 

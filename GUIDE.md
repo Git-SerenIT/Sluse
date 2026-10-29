@@ -117,7 +117,12 @@ check it against (`Get-FileHash Sluse.msi`); it is not signed yet.
    back to their own codes: a device code, or one sent by email. Also recommended: "Stay
    signed in?" off in your company branding.
 5. **Advanced:** the volume alert, the largest fetch, the box's memory and
-   disk, copying text out, the egress log.
+   disk, copying text out, the egress log, the AI apps' accounts, and
+   **Mistral Vibe's models**: Mistral's, and optionally one OpenAI-compatible
+   provider's (TensorX, say; its host under Egress, each person's own key).
+   Without them Vibe offers only Mistral Medium 3.5. The box's user can
+   change Vibe's settings, so this is what is offered, not a limit: limit
+   the models in Mistral's admin console.
 6. **Review:** what the box would refuse, the warnings, what changed.
 7. **Publish:** pick `Sluse.msi`; save the configuration and publish it to
    Intune for a device group, or save a `.intunewin` to upload by hand.
