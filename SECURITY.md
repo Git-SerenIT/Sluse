@@ -57,7 +57,7 @@ on a device.
 | Claude Desktop | In the box | Nothing yet |
 | Codex | In the box, in its browser, with ChatGPT's sign-in; a device code optional | `/etc/codex/requirements.toml`: ChatGPT sign-in only, to the listed workspaces |
 | ChatGPT Desktop | In the box, in its browser | The same `requirements.toml`: it is OpenAI's Codex app. Whether its plain chat obeys the pin, not only its Codex side, is not documented |
-| Mistral Vibe | In the box, a Mistral key, Mistral's EU endpoint | Nothing: Vibe has no documented organisation pin. Which inference provider and sign-in it uses waits on Mistral's answer about its terms |
+| Mistral Vibe | In the box, a Mistral account (Mistral's global endpoint) or a key (its EU endpoint) | Nothing: Vibe has no documented organisation pin. Which inference provider and sign-in it uses waits on Mistral's answer about its terms |
 
 ## Invariants
 
@@ -173,9 +173,8 @@ Built, and not yet run on a device:
 - the App Control policy on Sluse Artifacts;
 - whether Conditional Access cuts off a device when Gate Core refreshes the
   person's token as SYSTEM;
-- Gate Front's start as LocalService;
-- Codex and Mistral Vibe, which are installed and wired like the other
-  runtimes and not checked. Vibe uses Mistral's EU endpoint; where Mistral
+- Mistral Vibe end to end. Signed in with a Mistral account it uses
+  Mistral's global endpoint, with a key its EU endpoint; where Mistral
   processes and keeps what it is sent is Mistral's term, not Sluse's claim.
 
 ## Out of scope

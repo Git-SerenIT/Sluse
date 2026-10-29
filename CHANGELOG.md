@@ -5,6 +5,25 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.1.14
+
+**For the administrator**
+- **Microsoft sign-in, opened by the person** now includes
+  `sso.claude.com`, which Claude's sign-in with Microsoft needs, and
+  `login.live.com`, without which ChatGPT's Continue with Microsoft does not
+  finish. `login.live.com` is also where personal Microsoft accounts sign
+  in: in a window they reach Microsoft's sign-in too. An app's organisation
+  pin keeps them out of your seats where the app has one: Claude Code and
+  Codex do, Claude Desktop does not, ChatGPT's plain chat is not documented
+  (SECURITY.md).
+- **Mistral Vibe's group** adds `api.mistral.ai` and `chat.mistral.ai`:
+  signed in with a Mistral account, Vibe sends its prompts there, Mistral's
+  global endpoint, not the EU one.
+- Both in catalog 8. Open the deployment in Sluse Admin: Review shows the
+  added hosts; publish it again.
+
+**Not proven:** the rest of the sign-in on a device.
+
 ## 0.1.13
 
 **For the administrator**

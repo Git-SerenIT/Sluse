@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "about": "The egress bundles Sluse Admin offers (D-038 point 5). A config holds the bundles chosen and every host written out; only the hosts are enforced, and a newer catalog never widens a box by itself. 'measured' says what of a bundle was measured, when and how, or is null where its hosts are still the M9 draft.",
   "bundles": [
     {
@@ -68,16 +68,18 @@
     {
       "id": "mistral",
       "name": "Mistral Vibe",
-      "description": "Mistral's EU inference endpoint and the sign-in for Mistral Vibe. Vibe itself installs from PyPI.",
+      "description": "Mistral's inference endpoints, EU and global, and the sign-in for Mistral Vibe. Signed in with a Mistral account, Vibe uses the global endpoint, which has no EU location commitment. Vibe itself installs from PyPI.",
       "default": false,
       "uploads": true,
       "hosts": [
         "api.eu.mistral.ai",
+        "api.mistral.ai",
+        "chat.mistral.ai",
         "auth.mistral.ai",
         "v2.auth.mistral.ai",
         "console.mistral.ai"
       ],
-      "measured": "2026-10-28, L1: Vibe's sign-in needs auth.mistral.ai and v2.auth.mistral.ai, which the bundle lacked (refused by the proxy). The rest of its hosts not yet measured"
+      "measured": "2026-10-28, L1: Vibe's sign-in needs auth.mistral.ai and v2.auth.mistral.ai, which the bundle lacked (refused by the proxy). 2026-10-29, L1: signed in, every prompt went to api.mistral.ai and chat.mistral.ai, not the EU endpoint the box's config names. The rest of its hosts not yet measured"
     },
     {
       "id": "python",
@@ -133,9 +135,11 @@
         "aadcdn.msauth.net",
         "logincdn.msauth.net",
         "api.workos.com",
-        "auth.workos.com"
+        "auth.workos.com",
+        "sso.claude.com",
+        "login.live.com"
       ],
-      "measured": "2026-10-05, L1: the hosts of Claude's and ChatGPT's Entra sign-in, by the proxy's refusals (D-044); WorkOS is Claude's single sign-on. Mistral's not yet measured"
+      "measured": "2026-10-05, L1: the hosts of Claude's and ChatGPT's Entra sign-in, by the proxy's refusals (D-044); WorkOS is Claude's single sign-on. 2026-10-29, L1: Claude's sign-in with Microsoft needs sso.claude.com; ChatGPT's (Continue with Microsoft) does not finish without login.live.com, which is also where personal Microsoft accounts sign in. Mistral's not yet measured"
     }
   ]
 }
