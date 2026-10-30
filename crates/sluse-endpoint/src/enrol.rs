@@ -36,6 +36,8 @@ pub enum Outcome {
     Unchanged,
     /// The host has not sent a bootstrap yet.
     NoBootstrap,
+    /// The Gate did not answer the connection: nothing was sent.
+    NotReached,
 }
 
 /// Enrol into `config`'s directory from the pool at `pool`.
@@ -62,9 +64,12 @@ pub async fn run(config: &Path, pool: &Path, owner: Option<(u32, u32)>) -> Resul
         public_key: key.public_key_raw().iter().map(|b| format!("{b:02x}")).collect(),
         hostname: hostname(),
     };
-    let resp = crate::gate_client::enrol(&boot.enrol, boot.pin.clone(), &req)
+    let Some(resp) = crate::gate_client::enrol(&boot.enrol, boot.pin.clone(), &req)
         .await
-        .map_err(|e| format!("{}: {e}", boot.enrol))?;
+        .map_err(|e| format!("{}: {e}", boot.enrol))?
+    else {
+        return Ok(Outcome::NotReached);
+    };
 
     // The config decides where the key and certificate go, so it is read
     // before anything is written, and refused if it would put them elsewhere.

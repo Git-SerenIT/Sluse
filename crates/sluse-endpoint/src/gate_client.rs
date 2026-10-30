@@ -239,11 +239,14 @@ pub fn build_client(loaded: &Loaded) -> Result<Client, ClientError> {
 /// Enrol this box (slice 2): the enrolment listener, pinned to the same leaf
 /// as the mTLS one, with no client certificate, because the box has none yet.
 /// The one call in this crate made without one.
+/// `Ok(None)` when the Gate was not reached: no connection, so nothing was
+/// sent and the token is unspent, and trying again is safe. Anything after
+/// the connection, a refusal included, is final.
 pub async fn enrol(
     url: &str,
     pin: ContentHash,
     req: &sluse_proto::wire::EnrolRequest,
-) -> Result<sluse_proto::wire::EnrolResponse, SluseError> {
+) -> Result<Option<sluse_proto::wire::EnrolResponse>, SluseError> {
     let tls = ClientConfig::builder()
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(PinnedVerifier::new(pin)))
@@ -259,9 +262,12 @@ pub async fn enrol(
         .post(format!("{}{}", url.trim_end_matches('/'), sluse_proto::wire::route::ENROL))
         .json(req)
         .send()
-        .await
-        .map_err(transport_cause)?;
-    json_or_error(res).await
+        .await;
+    let res = match res {
+        Err(e) if e.is_connect() && !innermost(&e).contains("certificate pin mismatch") => return Ok(None),
+        r => r.map_err(transport_cause)?,
+    };
+    json_or_error(res).await.map(Some)
 }
 
 /// Ask a Gate whether it is serving, without taking a session from it.

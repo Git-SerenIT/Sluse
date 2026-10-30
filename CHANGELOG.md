@@ -5,6 +5,50 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.2.0
+
+v0.2: tool servers through Sluse Gate, the AI providers' own connectors
+read in the tenant, four AI runtimes in the box, Microsoft sign-in opened
+by the person, and the clipboard recorded. 0.1.1 to 0.1.15 below hold the
+details; this version's own changes follow the summary.
+
+**Since 0.1.0**
+- **Tool servers (MCP) as sources**, called as the person, only the tools
+  the admin ticks; Sluse Admin adds one step by step (0.1.3, 0.1.7, 0.1.8).
+- **Sluse Gate in two halves:** Gate Front, one per box, as LocalService,
+  holding no token; Gate Core, as SYSTEM, holding the person's (0.1.2).
+- **The AI providers' own connectors** read at Tenant, with an offer to
+  turn an app's sign-in off (0.1.3).
+- **The runtimes:** Mistral Vibe (0.1.1), its models from the
+  configuration (0.1.15); ChatGPT's desktop app (0.1.4); Claude Code and
+  Codex held to your organisation's account (0.1.4).
+- **Microsoft sign-in, opened by the person**, for five minutes, on by
+  default (0.1.9, 0.1.12).
+- **The clipboard recorded both ways** (event 2000), into the box only
+  when the person pastes (0.1.10).
+
+**Run on a test device:** tool servers as the person; Gate Front as
+LocalService; Claude Code's and Codex's pins refusing an outside account;
+ChatGPT's app; Claude's Microsoft sign-in through the window; Mistral Vibe
+with two models from the configuration; the clipboard's records.
+
+**For the person**
+- **A box on an older system takes its update when it is opened**, its
+  files kept: when a new Sluse has prepared a new system for the box and
+  the box is closed, opening it resets the box's system first. A box that
+  is running keeps the offer to reset. Before, the box stayed on its old
+  system, and a new setting it could not read kept the window from
+  connecting at all.
+- **A box that could not connect to Sluse says so at once,** with the
+  cause under Details, instead of waiting out the open.
+- **Sluse no longer tries again by itself and counts the tries** ("Try 2
+  of 20"). While the box opens, Sluse waits for it; once a connection is
+  lost or refused, the window says so, and Try again is yours.
+
+**Not proven:** this version's own changes above, not yet run on a
+device; ChatGPT's workspace sign-in through the Microsoft window. Code
+signing comes in 0.3.
+
 ## 0.1.15
 
 **For the administrator**

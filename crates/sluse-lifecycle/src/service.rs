@@ -246,6 +246,9 @@ pub struct Service {
     /// VMs whose console showed a login prompt since this service started
     /// them: a system without Sluse, whose screen never comes (D-066).
     no_sluse: Arc<Mutex<HashSet<String>>>,
+    /// The boxes whose enrolment failed since this open booted them, said on
+    /// their serial console: the open has failed, at once.
+    enrol_failed: Arc<Mutex<HashSet<String>>>,
     /// Who quit the shell during their open (Q26, Q75): that open leaves the
     /// box closed. Cleared when the next open begins.
     quit: Mutex<std::collections::HashSet<String>>,
@@ -403,6 +406,7 @@ impl Service {
             consoles: Arc::default(),
             console_up: Arc::default(),
             no_sluse: Arc::default(),
+            enrol_failed: Arc::default(),
             quit: Mutex::default(),
             #[cfg(windows)]
             job: crate::winsys::KillOnClose::new()?,
@@ -468,7 +472,9 @@ impl Service {
                 let mut plan = match boxes::load(&self.root, sid) {
                     // Already open: no steps, the same screen at once.
                     Ok(Some(_)) if running => return vec![],
-                    // A box that exists waits only for a build under way.
+                    // A box that exists waits only for a build under way, and
+                    // one on an older base is reset onto the current first.
+                    Ok(Some(r)) if self.update_for(&r) => [vec![step(Phase::Reset)], self.base_plan(true), vec![remake]].concat(),
                     Ok(Some(_)) => self.base_plan(true),
                     _ => [self.base_plan(false), vec![step(Phase::Make)]].concat(),
                 };
@@ -572,6 +578,24 @@ impl Service {
                 Err(e) => failed(PipeFailure::Box, e),
             },
             PipeRequest::Open { keyboard, timezone, sign_in, theme } => {
+                // A closed box on an older base takes the update first, its
+                // files kept: its system's endpoint may not read the config
+                // the new package brought (L1, 2026-10-30: 0.1.15's `vibe`
+                // refused at enrolment, the window never connected). jok,
+                // 2026-10-30. A running box keeps the offer to reset.
+                let rec = if self.update_for(&rec) && self.hyperv.state(&rec.vm) == Ok(BoxState::Off) {
+                    self.log_device("open", &format!("{}: on an older base; reset onto the current one, files kept", rec.vm));
+                    match self.reset(caller, sid, false, send) {
+                        PipeEvent::Closed => match boxes::load(&self.root, sid) {
+                            Ok(Some(r)) => r,
+                            Ok(None) => return failed(PipeFailure::NoBox, "There is no box to open."),
+                            Err(e) => return failed(PipeFailure::Box, format!("the box record: {e}")),
+                        },
+                        other => return other,
+                    }
+                } else {
+                    rec
+                };
                 let open = Open { keyboard: &keyboard, timezone, sign_in, theme, received, gone };
                 self.open(caller, &rec, open, send)
             }
@@ -722,6 +746,9 @@ impl Service {
         let Some(r) = running.as_mut().filter(|r| r.sid == sid) else {
             return failed(PipeFailure::NoBox, "Your box is not open.");
         };
+        if let Some(e) = self.enrol_failure(sid, &r.vm) {
+            return failed(PipeFailure::Box, e);
+        }
         let last_s = self.last_time(Phase::Console);
         let answered = match self.console_up.lock().unwrap_or_else(|p| p.into_inner()).get(&r.vm) {
             Some(None) => false,
@@ -831,6 +858,7 @@ impl Service {
         if was_off {
             self.console_up.lock().unwrap_or_else(|p| p.into_inner()).insert(rec.vm.clone(), None);
             self.no_sluse.lock().unwrap_or_else(|p| p.into_inner()).remove(&rec.vm);
+            self.enrol_failed.lock().unwrap_or_else(|p| p.into_inner()).remove(&rec.vm);
         }
         if let Err(e) = self.hyperv.start(&rec.vm, steps.left()) {
             return undo(failed(PipeFailure::Box, steps.why(e)));
@@ -885,7 +913,7 @@ impl Service {
                 }
             }
         }
-        match self.hand_over(rec, &boot, theme, &mut steps, send) {
+        match self.hand_over(sid, rec, &boot, theme, &mut steps, send) {
             // The window quit while the box started: it stops opening, and a
             // box this open started is stopped (Q75). One running from before
             // runs on, as the window said it would.
@@ -941,7 +969,7 @@ impl Service {
             return;
         }
         let (consoles, vm, dir) = (self.consoles.clone(), vm.to_owned(), self.root.join("boxes").join(sid));
-        let (up, no_sluse) = (self.console_up.clone(), self.no_sluse.clone());
+        let (up, no_sluse, enrol_failed) = (self.console_up.clone(), self.no_sluse.clone(), self.enrol_failed.clone());
         std::thread::spawn(move || {
             let mut said = |s| match s {
                 crate::console::Said::ConsoleUp => {
@@ -951,6 +979,9 @@ impl Service {
                 }
                 crate::console::Said::NoSluse => {
                     no_sluse.lock().unwrap_or_else(|p| p.into_inner()).insert(vm.clone());
+                }
+                crate::console::Said::EnrolFailed => {
+                    enrol_failed.lock().unwrap_or_else(|p| p.into_inner()).insert(vm.clone());
                 }
             };
             crate::console::follow(&crate::console::pipe_name(&vm), &dir, &mut said);
@@ -962,6 +993,7 @@ impl Service {
     /// its screen.
     fn hand_over(
         &self,
+        sid: &str,
         rec: &boxes::BoxRecord,
         boot: &Bootstrap,
         theme: Option<Theme>,
@@ -982,6 +1014,7 @@ impl Service {
             self.no_sluse.lock().unwrap_or_else(|p| p.into_inner()).contains(&rec.vm).then(|| {
                 "the box's system has no Sluse on it: its console shows a login prompt, which only a system Sluse was never installed on shows".to_owned()
             })
+            .or_else(|| self.enrol_failure(sid, &rec.vm))
         };
         wait_for_port(rec.address, VNC_PORT, BOX_TIMEOUT, incomplete).map_err(|e| failed(PipeFailure::Box, e))?;
         Ok(format!("ws://{}:{VNC_PORT}", rec.address))
@@ -1328,6 +1361,16 @@ impl Service {
         // failed build noted it (D-034 wording review, 2026-10-01).
         self.build_failed.lock().unwrap_or_else(|p| p.into_inner()).as_ref()?;
         Some("An update for your box could not be prepared. Your box works as before; Sluse tries again by itself and when the computer restarts.".into())
+    }
+
+    /// Why the box's enrolment failed, from its console log, once the box
+    /// said it did (see [`crate::console::ENROL_FAILED`]).
+    fn enrol_failure(&self, sid: &str, vm: &str) -> Option<String> {
+        if !self.enrol_failed.lock().unwrap_or_else(|p| p.into_inner()).contains(vm) {
+            return None;
+        }
+        let cause = crate::console::enrol_cause(&self.box_dir(sid));
+        Some(format!("the box could not enrol: {}", cause.as_deref().unwrap_or("its console log says why")))
     }
 
     fn current_base(&self) -> Option<BaseRecord> {
@@ -2149,6 +2192,11 @@ mod tests {
             *s.build_step.lock().unwrap() = Some(s.progress(Convert, "Converting".into(), Some(12)));
             assert_eq!(phases(s.plan(SID, &open)), [Convert, Install, Check, Start, Gate, Wait]);
         }
+        // A newer base on the device: the open resets the box onto it first.
+        std::fs::create_dir_all(d.path().join("images")).unwrap();
+        std::fs::write(d.path().join("images").join("base-2.vhdx"), b"").unwrap();
+        std::fs::write(d.path().join("images").join("base.json"), br#"{"name":"base-2.vhdx","bundle":"x","built":"2026-10-30T00:00:00Z"}"#).unwrap();
+        assert_eq!(phases(s.plan(SID, &open)), [Reset, Make, Check, Start, Gate, Wait]);
         assert!(s.plan(SID, &PipeRequest::Status).is_empty() && s.plan(SID, &PipeRequest::Console).is_empty());
         // Close: its plan with its first progress, and none after it. Hyper-V
         // is not here, so it then fails, which is what ends the answer.

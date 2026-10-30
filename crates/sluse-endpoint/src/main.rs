@@ -110,8 +110,10 @@ fn main() -> ExitCode {
 }
 
 /// `--enrol`. Exit 0 when the box has an identity for this bootstrap; 75
-/// (`EX_TEMPFAIL`) when the host has sent none yet, so the unit tries again;
-/// 1 when enrolment failed.
+/// (`EX_TEMPFAIL`) when the host has sent none yet or the Gate did not
+/// answer the connection, so the unit tries again; 1 when enrolment failed,
+/// which is final: the host sees it on the serial console and the window
+/// says so (jok, 2026-10-30: retrying is the person's decision).
 async fn run_enrol(cli: &Cli) -> ExitCode {
     let owner = match cli.owner.as_deref().map(sluse_endpoint::enrol::parse_owner).transpose() {
         Ok(o) => o,
@@ -136,6 +138,10 @@ async fn run_enrol(cli: &Cli) -> ExitCode {
         }
         Ok(sluse_endpoint::enrol::Outcome::NoBootstrap) => {
             eprintln!("no bootstrap from the host yet");
+            ExitCode::from(75)
+        }
+        Ok(sluse_endpoint::enrol::Outcome::NotReached) => {
+            eprintln!("the Gate did not answer yet");
             ExitCode::from(75)
         }
         Err(e) => {

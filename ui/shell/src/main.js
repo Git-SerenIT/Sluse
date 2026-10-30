@@ -145,7 +145,7 @@ function progress(p) {
   if (p.plan?.length) att.plan = p.plan;
   const phase = p.phase ?? null;
   if (phase !== (att.cur?.phase ?? null) || (!phase && p.step !== att.cur?.step)) {
-    slog('step:', phase ?? '-', p.step, p.tries ? `(try ${p.tries})` : '');
+    slog('step:', phase ?? '-', p.step);
     if (att.cur) att.done.push({ phase: att.cur.phase, name: att.cur.name, secs: secondsSince(att.cur.since) });
     att.cur = { phase, name: phase ? nameFor(phase) : p.step, since: Date.now(), pct: null, pctSince: Date.now() };
   }
@@ -156,8 +156,7 @@ function progress(p) {
   if ((p.pct ?? null) !== c.pct) { c.pct = p.pct ?? null; c.pctSince = Date.now(); }
   c.sub = phase === 'sign-in' ? (signinWindow ? 'Waiting for you in the sign-in window' : 'A Microsoft window opens only if Microsoft needs you.')
     : phase === 'console' ? "The box's screen is up. Sluse shows it once the console answers."
-      : p.tries ? `Try ${p.tries} of ${RETRIES}`
-        : p.step !== c.name ? (c.pct != null ? `${p.step}, ${c.pct}%` : p.step) : '';
+      : p.step !== c.name ? (c.pct != null ? `${p.step}, ${c.pct}%` : p.step) : '';
   renderLedger();
   renderWait();
   edges();
@@ -427,8 +426,10 @@ $('show-signin').onclick = () => invoke('show_sign_in');
 
 // ---- The viewer -----------------------------------------------------------
 // The box may still be applying this open's secret when the port first
-// answers, so a refused or dropped connection is retried for a while.
-const RETRIES = 20;
+// answers, so while the open waits for its console a refused or dropped
+// connection is tried again, quietly: the service's wait decides when the
+// open has failed. After that a drop is said, and trying again is the
+// person's decision, not a count of ours (jok, 2026-10-30).
 
 // The viewer now showing, and whether it was stopped on purpose, so that a
 // reset's disconnect is not taken for a box that stopped answering.
@@ -438,24 +439,14 @@ let box = null;
 // This open's wait for the box's console (Q9): the picture shows once it has
 // answered, and `opening` tells this open's answer from an earlier one's.
 let consoleUp = Promise.resolve();
+let consoleSettled = true;
 let opening = 0;
-let reconnectClock = null;
-// Tries since the screen last answered: a drop after a good connection gets
-// its full 20 again.
-let tries = 0;
 
 function stopViewer() {
   stopped = true;
   if (viewer) viewer.disconnect();
   viewer = null;
   clearTimeout(signInTimer);
-  endReconnect();
-}
-
-function endReconnect() {
-  clearInterval(reconnectClock);
-  $('reconnecting').hidden = true;
-  $('still').hidden = true;
 }
 
 function connect() {
@@ -478,8 +469,6 @@ function connect() {
   rfb.addEventListener('serververification', () => rfb.approveServer());
   rfb.addEventListener('connect', () => (slog('viewer: connected'), consoleUp.then(() => {
     if (viewer !== rfb) return;
-    tries = 0;
-    endReconnect();
     if (state() !== 'running') {
       // Q77: only after a first build or a reset, and only when the window
       // is not in front.
@@ -495,21 +484,7 @@ function connect() {
   rfb.addEventListener('disconnect', (e) => {
     slog('viewer: disconnected', e.detail.clean ? 'clean' : 'not clean', stopped ? '(stopped)' : '');
     if (stopped || viewer !== rfb) return;
-    if (tries < RETRIES) {
-      tries += 1;
-      if (state() === 'running') {
-        // The last frame stays, greyed, with the tries counted over it.
-        try { $('still').src = rfb.toDataURL(); $('still').hidden = false; } catch { /* no frame yet */ }
-        $('reconnecting').hidden = false;
-        if (!reconnectClock) {
-          const from = Date.now();
-          reconnectClock = setInterval(() => { $('rclock').textContent = clockText(secondsSince(from)); }, 1000);
-          $('rclock').textContent = '0:00';
-        }
-        $('rtry').textContent = `Try ${tries} of ${RETRIES}`;
-      } else {
-        progress({ step: 'Connecting to your box', phase: 'connect', tries });
-      }
+    if (state() !== 'running' && !consoleSettled) {
       setTimeout(() => { if (viewer === rfb) connect(); }, 1000);
     } else {
       stopViewer();
@@ -878,13 +853,14 @@ async function open(carryOn = false) {
     // wait never shows the screen's step once the screen answered (D-066).
     progress({ step: NAME.connect, phase: 'connect' });
     consoleUp = invoke('wait_for_console');
+    consoleSettled = false;
+    consoleUp.finally(() => { consoleSettled = true; }).catch(() => {});
     consoleUp.then(() => slog('console: answered'), () => {});
     consoleUp.catch((e) => {
       if (mine !== opening || !viewer) return;
       stopViewer();
       failed(e, 'open');
     });
-    tries = 0;
     connect();
     keepSignedIn(true);
     sendTheme();

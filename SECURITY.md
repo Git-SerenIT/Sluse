@@ -48,8 +48,9 @@ that account. Where a vendor offers an organisation pin, the admin sets it
 in Sluse Admin (Advanced) and Sluse writes it into the runtime's managed
 settings, root-owned in the box. **The runtime enforces the pin, not
 Sluse.** An account outside the company's organisation is not the
-company's and does not belong near company data. Since 0.1.4, not yet run
-on a device.
+company's and does not belong near company data. Since 0.1.4; on a test
+device, Claude Code's and Codex's pins refused an account outside the
+organisation.
 
 | Runtime | Sign-in | Held to the organisation by |
 |---|---|---|

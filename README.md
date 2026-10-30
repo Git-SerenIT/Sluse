@@ -74,30 +74,37 @@ Run on a test device: install and updates through Intune; sign-in with no
 app credential; SharePoint, OneDrive and SMB read as the person (one user,
 one tenant); the egress proxy; publishing with declared sources checked
 against what was admitted; Word, PDF, spreadsheets and slides read as text;
-Claude Code, Claude Desktop, ChatGPT and Codex end to end; a tool server
-called as the person.
+Claude Code, Claude Desktop, ChatGPT and Codex end to end, Claude Code and
+Codex refusing an account outside the organisation; a tool server called as
+the person, only the tools the admin ticked; Sluse Admin reading whether the
+AI providers' Microsoft 365 connectors are open in the tenant; Mistral Vibe
+with models from the configuration; the clipboard's records.
 
 Built, not yet run on a device: the Sluse log accepting writes from SYSTEM
 only, App Control on Sluse Artifacts, the check that the Windows user and
-the signed-in user are the same person, and Mistral Vibe. What is open is listed as open, in
+the signed-in user are the same person, and a closed box taking its
+update at the next open. What is open is listed as open, in
 [GUIDE.md](GUIDE.md#known-edges) and [SECURITY.md](SECURITY.md).
 
 ## Where this is going
 
-A plan, not a promise: the pilots decide the order. Nothing here is claimed
-until it is built and run, and then it moves to Status.
+A plan, not a promise. Nothing here is claimed until it is built and run,
+and then it moves to Status.
 
-| Area | Today (v0.1) | Planned | When |
-| --- | --- | --- | --- |
-| Sources | SharePoint, the person's OneDrive `Sluse` folder, SMB shares and a local Sluse Inputs folder, read as the person | Internal tools and APIs as sources: MCP servers and tool calls through Gate Core, scoped per operation in the config, called as the person, recorded like a file. Read only first | v0.2, first |
-| Writing back | None. The one way out is Sluse Artifacts | A writing operation only after the person confirms it in the host's window, which the agent cannot draw over | after tool calls |
-| The providers' connectors | Connectors such as Microsoft 365 in Claude, or apps in ChatGPT, read company data from the provider's cloud, around Sluse. The guide says to turn them off; Sluse cannot check | Sluse Admin reads the tenant's consent and assignment for the providers' apps and warns when they are open | v0.2 |
-| Agent runtimes | Claude Code and Claude Desktop, run end to end. Codex, ChatGPT and Mistral Vibe installed, not checked | Both checked | when each can be tested |
-| The provider's credential | Each runtime signs in inside the box; Sluse cannot see which account | The credential held on the host, none in the box, for runtimes that take a key or a token | when a pilot needs it |
-| Egress | Default deny; the box reaches only listed hosts, by name. A listed host that takes uploads is a way out | Method and path rules on such hosts, so one like GitHub can be allowed in part. A company's own upstream proxy | when a pilot needs it |
-| Files in the box | They stay until the person clears or wipes the box | Finding admitted files moved out of the workspace, by hash (advisory). A spike on confining the command-line runtimes' writes to the workspace; a claim only if it holds | after the pilots |
-| The Sluse log | The Windows Event Log, written by SYSTEM only | A documented query for a box that reads much and publishes little | after the pilots |
-| Releases | An unsigned MSI with `SHA256SUMS`, third-party notices inside | Code signing | v0.2 |
+- **0.3:** code signing, built and waiting on the certificate's identity
+  check. And the connections a Sluse Platform will need, **to be done**: a
+  paid platform for running Sluse at scale (teams, a configuration per team,
+  compliance reporting) is planned, and what it needs from the open-source
+  box is found out before anything is built for it.
+- **After 0.3, the pilots decide** what comes next, by what they need. The
+  candidates known today:
+
+| Area | Today | Candidate |
+| --- | --- | --- |
+| Writing back | None through Sluse's own tools; the one way out is Sluse Artifacts. A tool server's tool that writes is the admin's to tick, and Sluse cannot tell it from one that reads | A writing operation only after the person confirms it in the host's window, which the agent cannot draw over |
+| Egress | Default deny; the box reaches only listed hosts, by name. A listed host that takes uploads is a way out | Method and path rules on such hosts, so one like GitHub can be allowed in part. A company's own upstream proxy |
+| Files in the box | They stay until the person clears or wipes the box | Finding admitted files moved out of the workspace, by hash (advisory). A spike on confining the command-line runtimes' writes to the workspace; a claim only if it holds |
+| The Sluse log | The Windows Event Log, written by SYSTEM only | A documented query for a box that reads much and publishes little |
 
 ## Install
 

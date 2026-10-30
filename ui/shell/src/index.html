@@ -78,15 +78,6 @@
   <!-- The box. noVNC draws into #screen at the size of the space it has
        (Q34). -->
   <main class="screen" id="screen" aria-label="Your box's screen">
-    <img class="screen__still" id="still" alt="" hidden>
-    <div class="overlay" id="reconnecting" role="status" hidden>
-      <div class="overlay__card">
-        <h2>Reconnecting to your box…</h2>
-        <p class="bigclock" aria-live="off"><span class="bigclock__label" id="rtry">Try 1 of 20</span><span class="bigclock__num" id="rclock">0:00</span></p>
-        <div class="progress" data-indeterminate aria-hidden="true"><div class="progress__fill"></div></div>
-        <p>The picture is from before the connection dropped. If your box does not answer after 20 tries, Sluse says why.</p>
-      </div>
-    </div>
     <div class="overlay overlay--drag" id="drag" role="status" hidden>
       <div class="overlay__card">
         <span class="overlay__ring"><i data-icon="drag"></i></span>

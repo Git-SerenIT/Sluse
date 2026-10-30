@@ -204,8 +204,8 @@ carries two lists:
   sees; the box's firewall takes VNC from the host alone.
 - **Reset** gives the box a fresh system disk on the newest base and keeps
   the home disk. **Wipe** replaces both. **Updates** arrive as a new base,
-  built beside the old one, and the person moves onto it with a reset;
-  never automatically.
+  built beside the old one; a closed box is reset onto it at its next open,
+  its home disk kept, and a running one is offered the reset.
 - **The box's journal is mirrored to the host** as it is written, so a wipe
   keeps the record.
 - **Not supported:** an agent running outside the box. Containment needs the

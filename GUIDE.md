@@ -285,7 +285,8 @@ agent in that session; it cannot check that the agent used it.
   being prepared lets the preparation finish in the notification area,
   says when it is ready, and leaves the box closed.
 - **Reset the box's system** (under More) gives the box a fresh system,
-  including Sluse's updates; your files in the box stay.
+  including Sluse's updates; your files in the box stay. After an update,
+  opening a closed box does this by itself first.
 - **Wipe the box** removes everything in it. Use it when you are done with
   a piece of work: files given to the agent stay in the box until you do.
 

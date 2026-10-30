@@ -9,8 +9,11 @@ Type=oneshot
 # Root, to read the KVP pool, which holds this open's token. The files it
 # writes belong to the desktop user, who runs the endpoint.
 ExecStart=/usr/local/bin/sluse-endpoint --config @HOME@/Sluse/sluse.json --enrol --owner @UID@:@GID@ --restart sluse-console.service
-# Exit 75 means the host has not sent a bootstrap yet: try again.
-Restart=on-failure
+# Exit 75 means nothing was spent: no bootstrap from the host yet, or the
+# Gate did not answer the connection. Only that is tried again; a failure is
+# final, the host reads it on the serial console and the window says so.
+Restart=no
+RestartForceExitStatus=75
 RestartSec=5
 
 [Install]

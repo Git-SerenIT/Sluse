@@ -32,6 +32,17 @@ export const CAUSES = [
     head: 'Your box\'s system is incomplete',
     body: 'Resetting the box\'s system fixes this, and your files stay.',
     sub: 'The system is incomplete', reset: true }],
+  // The box refused or was refused at enrolment, said on its console
+  // (2026-10-30). A config its system cannot read is a system too old for
+  // it, which a reset replaces; the service resets a closed one by itself.
+  [/could not enrol: the Gate's config/, {
+    head: 'Your box\'s system is out of date',
+    body: 'Resetting the box\'s system fixes this, and your files stay.',
+    sub: 'The system is out of date', reset: true }],
+  [/could not enrol/, {
+    head: 'Your box could not connect to Sluse',
+    body: 'Try again. If it keeps happening, send the details to your IT department.',
+    sub: 'The box was not let in' }],
   // Last, so memory and disk above name a build's cause when they are it.
   // The service counts failed builds in a row; IT from the second (D-063).
   [/^preparing the box:/, (m) => ({

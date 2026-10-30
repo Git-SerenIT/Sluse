@@ -34,14 +34,36 @@ pub const CONSOLE_UP: &[u8] = b"sluse-console-up";
 /// box held its open for the full 600 s; D-066).
 pub const NO_SLUSE: &[u8] = b"sluse-box login:";
 
+/// What the endpoint prints when the box's enrolment failed for good
+/// (`sluse-endpoint/src/main.rs`): the open has failed, and waiting on for
+/// its console only hid that (L1, 2026-10-30: 791 restarts, no word).
+pub const ENROL_FAILED: &[u8] = b"enrolment failed: ";
+
 /// What the box says on its console that the service acts on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Said {
     ConsoleUp,
     NoSluse,
+    EnrolFailed,
 }
 
-const MARKERS: [(&[u8], Said); 2] = [(CONSOLE_UP, Said::ConsoleUp), (NO_SLUSE, Said::NoSluse)];
+const MARKERS: [(&[u8], Said); 3] = [(CONSOLE_UP, Said::ConsoleUp), (NO_SLUSE, Said::NoSluse), (ENROL_FAILED, Said::EnrolFailed)];
+
+/// The cause on the last enrolment failure's line in `dir`'s console log.
+/// ponytail: the log's last 64 kB, read when the window asks, a second at
+/// most after the line came; enough while the box writes a line a second.
+pub fn enrol_cause(dir: &Path) -> Option<String> {
+    use std::io::{Seek, SeekFrom};
+    let mut f = std::fs::File::open(dir.join("console.log")).ok()?;
+    let len = f.metadata().ok()?.len();
+    f.seek(SeekFrom::Start(len.saturating_sub(64 << 10))).ok()?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).ok()?;
+    let text = String::from_utf8_lossy(&buf);
+    let marker = std::str::from_utf8(ENROL_FAILED).ok()?;
+    let line = text.lines().rev().find(|l| l.contains(marker))?;
+    Some(line[line.find(marker)? + marker.len()..].trim().to_owned())
+}
 
 pub fn pipe_name(vm: &str) -> String {
     format!(r"\\.\pipe\sluse-console-{vm}")
@@ -272,5 +294,16 @@ mod tests {
         let mut no = 0;
         copy(&mut Trickle(b"Ubuntu 26.04.1 LTS sluse-box ttyS0\n\nsluse-box login: "), dir.path(), CAP, &mut |s| no += usize::from(s == Said::NoSluse)).unwrap();
         assert_eq!(no, 1);
+    }
+
+    #[test]
+    fn an_enrolment_that_failed_is_seen_with_its_cause() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = b"2026-10-30T10:25:54+01:00 sluse-box sluse-endpoint[1270]: enrolment failed: the Gate's config: unknown field `vibe`\n";
+        let mut n = 0;
+        copy(&mut Trickle(log), dir.path(), CAP, &mut |s| n += usize::from(s == Said::EnrolFailed)).unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(enrol_cause(dir.path()).as_deref(), Some("the Gate's config: unknown field `vibe`"));
+        assert!(include_str!("../../sluse-endpoint/src/main.rs").contains(r#"eprintln!("enrolment failed: {e}")"#), "the words the endpoint prints");
     }
 }
