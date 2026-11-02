@@ -17,6 +17,19 @@ logger -t sluse-console-up "the console answers on 7582"
 # --name is its Wayland app id, which sway names the tab by (sway.conf, Q5).
 # Not exec: when the console's Firefox ends, the box's console log says so
 # and with what code (console-log forwards the tag). On L1 (2026-10-21) it
-# was missing and nothing anywhere said so.
-env MOZ_ENABLE_WAYLAND=1 firefox --new-instance --name sluse-console --profile "$SLUSE_PROFILE" http://localhost:7582/
-logger -t sluse-console-down "the console's Firefox ended (exit $?)"
+# was missing and nothing anywhere said so. It is the box's only screen, so
+# it is started again; its own last lines go with the first three ends (L1,
+# 2026-11-02: snap revision 9137 ended at once, exit 0, saying nowhere why).
+# ponytail: restarts every 5 s for ever; a Firefox that never stays is a
+# blank screen either way, and the serial log says why.
+out="$XDG_RUNTIME_DIR/sluse/console-firefox.log"
+mkdir -p "${out%/*}"
+n=0
+while :; do
+  env MOZ_ENABLE_WAYLAND=1 firefox --new-instance --name sluse-console --profile "$SLUSE_PROFILE" http://localhost:7582/ >"$out" 2>&1
+  code=$?
+  n=$((n + 1))
+  logger -t sluse-console-down "the console's Firefox ended (exit $code, $n so far)"
+  [ "$n" -le 3 ] && tail -n 20 "$out" | logger -t sluse-console-down
+  sleep 5
+done

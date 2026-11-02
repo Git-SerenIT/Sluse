@@ -5,6 +5,18 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.2.1
+
+**For the person**
+- **The box's console comes back when its browser ends.** On a test device,
+  a box built on 2026-11-02 showed only its top bar: the console's Firefox
+  ended a second after it started. It is now started again, and its own
+  last lines go to the box's console log, where the administrator reads
+  why.
+
+**Not proven:** why that Firefox ended, nor that starting it again keeps
+it. A new box system is built for this version.
+
 ## 0.2.0
 
 v0.2: tool servers through Sluse Gate, the AI providers' own connectors
