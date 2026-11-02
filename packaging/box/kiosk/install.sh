@@ -57,6 +57,8 @@ MIME
 install -m 0644 "$here/sway.conf" "$here/vnc.nft" "$here/no-images.lua" /usr/local/lib/sluse/
 install -m 0644 "$here/policies.json" /etc/firefox/policies/policies.json
 install -m 0755 "$bundle/bin/sluse-endpoint" /usr/local/bin/sluse-endpoint
+# Spike 9 (D-079), when the bundle carries it; sway starts it (sway.conf).
+[ ! -x "$bundle/bin/s9-console" ] || install -m 0755 "$bundle/bin/s9-console" /usr/local/libexec/sluse/s9-console
 rm -rf /usr/local/share/sluse/ui && install -d /usr/local/share/sluse/ui
 cp -r "$bundle/ui/console" /usr/local/share/sluse/ui/console
 

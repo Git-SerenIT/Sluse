@@ -5,6 +5,18 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.2.2
+
+**For the person**
+- **A second console tab in the box, "Sluse console (spike)"**: the Work
+  page drawn by Sluse's own program instead of the browser, a test of
+  whether the console can stop depending on Firefox. It shows the same
+  counts and opens the same apps. The browser's console is still there.
+
+**Not proven:** that it draws in the box, which has no graphics card; it
+has drawn only on a development machine. A new box system is built for
+this version.
+
 ## 0.2.1
 
 **For the person**

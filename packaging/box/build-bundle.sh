@@ -14,12 +14,16 @@ cd "$repo"
 out=${1:-dist}
 
 cargo build --release --locked -p sluse-endpoint
+# Spike 9 (D-079): the console without a web stack, beside the Firefox one
+# until the spike passes.
+cargo build --release --locked --manifest-path ui/console-native/Cargo.toml
 npm --prefix ui/console ci
 npm --prefix ui/console run build
 
 stage=$(mktemp -d)
 mkdir -p "$stage/sluse/bin" "$stage/sluse/ui/console"
 cp target/release/sluse-endpoint "$stage/sluse/bin/"
+cp ui/console-native/target/release/s9-console "$stage/sluse/bin/"
 cp ui/console/index.html ui/console/style.css "$stage/sluse/ui/console/"
 cp -r ui/console/look "$stage/sluse/ui/console/look"
 cp -r ui/console/dist "$stage/sluse/ui/console/dist"

@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# The box's console in Rust, with iced, no web stack (D-079). Spike 9 until
+# it passes: its own workspace, outside
+# the main one, so the box's build alone pulls in a GUI toolkit.
+[package]
+name = "s9-console"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+iced = { version = "0.14", default-features = false, features = ["tiny-skia", "wayland", "tokio", "crisp"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "time"] }

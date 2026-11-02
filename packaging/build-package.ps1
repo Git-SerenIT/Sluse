@@ -146,7 +146,8 @@ try {
     Copy-Item 'config\egress-catalog.json'       (Join-Path $stage 'config') -Force
 
     # Third-party notices, which MIT and BSD require with a binary copy: the
-    # crates compiled into both workspaces' programs, by cargo-about, which
+    # crates compiled into the three workspaces' programs (the third is the
+    # box's native console, D-079), by cargo-about, which
     # fails on a licence packaging\notices\about.toml does not accept; then
     # noVNC's, which the shell carries.
     if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) {
@@ -154,7 +155,7 @@ try {
     }
     $about = Join-Path $repo 'packaging\notices'
     $notices = @(Get-Content (Join-Path $about 'header.txt') -Raw)
-    foreach ($ws in '.', 'ui\shell\src-tauri') {
+    foreach ($ws in '.', 'ui\shell\src-tauri', 'ui\console-native') {
         $out = [IO.Path]::Combine($repo, $OutDir, 'notices.part.txt')
         Push-Location $ws
         try {
