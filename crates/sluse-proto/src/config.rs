@@ -174,7 +174,7 @@ pub struct Device {
     /// Where the Gate listens and what certificate it presents.
     pub gate: GateConfig,
 
-    /// What the endpoint presents, and where the console listens.
+    /// What the endpoint presents.
     pub endpoint: EndpointConfig,
 
     /// Where published artifacts land. The single write path. On a device the
@@ -672,7 +672,8 @@ pub struct GateConfig {
     pub cert_pin: ContentHash,
 }
 
-/// What the endpoint presents, and where the console listens.
+/// What the endpoint presents. The console had a loopback port here until
+/// 0.3; it makes its calls in its own process now (D-079).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct EndpointConfig {
@@ -680,11 +681,6 @@ pub struct EndpointConfig {
     pub client_cert_path: String,
     /// Its private key (PEM).
     pub client_key_path: String,
-    /// Where the console's loopback API listens, e.g. `127.0.0.1:7582`.
-    ///
-    /// Loopback and unauthenticated in LOCAL, which is a limitation and is
-    /// written down as one in `prototype/README.md` rather than glossed.
-    pub console_listen: String,
 }
 
 /// Where audit records go.
@@ -1071,7 +1067,6 @@ fn validate_device(c: &Device) -> Result<(), ConfigError> {
     }
     validate_socket_addr("gate.listen", &c.gate.listen)?;
     refuse_wildcard("gate.listen", &c.gate.listen)?;
-    validate_socket_addr("endpoint.consoleListen", &c.endpoint.console_listen)?;
 
     if c.audit.sink == AuditSinkKind::Jsonl && c.audit.path.is_none() {
         return Err(ConfigError::JsonlWithoutPath);
@@ -1299,8 +1294,7 @@ mod tests {
             },
             "endpoint": {
                 "clientCertPath": "certs/endpoint.pem",
-                "clientKeyPath": "certs/endpoint.key",
-                "consoleListen": "127.0.0.1:7582"
+                "clientKeyPath": "certs/endpoint.key"
             },
             "artifacts": "artifacts",
             "workspace": "workspace",

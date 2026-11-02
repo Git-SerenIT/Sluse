@@ -141,9 +141,11 @@ Written down as channels, not as mitigations. Each is open in v0.1.
 - **The box's certificate is readable by the agent.** Used directly against
   Sluse Gate, it has the endpoint's authority and no more: same scope, same
   person, recorded on the host. It skips the box's journal and the envelope.
-- **The console's API in the box is unauthenticated.** Anything in the box
-  can sign the person out, clear the workspace or open an app, and read each
-  source's address. None widens what can be read.
+- **Anything in the box can do what the console does.** Since 0.3 the
+  console has no port (it was an unauthenticated one until then), but the
+  agent runs as the box's user: it can delete the copies itself, start an
+  app, drive the console's window, and, with the box's certificate, sign the
+  person out and read each source's address. None widens what can be read.
 - **An artifact's sources are the agent's word.** Sluse checks each one was
   admitted in that session, not that it was used, nor that an undeclared one
   was not.

@@ -401,9 +401,12 @@ pub struct SourceView {
     /// Where it is, for the console to show a person. The agent has no use for
     /// it: every path it writes starts with the source name, and
     /// `sluse_sources` does not show it. **It does reach the guest:** the
-    /// console's API on localhost serves it, so the agent can learn a share's
-    /// UNC path or the SharePoint site's URL. Accepted as a known channel
-    /// (D-056 point 2): it names a place, and grants no way to it.
+    /// Gate serves it to the box for the console, and anything in the box
+    /// that reads the box's certificate can ask for it too (the console's
+    /// loopback API served it outright until 0.3, D-079), so the agent can
+    /// learn a share's UNC path or the SharePoint site's URL. Accepted as a
+    /// known channel (D-056 point 2): it names a place, and grants no way to
+    /// it.
     pub address: String,
     pub sensitivity: u8,
     pub sensitivity_name: String,

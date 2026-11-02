@@ -214,7 +214,7 @@ Try again. Sign in when asked, with the account you use for Windows: Sluse
 asks once each time it opens the box, and once more if a first preparation
 took long. The box shows once its console is ready.
 
-**In the box:** the Sluse console in Firefox, and the AI apps (Claude
+**In the box:** the Sluse console, and the AI apps (Claude
 Desktop, ChatGPT, Claude Code, Codex, Mistral Vibe), which the console's
 Open buttons start. Each opens as a tab along the top of the box, named
 Sluse console, Claude, ChatGPT, Claude Code, Codex, Mistral Vibe or
@@ -356,6 +356,11 @@ it reads as.
   until the client was turned off, on our test PC.
 - **The first open on a PC is slow**: the box's system is built there,
   about 20 minutes or more on our test PC. Later opens take under a minute.
+- **The console in the box has almost no screen-reader support.** Since 0.3
+  it is Sluse's own program, not a web page, and its toolkit (iced) gives a
+  screen reader little to read. The box reaches the person as a picture in
+  the Sluse window either way, so a screen reader on Windows did not read
+  the box's console before 0.3 either.
 - **Hosts that accept uploads.** The AI providers' groups (Claude, Codex and ChatGPT,
   and Mistral Vibe when ticked) take whatever the box sends them: that is
   the conversation. Claude and Codex are on by default. npm and GitHub

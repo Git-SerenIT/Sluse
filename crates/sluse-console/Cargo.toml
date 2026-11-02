@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 SerenIT ApS and Prompted EV
+
+[package]
+name = "sluse-console"
+description = "Sluse console: what crossed the boundary, drawn in the box without a web stack (D-079)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The console's calls, made in this process: no port (D-079 point 5).
+sluse-endpoint = { path = "../sluse-endpoint" }
+sluse-proto = { path = "../sluse-proto" }
+chrono.workspace = true
+clap.workspace = true
+rustls.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# The window is the box's, which is Linux: elsewhere this builds to a program
+# that says so, and Windows CI does not compile a GUI toolkit for nothing.
+# Software rendering only (tiny-skia): the box has no GPU (S-9).
+[target.'cfg(target_os = "linux")'.dependencies]
+iced = { version = "0.14", default-features = false, features = ["tiny-skia", "wayland", "tokio", "crisp", "svg", "canvas", "advanced"] }

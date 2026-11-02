@@ -1995,7 +1995,7 @@ fn device_half(box_id: &str, pin: &ContentHash) -> String {
             "certPath": "certs/gate.pem", "keyPath": "certs/gate.key", "clientCaPath": "certs/client-ca.pem",
             "certPin": pin.as_str(),
         },
-        "endpoint": { "clientCertPath": "certs/endpoint.pem", "clientKeyPath": "certs/endpoint.key", "consoleListen": format!("127.0.0.1:{}", ports::CONSOLE) },
+        "endpoint": { "clientCertPath": "certs/endpoint.pem", "clientKeyPath": "certs/endpoint.key" },
         "artifacts": "artifacts",
         "workspace": "workspace",
         "journalDir": "journal",

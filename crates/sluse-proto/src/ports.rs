@@ -15,9 +15,9 @@
 pub const GATE: u16 = 7580;
 /// Enrolment: server TLS, one route, no client certificate (slice 2). Host.
 pub const ENROL: u16 = 7581;
-/// The console. Box, loopback only. The sign-in left it for the host shell
-/// (D-036).
-pub const CONSOLE: u16 = 7582;
+// 7582 was the console's loopback API, the box's own, until 0.3: the console
+// makes its calls in its own process now and has no port (D-079). Not
+// reused, so an old box's number never names something else.
 /// The box's screen, VNC over a websocket, for the shell. Box, host-only
 /// side, admitted from the host alone.
 pub const VNC: u16 = 7583;
@@ -40,7 +40,6 @@ pub fn part(port: u16) -> &'static str {
     match port {
         GATE => "Sluse Gate",
         ENROL => "enrolment",
-        CONSOLE => "console",
         VNC => "the box's screen (VNC)",
         PROXY => "the egress proxy",
         p if BLOCK.contains(&p) => "a reserved Sluse port",
@@ -64,12 +63,12 @@ mod tests {
 
     #[test]
     fn the_block_is_host_first_and_every_port_names_its_part() {
-        for p in [GATE, ENROL, CONSOLE, VNC, PROXY] {
+        for p in [GATE, ENROL, VNC, PROXY] {
             assert!(BLOCK.contains(&p));
         }
-        assert!(!ON_HOST.contains(&CONSOLE) && !ON_HOST.contains(&VNC), "the box's ports are not the host's");
+        assert!(!ON_HOST.contains(&VNC), "the box's port is not the host's");
         assert_eq!(label("192.168.77.1:7580"), "Sluse Gate, 192.168.77.1:7580");
-        assert_eq!(label("127.0.0.1:7582"), "console, 127.0.0.1:7582");
+        assert_eq!(part(7582), "a reserved Sluse port");
         assert_eq!(part(7588), "a reserved Sluse port");
         assert_eq!(label("192.168.77.1:7584"), "the egress proxy, 192.168.77.1:7584");
         assert_eq!(part(443), "not a Sluse port");

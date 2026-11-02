@@ -444,8 +444,7 @@ fn config_with_write_paths(
           }},
           "endpoint": {{
             "clientCertPath": "certs/endpoint.pem",
-            "clientKeyPath": "certs/endpoint.key",
-            "consoleListen": "127.0.0.1:7582"
+            "clientKeyPath": "certs/endpoint.key"
           }},
           "artifacts": {artifacts},
           "workspace": {workspace},
@@ -729,7 +728,7 @@ fn an_mcp_source_has_tools_and_no_paths() {
             "certPath": "certs/core.pem", "keyPath": "certs/core.key",
             "clientCaPath": "certs/client-ca.pem", "certPin": "0".repeat(64)
         },
-        "endpoint": { "clientCertPath": "certs/endpoint.pem", "clientKeyPath": "certs/endpoint.key", "consoleListen": "127.0.0.1:7582" },
+        "endpoint": { "clientCertPath": "certs/endpoint.pem", "clientKeyPath": "certs/endpoint.key" },
         "artifacts": "artifacts", "workspace": "workspace", "journalDir": "journal",
         "audit": { "sink": "jsonl", "path": "audit/core.jsonl" }
     });

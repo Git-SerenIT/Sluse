@@ -163,7 +163,10 @@ jobs:
 
   console:
     if: github.event_name == 'workflow_dispatch' || github.repository != 'Git-SerenIT/Sluse-Private'
-    name: Console — types and contrast
+    # The job's id stays `console` so the jobs that wait on it need no change.
+    # The console's own checks are Rust's now (D-079): its colours against
+    # ui/look/tokens.css and their contrast, both themes, in the Linux suite.
+    name: Shell — its reading of a box failure
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -171,16 +174,6 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
-
-      - name: Install
-        run: npm --prefix ui/console ci
-
-      # `tsc --noEmit` and `contrast.mjs`. The second reads the colour values out
-      # of look/tokens.css, both themes, and fails if any pair drops below AA — it exists because the
-      # first palette shipped an out-of-scope row at 1.88:1, greyed with an
-      # `opacity` that read as reasonable in the stylesheet.
-      - name: Check
-        run: npm --prefix ui/console run check
 
       # The shell's reading of a box failure (causes.js): plain Node, no install.
       - name: Shell
@@ -382,7 +375,7 @@ jobs:
           # 3010: installed, and a restart is wanted (Hyper-V). The runner has it.
           if ($p.ExitCode -notin 0, 3010) { Get-Content msi-install.log -Tail 60; throw "msiexec /i exited $($p.ExitCode)" }
           $default = Join-Path $env:ProgramFiles 'Sluse'
-          foreach ($f in 'bin\sluse.exe', 'bin\sluse-shell.exe', 'box\sluse-box-linux.tar.gz', 'ui\console\index.html', 'Test-Sluse.ps1', 'THIRD-PARTY-NOTICES.txt', 'intune\sluse-artifacts-deny.xml', 'intune\{3CA83446-6F47-4A65-9891-2685B75CD7E3}.cip') {
+          foreach ($f in 'bin\sluse.exe', 'bin\sluse-shell.exe', 'box\sluse-box-linux.tar.gz', 'Test-Sluse.ps1', 'THIRD-PARTY-NOTICES.txt', 'intune\sluse-artifacts-deny.xml', 'intune\{3CA83446-6F47-4A65-9891-2685B75CD7E3}.cip') {
             if (-not (Test-Path (Join-Path $default $f))) { throw "the MSI did not install $f" }
           }
           if ((Get-Service Sluse).Status -ne 'Running') { throw "the service is $((Get-Service Sluse).Status)" }

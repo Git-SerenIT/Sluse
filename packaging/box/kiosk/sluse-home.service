@@ -3,7 +3,7 @@
 [Unit]
 Description=Sluse: the user's home disk, kept across a reset
 After=local-fs.target
-Before=systemd-user-sessions.service sluse-kiosk.service sluse-enrol.service sluse-console.service
+Before=systemd-user-sessions.service sluse-kiosk.service sluse-enrol.service
 
 [Service]
 Type=oneshot

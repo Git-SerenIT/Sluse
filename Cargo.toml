@@ -28,6 +28,7 @@ members = [
     "crates/sluse-endpoint",   # M3 — MCP over stdio; M5 — the console's API
     "crates/sluse-lifecycle",  # M2 devcert, M4 check/start/stop/status
     "crates/sluse-admin",      # D-039 slice 4 — setup's engine
+    "crates/sluse-console",    # D-079 — the box's console, drawn without a web stack
 ]
 
 [workspace.package]
@@ -36,7 +37,7 @@ members = [
 # number is a claim about proven-ness, not a record of effort.
 #
 # Human owns version bumps (CLAUDE.md, Human-owned). Nothing automated edits this.
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 # Measured from the locked graph, never estimated from direct dependencies and
 # never copied from Chaperone (D-010 point 6). Chaperone's own MSRV line was
@@ -70,6 +71,10 @@ edition = "2021"
 # for the endpoint, on both targets. Pinning an older uuid in the lock would
 # keep 1.88.0 and break at the next `cargo update`; the floor is measured, so
 # it moves.
+#
+# **Re-measured 2026-11-02**, after `sluse-console` joined with iced 0.14
+# (D-079), Linux only: still **1.89.0** on both targets, from uuid; iced and
+# iced_program declare 1.88, the rest of its graph lower or nothing.
 rust-version = "1.89.0"
 # Apache-2.0 for the box (D-005). Which entity grants it, and the NOTICE text,
 # are Q-8 and not settled; there is no LICENSE or NOTICE file at the root yet

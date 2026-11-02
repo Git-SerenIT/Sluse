@@ -8,7 +8,7 @@
 #
 #   sudo bash kiosk/install.sh <the box's desktop user>
 #
-# The bundle's `bin/sluse-endpoint` and `ui/console` go to /usr/local. The
+# The bundle's `bin/sluse-endpoint` and `bin/sluse-console` go to /usr/local. The
 # box then gets its VNC secret, keyboard, identity and config from the host
 # at every open, with nothing copied in by hand again.
 set -euo pipefail
@@ -33,7 +33,7 @@ apt-get install -y swaybg libglib2.0-bin dconf-gsettings-backend xdg-desktop-por
 apt-get install -y --no-install-recommends gnome-keyring
 
 install -d /usr/local/libexec/sluse /usr/local/lib/sluse /etc/firefox/policies
-install -m 0755 "$here/sluse-bootstrap" "$here/kiosk" "$here/vnc" "$here/home-init" "$here/browser" "$here/console-log" "$here/cli" "$here/theme" "$here/chatgpt" "$here/signin-browser" /usr/local/libexec/sluse/
+install -m 0755 "$here/sluse-bootstrap" "$here/kiosk" "$here/vnc" "$here/home-init" "$here/console-log" "$here/cli" "$here/theme" "$here/chatgpt" "$here/signin-browser" /usr/local/libexec/sluse/
 # Firefox opens the web: ChatGPT's package registers itself for http and
 # https, and its sign-in opens the default browser, which would then be
 # ChatGPT itself. Through signin-browser (D-075): Firefox in a profile made
@@ -57,10 +57,10 @@ MIME
 install -m 0644 "$here/sway.conf" "$here/vnc.nft" "$here/no-images.lua" /usr/local/lib/sluse/
 install -m 0644 "$here/policies.json" /etc/firefox/policies/policies.json
 install -m 0755 "$bundle/bin/sluse-endpoint" /usr/local/bin/sluse-endpoint
-# Spike 9 (D-079), when the bundle carries it; sway starts it (sway.conf).
-[ ! -x "$bundle/bin/s9-console" ] || install -m 0755 "$bundle/bin/s9-console" /usr/local/libexec/sluse/s9-console
-rm -rf /usr/local/share/sluse/ui && install -d /usr/local/share/sluse/ui
-cp -r "$bundle/ui/console" /usr/local/share/sluse/ui/console
+# The console (D-079); sway starts it (sway.conf).
+install -m 0755 "$bundle/bin/sluse-console" /usr/local/libexec/sluse/sluse-console
+# The web console's files, from a box installed before 0.3 (D-079).
+rm -rf /usr/local/share/sluse/ui /usr/local/libexec/sluse/browser /etc/systemd/system/sluse-console.service
 
 # wayvnc's RSA key, for viewers that speak RSA-AES. Once per box.
 install -d -m 0750 -g "$(id -gn "$user")" /var/lib/sluse
@@ -71,13 +71,13 @@ fi
 chgrp "$(id -gn "$user")" /var/lib/sluse/vnc-rsa.pem
 chmod 0640 /var/lib/sluse/vnc-rsa.pem
 
-units="sluse-home.service sluse-kiosk.service sluse-vnc.service sluse-firewall.service sluse-bootstrap.service sluse-bootstrap.path sluse-enrol.service sluse-console.service sluse-console-log.service"
+units="sluse-home.service sluse-kiosk.service sluse-vnc.service sluse-firewall.service sluse-bootstrap.service sluse-bootstrap.path sluse-enrol.service sluse-console-log.service"
 for u in $units; do
     sed -e "s/@KIOSK_USER@/$user/g" -e "s/@UID@/$uid/g" -e "s/@GID@/$gid/g" -e "s#@HOME@#$home#g" "$here/$u" > "/etc/systemd/system/$u"
 done
 systemctl daemon-reload
 systemctl enable --now sluse-firewall.service sluse-bootstrap.path sluse-kiosk.service
-systemctl enable sluse-home.service sluse-vnc.service sluse-enrol.service sluse-console.service sluse-bootstrap.service
+systemctl enable sluse-home.service sluse-vnc.service sluse-enrol.service sluse-bootstrap.service
 # The serial console carries the log out and nothing in (D-030): no login
 # listens on it, whatever the kernel command line says.
 systemctl mask serial-getty@ttyS0.service

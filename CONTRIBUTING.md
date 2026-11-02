@@ -11,7 +11,6 @@ contribution is licensed under the same licence as the project.
 cargo build --workspace
 cargo test  --workspace
 cargo clippy --workspace --all-targets -- -D warnings
-npm --prefix ui/console ci && npm --prefix ui/console run check
 ```
 
 The MSRV is `rust-version` in the root `Cargo.toml`, measured from the
@@ -52,14 +51,15 @@ fails. Releases are not signed yet; check the MSI against `SHA256SUMS`.
 | `crates/sluse-proto` | The shared contract: config schema, capability request and response, journal record, errors | both sides |
 | `crates/sluse-gate-core` | Gate Core: scope enforcement (`scope.rs`), the person's tokens, sources read as the person, publishing, the Event Log; starts and serves its Gate Front (`front.rs`) | host, SYSTEM |
 | `crates/sluse-gate-front` | Gate Front, one per box: the box's mTLS listener, request parsing, the egress proxy; no tokens | host, LocalService |
-| `crates/sluse-endpoint` | The MCP server the agent talks to, the journal, the envelope, the console's API | the box |
+| `crates/sluse-endpoint` | The MCP server the agent talks to, the journal, the envelope, enrolment, the console's calls | the box |
+| `crates/sluse-console` | The console in the box: Rust, drawn with iced, no web stack, no port | the box |
 | `crates/sluse-lifecycle` | `sluse check / start / stop / status`, the lifecycle service, the box's image build | host, SYSTEM |
 | `crates/sluse-admin` | Setup: the Entra registration, sources and egress, the deployment package, Intune | the admin's PC |
 | `ui/shell` | The host shell and Sluse Admin (`--admin`): Tauri 2 and noVNC | host, as the person |
-| `ui/console` | The console in the box: TypeScript, no framework | the box |
+| `ui/look` | The design kit: tokens, components, icons, logo. The shell and Sluse Admin draw with it; the console's colours and icons are tested against it | |
 | `packaging/` | The MSI (WiX), the install and acceptance scripts; `packaging/box/` holds the box's side | host, the box |
 | `config/` | The config schema, generated from `sluse-proto`; a test fails if it is stale | |
-| `tools/` | The fixture generator and run scorers | |
+| `tools/` | The fixture generator, run scorers, and the console's icon table (`console-icons.mjs`) | |
 
 ## Conventions
 

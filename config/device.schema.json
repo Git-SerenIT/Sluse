@@ -17,7 +17,7 @@
       "$ref": "#/$defs/BoxId"
     },
     "endpoint": {
-      "description": "What the endpoint presents, and where the console listens.",
+      "description": "What the endpoint presents.",
       "$ref": "#/$defs/EndpointConfig"
     },
     "environment": {
@@ -101,7 +101,7 @@
       "type": "string"
     },
     "EndpointConfig": {
-      "description": "What the endpoint presents, and where the console listens.",
+      "description": "What the endpoint presents. The console had a loopback port here until\n0.3; it makes its calls in its own process now (D-079).",
       "type": "object",
       "properties": {
         "clientCertPath": {
@@ -111,17 +111,12 @@
         "clientKeyPath": {
           "description": "Its private key (PEM).",
           "type": "string"
-        },
-        "consoleListen": {
-          "description": "Where the console's loopback API listens, e.g. `127.0.0.1:7582`.\n\nLoopback and unauthenticated in LOCAL, which is a limitation and is\nwritten down as one in `prototype/README.md` rather than glossed.",
-          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
         "clientCertPath",
-        "clientKeyPath",
-        "consoleListen"
+        "clientKeyPath"
       ]
     },
     "Environment": {

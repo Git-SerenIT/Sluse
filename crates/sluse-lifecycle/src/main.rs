@@ -1164,11 +1164,10 @@ mod tests {
     /// anything that ships.
     #[test]
     fn ports_agree() {
-        use sluse_proto::ports::{GATE, CONSOLE, PROXY, VNC};
+        use sluse_proto::ports::{GATE, PROXY, VNC};
         let files = [
             ("vnc.nft", include_str!("../../../packaging/box/kiosk/vnc.nft")),
             ("sluse-bootstrap", include_str!("../../../packaging/box/kiosk/sluse-bootstrap")),
-            ("browser", include_str!("../../../packaging/box/kiosk/browser")),
             ("tauri.conf.json", include_str!("../../../ui/shell/src-tauri/tauri.conf.json")),
             ("local.example.json", include_str!("../../../config/local.example.device.json")),
             ("sluse-box.ps1", include_str!("../../../packaging/box/sluse-box.ps1")),
@@ -1179,10 +1178,12 @@ mod tests {
         assert!(text("vnc.nft").contains(&format!("tcp dport {VNC} ip saddr 192.168.77.1 accept")));
         assert!(text("vnc.nft").contains(&format!("tcp dport {VNC} drop")));
         assert!(text("sluse-bootstrap").contains(&format!("port={VNC}")));
-        assert!(text("browser").matches(&format!("http://localhost:{CONSOLE}/")).count() == 2);
         assert!(text("tauri.conf.json").contains(&format!("ws://*:{VNC}")));
         assert!(text("local.example.json").contains(&format!("127.0.0.1:{GATE}")));
-        assert!(text("local.example.json").contains(&format!("127.0.0.1:{CONSOLE}")));
+        // The console's port is gone (D-079): nothing in the box names it.
+        for (name, body) in files {
+            assert!(!body.contains("7582"), "{name} still names the console's port");
+        }
         // The box's proxy settings (M9): apt's two, four each in the
         // environment, profile.d and systemd's, snapd's two; and the browser's.
         assert_eq!(text("user-data.yaml").matches(&format!("http://192.168.77.1:{PROXY}")).count(), 16);

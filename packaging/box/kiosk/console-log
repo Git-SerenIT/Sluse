@@ -19,10 +19,10 @@ exec >/dev/ttyS0 2>&1
 journalctl -b -f -o short-iso \
     _PID=1 + \
     _SYSTEMD_UNIT=sluse-home.service _SYSTEMD_UNIT=sluse-firewall.service _SYSTEMD_UNIT=sluse-bootstrap.service \
-    _SYSTEMD_UNIT=sluse-vnc.service _SYSTEMD_UNIT=sluse-enrol.service _SYSTEMD_UNIT=sluse-console.service \
+    _SYSTEMD_UNIT=sluse-vnc.service _SYSTEMD_UNIT=sluse-enrol.service \
     _SYSTEMD_UNIT=hv-kvp-daemon.service + \
     PRIORITY=0 PRIORITY=1 PRIORITY=2 PRIORITY=3 + \
-    SYSLOG_IDENTIFIER=sluse-console-up SYSLOG_IDENTIFIER=sluse-console-down &
+    SYSLOG_IDENTIFIER=sluse-console-up &
 # What the boot spent its time on, once it has finished, and later than the
 # console's line so as not to hold it up: the host's administrators read it
 # in console.log when a box was slow to show.

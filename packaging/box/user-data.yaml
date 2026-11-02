@@ -123,10 +123,10 @@ runcmd:
   - [sh, -c, 'systemctl mask fwupd-refresh.timer fwupd.service || true']
   # No sshd in the product box.
   - [sh, -c, 'apt-get purge -y openssh-server; apt-get autoremove -y; apt-get clean']
-  # Firefox, which is the console, again if the package's own fetch gave up:
+  # Firefox, the box's browser for a sign-in and a link (D-075; it was the
+  # console until 0.3, D-079), again if the package's own fetch gave up:
   # snapd drops a download it finds too slow, the firefox package's preinst
-  # then fails, and the base had no console (L1, 2026-10-21: core24 at
-  # 80 kB/s, then nothing).
+  # then fails (L1, 2026-10-21: core24 at 80 kB/s, then nothing).
   - [sh, -c, 'for i in 1 2 3; do snap list firefox >/dev/null 2>&1 && break; snap install firefox; done; apt-get install -y firefox']
   # The build's verdict, its last line on the console the service records
   # (D-063): Sluse, Claude Desktop and Claude Code, Firefox's snap and every

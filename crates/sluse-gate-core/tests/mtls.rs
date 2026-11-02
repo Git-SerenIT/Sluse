@@ -148,8 +148,7 @@ fn config_json(
           }},
           "endpoint": {{
             "clientCertPath": "certs/endpoint.pem",
-            "clientKeyPath": "certs/endpoint.key",
-            "consoleListen": "127.0.0.1:7582"
+            "clientKeyPath": "certs/endpoint.key"
           }},
           "artifacts": "artifacts",
           "workspace": "workspace",

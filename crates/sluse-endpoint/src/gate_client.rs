@@ -270,6 +270,41 @@ pub async fn enrol(
     json_or_error(res).await.map(Some)
 }
 
+/// Connect, resuming the session the workspace remembers if the Gate still
+/// holds it, else a new one. `true` when it resumed.
+///
+/// The Gate is the authority on whether that session still exists, so it is
+/// asked rather than assumed: on the status route, which answers without a
+/// refusal in the Sluse log for a session that aged out. The errors are the
+/// sentence a person running it reads.
+pub async fn connect_resuming(
+    loaded: &Loaded,
+    remembered: Option<sluse_proto::SessionId>,
+) -> Result<(GateClient, Health, bool), String> {
+    let fresh = || async {
+        GateClient::connect(loaded).await.map_err(|e| {
+            format!("gate: {e}\nNothing is admitted when the Gate cannot be reached; this fails closed.")
+        })
+    };
+    let (client, health) = fresh().await?;
+    let Some(previous) = remembered else {
+        return Ok((client, health, false));
+    };
+    let resumed = client.with_session(previous);
+    match resumed.session_held().await {
+        Ok(true) => Ok((resumed, health, true)),
+        Ok(false) => {
+            tracing::info!(
+                session_id = %resumed.session(),
+                "the Gate no longer holds the previous session; starting a new run"
+            );
+            let (client, health) = fresh().await?;
+            Ok((client, health, false))
+        }
+        Err(e) => Err(format!("gate: {e}")),
+    }
+}
+
 /// Ask a Gate whether it is serving, without taking a session from it.
 ///
 /// A free function rather than a [`GateClient`] method because it needs no

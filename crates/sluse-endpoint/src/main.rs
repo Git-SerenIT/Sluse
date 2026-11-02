@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 SerenIT ApS and Prompted EV
 
-//! The endpoint. Runs in the guest: an MCP server over stdio (`--mcp`) and, at
-//! M5, the console's loopback API (`--console`).
+//! The endpoint. Runs in the guest: an MCP server over stdio (`--mcp`), the
+//! box's enrolment (`--enrol`), and the console's answers as JSON for the
+//! acceptance script (`--query`). The console itself is `sluse-console`.
 //!
 //! **Everything on stdout belongs to the MCP transport.** Diagnostics go to
 //! stderr, always. A single stray `println!` in this process is a protocol
@@ -36,14 +37,10 @@ struct Cli {
     #[arg(long)]
     mcp: bool,
 
-    /// The console's loopback API.
-    #[arg(long, conflicts_with = "mcp")]
-    console: bool,
-
     /// Enrol this box (slice 2): read the host's bootstrap from KVP, get an
     /// identity from the Gate, and write it and the Gate's config to
     /// `--config`. Run as root, by `sluse-enrol.service`.
-    #[arg(long, conflicts_with_all = ["mcp", "console"])]
+    #[arg(long, conflicts_with = "mcp")]
     enrol: bool,
 
     /// With `--enrol`: who owns the written files, as `uid:gid`.
@@ -54,14 +51,15 @@ struct Cli {
     #[arg(long, value_name = "PATH", default_value = sluse_endpoint::kvp::POOL, requires = "enrol")]
     pool: PathBuf,
 
-    /// With `--enrol`: a systemd unit to restart once a new identity is
-    /// written, which is the console.
-    #[arg(long, value_name = "UNIT", requires = "enrol")]
-    restart: Option<String>,
+    /// One of the console's answers as JSON on stdout, for the acceptance
+    /// script (D-079): `state`, `sources`, or `list` with `--path`.
+    #[arg(long, value_enum, conflicts_with_all = ["mcp", "enrol"])]
+    query: Option<Query>,
 
-    /// Where the console's files are. Only read with `--console`.
-    #[arg(long, value_name = "DIR", default_value = sluse_endpoint::console::assets::DEFAULT_UI_DIR)]
-    ui: PathBuf,
+    /// With `--query list`: `<source>` or `<source>/<relative path>`.
+    #[arg(long, value_name = "PATH", requires = "query")]
+    path: Option<String>,
+
 }
 
 fn main() -> ExitCode {
@@ -81,8 +79,8 @@ fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
-    if !cli.mcp && !cli.console && !cli.enrol {
-        eprintln!("sluse-endpoint: pass --mcp, --console or --enrol.");
+    if !cli.mcp && !cli.enrol && cli.query.is_none() {
+        eprintln!("sluse-endpoint: pass --mcp, --enrol or --query.");
         return ExitCode::from(2);
     }
 
@@ -98,8 +96,8 @@ fn main() -> ExitCode {
         return runtime.block_on(run_enrol(&cli));
     }
 
-    let result = if cli.console {
-        runtime.block_on(run_console(&cli.config, &cli.ui))
+    let result = if let Some(what) = cli.query {
+        runtime.block_on(run_query(&cli.config, what, cli.path.as_deref()))
     } else {
         runtime.block_on(run(&cli.config))
     };
@@ -124,12 +122,8 @@ async fn run_enrol(cli: &Cli) -> ExitCode {
     };
     match sluse_endpoint::enrol::run(&cli.config, &cli.pool, owner).await {
         Ok(sluse_endpoint::enrol::Outcome::Enrolled) => {
+            // The console sees the new config and joins again by itself.
             eprintln!("enrolled: {}", cli.config.display());
-            // Queued, not waited for: the console is ordered after this
-            // unit, so waiting here waits for ourselves (L1, 2026-09-30).
-            if let Some(unit) = &cli.restart {
-                let _ = std::process::Command::new("systemctl").args(["restart", "--no-block", unit]).status();
-            }
             ExitCode::SUCCESS
         }
         Ok(sluse_endpoint::enrol::Outcome::Unchanged) => {
@@ -151,81 +145,53 @@ async fn run_enrol(cli: &Cli) -> ExitCode {
     }
 }
 
-/// The console's loopback API (M5).
-///
-/// **It joins the run rather than starting one.** The journal is per session and
-/// the session belongs to the run, so a console that minted its own would read
-/// an empty file and show a person nothing while their agent worked. It takes
-/// the session the workspace remembers, and only falls back to a fresh one when
-/// there is no run to join yet — which is still worth serving, because the
-/// sources and the Gate are worth looking at before anything has been admitted.
-///
-/// It does **not** call [`session::attach`]. Recording a session is the running
-/// endpoint's business; a console that wrote there would claim a run it is only
-/// watching.
-async fn run_console(config_path: &std::path::Path, ui_dir: &std::path::Path) -> Result<(), u8> {
+/// `--query`: one of the console's calls, its answer as JSON on stdout (D-079
+/// point 5). For the acceptance script, which drove the console's HTTP API
+/// for the same answers. A refusal is an answer: its error, as JSON, on
+/// stdout too, and exit 1; only a run that could not ask exits otherwise.
+async fn run_query(config_path: &std::path::Path, what: Query, path: Option<&str>) -> Result<(), u8> {
     let loaded = sluse_proto::config::load(config_path).map_err(|e| {
         eprintln!("config: {e}");
         EX_CONFIG
     })?;
-
-    let addr: std::net::SocketAddr =
-        loaded.config.endpoint.console_listen.parse().map_err(|e| {
-            eprintln!("endpoint.consoleListen {}: {e}", loaded.config.endpoint.console_listen);
-            EX_CONFIG
-        })?;
-    // Checked before the Gate is contacted, so a config that could not have
-    // been served says so immediately rather than after a handshake.
-    sluse_endpoint::console::api::require_loopback(addr).map_err(|e| {
+    let console = sluse_endpoint::console::Console::join(&loaded).await.map_err(|e| {
         eprintln!("{e}");
         EX_CONFIG
     })?;
-
-    let workspace = loaded.resolve(&loaded.config.workspace);
-    let remembered = session::remembered(&workspace);
-    let joined = remembered.is_some();
-    let (client, health, _) = connect(&loaded, remembered).await?;
-    if joined {
-        tracing::info!(session = %client.session(), "console joined the run's session");
-    } else {
-        tracing::warn!("no run to join yet; the journal and inventory will be empty until one starts");
+    let answer = match what {
+        Query::State => serde_json::to_value(console.state().await).map_err(|e| e.to_string()),
+        Query::Sources => serde_json::to_value(&console.view).map_err(|e| e.to_string()),
+        Query::List => {
+            let Some(path) = path else {
+                eprintln!("--query list needs --path");
+                return Err(2);
+            };
+            match console.list(path).await {
+                Ok(l) => serde_json::to_value(l).map_err(|e| e.to_string()),
+                Err(refused) => {
+                    println!("{}", serde_json::to_string(&refused).unwrap_or_default());
+                    return Err(1);
+                }
+            }
+        }
+    };
+    match answer {
+        Ok(v) => {
+            println!("{v}");
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            Err(1)
+        }
     }
+}
 
-    let view = client.config_view().await.map_err(|e| {
-        eprintln!("the Gate refused the config view: {e}");
-        EX_CONFIG
-    })?;
-
-    let local = client.status_now().await.ok().and_then(|s| s.environment) == Some(sluse_proto::Environment::Local);
-    let state = std::sync::Arc::new(sluse_endpoint::console::Console {
-        session: client.session().clone(),
-        gate: client,
-        view,
-        workspace,
-        journal_dir: loaded.resolve(&loaded.config.journal_dir),
-        box_id: health.box_id.clone(),
-        config_version: health.config_version.clone(),
-        ui_dir: ui_dir.to_path_buf(),
-        mirrored: std::sync::atomic::AtomicU64::new(0),
-        local,
-        deployment: loaded.config.deployment.clone(),
-    });
-
-    if !ui_dir.join("index.html").is_file() {
-        // Said now, not discovered as a blank page. The API is still worth
-        // serving without the views — `curl` is a console too.
-        tracing::warn!(
-            dir = %ui_dir.display(),
-            "no index.html here; the API is served and the views are not. Build them with \
-             `npm --prefix ui/console run build`, or pass --ui"
-        );
-    }
-
-    eprintln!("console on http://{addr} — loopback, no authentication (M5 limitation)");
-    sluse_endpoint::console::serve(state, addr).await.map_err(|e| {
-        eprintln!("console: {e}");
-        EX_CONFIG
-    })
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum Query {
+    State,
+    Sources,
+    List,
 }
 
 async fn run(config_path: &std::path::Path) -> Result<(), u8> {
@@ -309,36 +275,8 @@ async fn connect(
     loaded: &sluse_proto::Loaded,
     remembered: Option<sluse_proto::SessionId>,
 ) -> Result<(GateClient, sluse_proto::Health, bool), u8> {
-    let (client, health) = GateClient::connect(loaded).await.map_err(|e| {
-        eprintln!("gate: {e}");
-        eprintln!("Nothing is admitted when the Gate cannot be reached; this fails closed.");
+    sluse_endpoint::gate_client::connect_resuming(loaded, remembered).await.map_err(|e| {
+        eprintln!("{e}");
         EX_CONFIG
-    })?;
-
-    let Some(previous) = remembered else {
-        return Ok((client, health, false));
-    };
-
-    // The Gate is the authority on whether that session still exists, so it is
-    // asked rather than assumed: on the status route, which answers without a
-    // refusal in the Sluse log for a session that aged out.
-    let resumed = client.with_session(previous);
-    match resumed.session_held().await {
-        Ok(true) => Ok((resumed, health, true)),
-        Ok(false) => {
-            tracing::info!(
-                session_id = %resumed.session(),
-                "the Gate no longer holds the previous session; starting a new run"
-            );
-            let (client, health) = GateClient::connect(loaded).await.map_err(|e| {
-                eprintln!("gate: {e}");
-                EX_CONFIG
-            })?;
-            Ok((client, health, false))
-        }
-        Err(e) => {
-            eprintln!("gate: {e}");
-            Err(EX_CONFIG)
-        }
-    }
+    })
 }

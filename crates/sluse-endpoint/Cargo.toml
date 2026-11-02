@@ -3,7 +3,7 @@
 
 [package]
 name = "sluse-endpoint"
-description = "Sluse endpoint: MCP server over stdio and the console API. Runs in the guest."
+description = "Sluse endpoint: MCP server over stdio, enrolment, and the console's calls. Runs in the guest."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -43,9 +43,6 @@ reqwest.workspace = true
 # the client uses. Two rustls in one graph would be two trust decisions.
 rustls.workspace = true
 rmcp.workspace = true
-# The console's loopback API. Same axum the broker serves with, so one HTTP
-# stack is in the graph rather than two.
-axum.workspace = true
 schemars.workspace = true
 
 # Enrolment (slice 2): the box makes its own key pair. P-256, the same rcgen
@@ -61,7 +58,6 @@ encoding_rs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-tower.workspace = true
 # The integration test runs a real broker behind a real handshake.
 sluse-gate-core = { path = "../sluse-gate-core" }
 sluse-gate-front = { path = "../sluse-gate-front" }
@@ -70,4 +66,6 @@ aws-lc-rs.workspace = true
 # tests use, included by path (D-071).
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-server"] }
 # The Entra and Graph stand-in the broker's M7 tests use, included by path.
+# It serves with axum, which the endpoint itself no longer carries (D-079).
+axum.workspace = true
 jsonwebtoken.workspace = true

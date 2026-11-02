@@ -161,9 +161,9 @@
       </Component>
     </ComponentGroup>
 
-    <!-- The console's files, the config schema, and what the package is. -->
+    <!-- The config schema, and what the package is. The console is the box's,
+         in the bundle (D-079). -->
     <ComponentGroup Id="Rest" Directory="INSTALLFOLDER">
-      <Files Include="$(var.Stage)\ui\**" Subdirectory="ui" />
       <Files Include="$(var.Stage)\config\**" Subdirectory="config" />
       <!-- The Sluse Artifacts policy, for the admin to deploy with Intune. -->
       <Files Include="$(var.Stage)\intune\**" Subdirectory="intune" />

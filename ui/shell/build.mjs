@@ -10,8 +10,9 @@ rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist/novnc/docs', { recursive: true });
 // Sluse Admin's window is three more (D-039 slice 6).
 for (const f of ['index.html', 'main.js', 'causes.js', 'theme.js', 'style.css', 'admin.html', 'admin.js', 'admin.css']) cpSync(`src/${f}`, `dist/${f}`);
-// Sluse's look, shared with the console (D-062): tokens, components, icons, logo.
-cpSync('../console/look', 'dist/look', { recursive: true });
+// Sluse's look (D-062): tokens, components, icons, logo. The box's console
+// draws with the same tokens and icons, carried into Rust (D-079).
+cpSync('../look', 'dist/look', { recursive: true });
 for (const d of ['core', 'vendor']) cpSync(`${novnc}/${d}`, `dist/novnc/${d}`, { recursive: true });
 cpSync(`${novnc}/LICENSE.txt`, 'dist/novnc/LICENSE.txt');
 cpSync(`${novnc}/AUTHORS`, 'dist/novnc/AUTHORS');

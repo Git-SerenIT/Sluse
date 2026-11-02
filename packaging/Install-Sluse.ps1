@@ -102,13 +102,6 @@ foreach ($exe in 'sluse.exe', 'sluse-gate-core.exe', 'sluse-gate-front.exe', 'sl
     Write-Host ("  {0,-20} {1}" -f $exe, ($out -join ' ').Trim())
 }
 
-$consolePage = Join-Path $InstallDir 'ui\console\index.html'
-if (Test-Path $consolePage) {
-    Write-Host ("  {0,-20} present" -f 'console')
-} else {
-    Write-Warning 'the console is not in this package; --console will serve its API and no views'
-}
-
 # ---- PATH, if asked --------------------------------------------------------
 if ($AddToPath) {
     $current = [Environment]::GetEnvironmentVariable('Path', 'User')

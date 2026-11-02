@@ -31,8 +31,9 @@
 //!
 //! ## M3, and what is not here yet
 //!
-//! Both halves are built. `--mcp` is M3; `--console` — the loopback API and
-//! the views in `ui/console` — is M5. See [`console`].
+//! `--mcp` is M3. The console's calls are [`console`]; the program that draws
+//! them is `crates/sluse-console` (D-079), which had been a loopback API and
+//! the views in `ui/console` since M5.
 
 pub mod blinders;
 pub mod gate_client;

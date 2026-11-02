@@ -81,7 +81,7 @@ async fn fx_sources(sources: Value) -> Fx {
             "clientCaPath": "certs/client-ca.pem",
             "certPin": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         },
-        "endpoint": { "clientCertPath": "c.pem", "clientKeyPath": "c.key", "consoleListen": "127.0.0.1:7582" },
+        "endpoint": { "clientCertPath": "c.pem", "clientKeyPath": "c.key" },
         "artifacts": "artifacts", "workspace": "workspace", "journalDir": "journal",
         "audit": { "sink": "jsonl", "path": "audit/core.jsonl" }
     });

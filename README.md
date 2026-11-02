@@ -91,12 +91,15 @@ update at the next open. What is open is listed as open, in
 A plan, not a promise. Nothing here is claimed until it is built and run,
 and then it moves to Status.
 
-- **0.3:** code signing, built and waiting on the certificate's identity
+- **0.3:** the box's console drawn by Sluse's own program instead of a
+  browser, so a browser update cannot take the box's screen away, and the
+  console's local port, which any program in the box could call, goes.
+- **0.4:** code signing, built and waiting on the certificate's identity
   check. And the connections a Sluse Platform will need, **to be done**: a
   paid platform for running Sluse at scale (teams, a configuration per team,
   compliance reporting) is planned, and what it needs from the open-source
   box is found out before anything is built for it.
-- **After 0.3, the pilots decide** what comes next, by what they need. The
+- **After 0.4, the pilots decide** what comes next, by what they need. The
   candidates known today:
 
 | Area | Today | Candidate |
@@ -124,7 +127,6 @@ Setting up, working in it, and what IT sees: [GUIDE.md](GUIDE.md).
 ```sh
 cargo build --workspace
 cargo test  --workspace
-npm --prefix ui/console ci && npm --prefix ui/console run check
 ```
 
 Windows binaries and the MSI are built by CI. See

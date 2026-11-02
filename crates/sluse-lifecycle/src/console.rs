@@ -10,8 +10,8 @@
 //! `boxes\<sid>\console.log`, beside the journal's mirror, so a wipe keeps
 //! it. Like the mirror it is what the box said, not a trust anchor.
 //!
-//! **The console's answer (Q9).** The box's kiosk logs [`CONSOLE_UP`] once
-//! its console's port answers, and the copy watches for it, so the shell can
+//! **The console's answer (Q9).** The box's console logs [`CONSOLE_UP`] once
+//! it has joined the run and read it, and the copy watches for it, so the shell can
 //! keep its wait over the box until then. The box can say it falsely or not
 //! at all; either way it only decides when the box's own picture is shown.
 
@@ -25,8 +25,8 @@ pub const CAP: u64 = 16 << 20;
 /// inside the box keeps it; a stop takes it away.
 const GRACE: Duration = Duration::from_secs(60);
 
-/// What the box's kiosk logs when its console's port answers
-/// (`packaging/box/kiosk/browser`, forwarded by `console-log`).
+/// What the box's console logs when it has joined the run and read it
+/// (`sluse-console`, forwarded by `console-log`).
 pub const CONSOLE_UP: &[u8] = b"sluse-console-up";
 
 /// A login prompt on the serial console: `install.sh` masks that getty, so
@@ -260,7 +260,9 @@ mod tests {
     #[test]
     fn the_box_says_the_consoles_answer_in_the_words_the_copy_looks_for() {
         let marker = std::str::from_utf8(CONSOLE_UP).unwrap();
-        assert!(include_str!("../../../packaging/box/kiosk/browser").contains(&format!("logger -t {marker} ")));
+        // `sluse-console` says it with logger (D-079; the kiosk's browser
+        // script did until 0.3).
+        assert!(include_str!("../../sluse-console/src/app.rs").contains(&format!(r#""logger").args(["-t", "{marker}""#)));
         assert!(include_str!("../../../packaging/box/kiosk/console-log").contains(&format!("SYSLOG_IDENTIFIER={marker} ")));
     }
 
@@ -278,7 +280,7 @@ mod tests {
     #[test]
     fn the_consoles_answer_is_seen_whole_or_split_across_reads() {
         let dir = tempfile::tempdir().unwrap();
-        let log = b"2026-10-20T10:00:01 sluse-box sluse-console-up[812]: the console answers on 7582\n";
+        let log = b"2026-10-20T10:00:01 sluse-box sluse-console-up[812]: the console answers\n";
         let count = |src: &mut dyn Read| {
             let mut n = 0;
             copy(src, dir.path(), CAP, &mut |s| n += usize::from(s == Said::ConsoleUp)).unwrap();
@@ -288,7 +290,7 @@ mod tests {
         assert_eq!(count(&mut Trickle(log)), 1, "split across reads");
         let twice = [&log[..], &log[..]].concat();
         assert_eq!(count(&mut Trickle(&twice)), 2, "a kiosk that started again says it again");
-        assert_eq!(count(&mut &b"Started sluse-console.service\nsluse-console-u\n"[..]), 0);
+        assert_eq!(count(&mut &b"Started sluse-kiosk.service\nsluse-console-u\n"[..]), 0);
         assert!(std::fs::read(dir.path().join("console.log")).unwrap().ends_with(b"sluse-console-u\n"), "copied as it came");
         // A login prompt, split across reads: the box without Sluse (D-066).
         let mut no = 0;

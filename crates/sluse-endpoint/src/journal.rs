@@ -281,9 +281,9 @@ pub fn read_all(dir: &Path) -> std::io::Result<Vec<AuditRecord>> {
 
 /// Read a journal file without opening it for append.
 ///
-/// **The console is a second process** — `--console` and `--mcp` do not share
-/// one — so it reads this file while the MCP endpoint is appending to it. It
-/// re-reads per request rather than holding a snapshot, because a console
+/// **The console is a second process** (`sluse-console`) and reads this file
+/// while the MCP endpoint is appending to it. It re-reads on every read rather
+/// than holding a snapshot, because a console
 /// showing a run that has moved on is worse than one that costs a file read.
 /// A missing file is an empty journal, not an error: the run may not have
 /// admitted anything yet.

@@ -45,13 +45,12 @@ try {
         throw 'no version in the workspace Cargo.toml'
     }
     $version = $Matches[1]
-    # The other three places that state it must agree (D-068): the shell's
-    # own workspace and the two UIs' package files. A release takes its tag
+    # The other places that state it must agree (D-068): the shell's own
+    # workspace and its package file. A release takes its tag
     # from this version, so a disagreement is a package lying about itself.
     $others = @{
         'ui\shell\src-tauri\Cargo.toml' = '(?m)^version\s*=\s*"([^"]+)"'
         'ui\shell\package.json'          = '"version":\s*"([^"]+)"'
-        'ui\console\package.json'        = '"version":\s*"([^"]+)"'
     }
     foreach ($f in $others.Keys) {
         if ((Get-Content $f -Raw) -notmatch $others[$f] -or $Matches[1] -ne $version) {
@@ -80,13 +79,6 @@ try {
         cargo build --workspace --release --locked
         if ($LASTEXITCODE -ne 0) { throw "cargo build failed with $LASTEXITCODE" }
 
-        # The console is TypeScript and ships built. `npm ci`, not `install`:
-        # the lock file is what CI and a developer agree on.
-        npm --prefix ui/console ci
-        if ($LASTEXITCODE -ne 0) { throw "npm ci failed with $LASTEXITCODE" }
-        npm --prefix ui/console run build
-        if ($LASTEXITCODE -ne 0) { throw "npm run build failed with $LASTEXITCODE" }
-
         # The host shell (D-025): its own Cargo workspace and lock file, built
         # by Tauri's CLI, which runs the frontend's copy step first. No bundle:
         # the MSI packages it (slice 5).
@@ -103,7 +95,6 @@ try {
     if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'bin') -Force
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'config') -Force
-    $null = New-Item -ItemType Directory -Path (Join-Path $stage 'ui\console') -Force
 
     # Four binaries, and the names are the ones the docs use. `sluse.exe` is
     # the lifecycle crate's binary; the crate name and the command differ and
@@ -128,15 +119,7 @@ try {
         Copy-Item $bundle (Join-Path $stage 'box') -Force
     }
 
-    # The console: the page, its stylesheet, the shared look and the compiled modules. Not the
-    # TypeScript, not node_modules - what ships is what a browser loads.
-    Copy-Item 'ui\console\index.html' (Join-Path $stage 'ui\console') -Force
-    Copy-Item 'ui\console\look'       (Join-Path $stage 'ui\console\look') -Recurse -Force
-    Copy-Item 'ui\console\style.css'  (Join-Path $stage 'ui\console') -Force
-    if (-not (Test-Path 'ui\console\dist\main.js')) {
-        throw 'ui/console/dist/main.js is missing - the console was not built'
-    }
-    Copy-Item 'ui\console\dist' (Join-Path $stage 'ui\console\dist') -Recurse -Force
+    # No console here: it is the box's, in the bundle (D-079). LOCAL has none.
 
     Copy-Item 'config\local.example.json'        (Join-Path $stage 'config') -Force
     Copy-Item 'config\local.example.device.json' (Join-Path $stage 'config') -Force
@@ -146,8 +129,7 @@ try {
     Copy-Item 'config\egress-catalog.json'       (Join-Path $stage 'config') -Force
 
     # Third-party notices, which MIT and BSD require with a binary copy: the
-    # crates compiled into the three workspaces' programs (the third is the
-    # box's native console, D-079), by cargo-about, which
+    # crates compiled into both workspaces' programs, by cargo-about, which
     # fails on a licence packaging\notices\about.toml does not accept; then
     # noVNC's, which the shell carries.
     if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) {
@@ -155,7 +137,7 @@ try {
     }
     $about = Join-Path $repo 'packaging\notices'
     $notices = @(Get-Content (Join-Path $about 'header.txt') -Raw)
-    foreach ($ws in '.', 'ui\shell\src-tauri', 'ui\console-native') {
+    foreach ($ws in '.', 'ui\shell\src-tauri') {
         $out = [IO.Path]::Combine($repo, $OutDir, 'notices.part.txt')
         Push-Location $ws
         try {

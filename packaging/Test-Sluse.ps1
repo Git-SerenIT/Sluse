@@ -17,9 +17,10 @@
 # (`docs/development.md`). Run this against `\\FS01\...` and it tests
 # something CI cannot reach.
 #
-# It drives the console's loopback API rather than an agent. An agent tests the
-# tool wording and is a scored run's job; this tests the enforcing path, which
-# is Gate Core's, and which answers over HTTP where a script can check it.
+# It asks through the console's calls rather than an agent, with
+# `sluse-endpoint --query`, which prints each answer as JSON (D-079; it drove
+# the console's loopback API until 0.3). An agent tests the tool wording and is
+# a scored run's job; this tests the enforcing path, which is Gate Core's.
 #
 # Records are left where they land and are **not** scored here: the scorers are
 # JavaScript and a clean host has no Node (D-012 point 6). Copy the run
@@ -47,7 +48,7 @@ param(
     # designed.
     [string] $DeniedPath = 'fixture/restricted/sealed',
 
-    # Leave Gate Core and console running afterwards, to look at the console.
+    # Leave Gate Core running afterwards.
     [switch] $KeepRunning
 )
 
@@ -59,8 +60,6 @@ $endpoint = Join-Path $BinDir 'sluse-endpoint.exe'
 foreach ($exe in $sluse, $endpoint) {
     if (-not (Test-Path $exe)) { throw "missing $exe - pass -BinDir, or run this from the install directory" }
 }
-$ui = Join-Path (Split-Path -Parent $BinDir) 'ui\console'
-$console = 'http://127.0.0.1:7582'
 
 $script:pass = 0
 $script:fail = 0
@@ -79,32 +78,28 @@ function Check {
     }
 }
 
-# `Invoke-RestMethod` throws on a non-2xx, and the refusals are the interesting
-# answers here - so the body is caught and returned rather than thrown away.
+# One of the console's answers, from `sluse-endpoint --query`: JSON on stdout,
+# exit 0 for an answer and 1 for a refusal, whose error is the JSON then. Any
+# other exit is a run that could not ask, and is thrown with what it said
+# rather than returned as though Gate Core had refused (2026-09-22: a transport
+# failure taken for a refusal cost the first host run its diagnosis).
 #
-# **A refusal is an answer; a transport failure is not**, and conflating them
-# cost the first host run its diagnosis (2026-09-22). Under `Set-StrictMode
-# -Version Latest` a missing property is fatal, and neither `ErrorDetails` nor
-# `Exception.Response` exists when nothing answered at all - so the real error
-# was replaced by "the property 'Message' cannot be found on this object" and
-# every check reported it. Both dereferences are guarded now, and a failure
-# with no HTTP status is rethrown with what the transport actually said rather
-# than returned as though the console had refused.
-function Api {
-    param([string] $Path)
-    try {
-        return @{ ok = $true; body = (Invoke-RestMethod -Uri "$console$Path" -TimeoutSec 20) }
-    } catch {
-        $status = $null
-        $response = $_.Exception.PSObject.Properties['Response']
-        if ($response -and $response.Value) { $status = [int] $response.Value.StatusCode }
-        if ($null -eq $status) { throw "no answer from $console$Path - $($_.Exception.Message)" }
-        $body = $null
-        if ($null -ne $_.ErrorDetails -and $_.ErrorDetails.Message) {
-            try { $body = $_.ErrorDetails.Message | ConvertFrom-Json } catch { $body = $_.ErrorDetails.Message }
-        }
-        return @{ ok = $false; status = $status; body = $body }
+# Start-Process, not `&` with `2>`: the endpoint logs to stderr, and Windows
+# PowerShell turns a native command's redirected stderr into errors, which
+# `-ErrorAction Stop` throws. **Every path is quoted**: `-ArgumentList` joins
+# with spaces and quotes nothing (2026-09-22, `C:\Program Files`).
+function Query {
+    param([string] $What, [string] $Path)
+    $queryArgs = @('--config', "`"$(Join-Path $WorkDir 'sluse.json')`"", '--query', $What)
+    if ($Path) { $queryArgs += @('--path', "`"$Path`"") }
+    $out = Join-Path $WorkDir 'query.out'
+    $err = Join-Path $WorkDir 'query.err'
+    $p = Start-Process -FilePath $endpoint -ArgumentList $queryArgs -Wait -PassThru -NoNewWindow `
+        -RedirectStandardOutput $out -RedirectStandardError $err
+    if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 1) {
+        throw "sluse-endpoint --query $What exited $($p.ExitCode) - $((Get-Content $err -ErrorAction SilentlyContinue) -join ' ')"
     }
+    return @{ ok = ($p.ExitCode -eq 0); body = (Get-Content $out -Raw | ConvertFrom-Json) }
 }
 
 Write-Host '--- what is being tested ---'
@@ -126,52 +121,19 @@ Write-Host '--- starting ---'
 & $sluse start --workspace $WorkDir --fixture $SourceRoot
 if ($LASTEXITCODE -ne 0) { throw "sluse start failed with $LASTEXITCODE - the gate log says why" }
 
-# A hidden window throws away everything the console says about why it would
-# not start, and three seconds was a guess. Its output goes to files beside the
-# run and the script waits until it answers, the way `sluse start` waits for the
-# Gate.
-$consoleOut = Join-Path $WorkDir 'console.log'
-$consoleErr = Join-Path $WorkDir 'console.err'
-# **Every path is quoted.** `Start-Process -ArgumentList` joins an array with
-# spaces and quotes nothing, so `C:\Program Files\Sluse\ui\console` arrives as
-# two arguments and the endpoint exits 2 on an unexpected one. Found on the host
-# on 2026-09-22, against the default install directory of this package's own
-# installer; CI had only ever installed to a path with no space in it.
-$consoleProc = Start-Process -FilePath $endpoint `
-    -ArgumentList '--config', "`"$(Join-Path $WorkDir 'sluse.json')`"", '--console', '--ui', "`"$ui`"" `
-    -PassThru -WindowStyle Hidden `
-    -RedirectStandardOutput $consoleOut -RedirectStandardError $consoleErr
-
 try {
-    $ready = $false
-    foreach ($attempt in 1..20) {
-        if ($consoleProc.HasExited) { break }
-        try {
-            Invoke-RestMethod -Uri "$console/api/state" -TimeoutSec 2 | Out-Null
-            $ready = $true
-            break
-        } catch {
-            Start-Sleep -Milliseconds 500
-        }
-    }
-    if (-not $ready) {
-        $said = @(Get-Content $consoleOut, $consoleErr -ErrorAction SilentlyContinue) -join "`n"
-        $exited = if ($consoleProc.HasExited) { "it exited with $($consoleProc.ExitCode)" } else { 'it is still running but not answering' }
-        throw "the console never answered on $console after 20 tries - $exited. It said:`n$said`nCheck: is 7582 already held (Get-NetTCPConnection -LocalPort 7582), and does $ui exist"
-    }
-
     Write-Host ''
     Write-Host '--- checks ---'
     Check 'Sluse Gate is serving' {
-        $r = Api '/api/state'
-        if (-not $r.ok) { throw "the console did not answer" }
+        $r = Query state
+        if (-not $r.ok) { throw "no state: $($r.body.code)" }
         if ($r.body.gate.status -ne 'serving') { throw "Gate Core is $($r.body.gate.status): $($r.body.gate.detail)" }
         "acting as $($r.body.user.kind):$($r.body.user.name), posture $($r.body.gate.postureId)"
     }
 
     Check 'the posture snapshot answered, rather than shrugging at everything' {
         # This check used to print the posture id and pass unconditionally - a
-        # name that claimed more than the body did. The console's API exposes
+        # name that claimed more than the body did. The console's state exposes
         # only the id, so the snapshot itself is read off disk.
         #
         # A machine that is not Windows answers `unknown` to every machine
@@ -200,7 +162,7 @@ try {
     }
 
     Check 'the source is advertised with its scopes in request form' {
-        $r = Api '/api/sources'
+        $r = Query sources
         if (-not $r.ok) { throw 'no sources' }
         $s = $r.body.sources[0]
         if (-not $s) { throw 'no source in the config view' }
@@ -213,7 +175,7 @@ try {
     }
 
     Check 'the console sees out-of-scope material, marked rather than hidden' {
-        $r = Api '/api/list?path=fixture'
+        $r = Query list 'fixture'
         if (-not $r.ok) { throw "listing refused: $($r.body.code)" }
         $out = @($r.body.entries | Where-Object { -not $_.inScope })
         if ($out.Count -eq 0) { throw 'nothing was marked out of scope; is there anything beside in-scope and restricted?' }
@@ -221,7 +183,7 @@ try {
     }
 
     Check 'an in-scope directory lists' {
-        $r = Api '/api/list?path=fixture/in-scope'
+        $r = Query list 'fixture/in-scope'
         if (-not $r.ok) { throw "refused: $($r.body.code)" }
         "$($r.body.entries.Count) entries"
     }
@@ -231,7 +193,7 @@ try {
         # root rather than below it, `sluse start` would have exited 78 and
         # nothing here would have run - which is exactly what happened the first
         # time CI ran this script.
-        $r = Api '/api/list?path=fixture/restricted'
+        $r = Query list 'fixture/restricted'
         if (-not $r.ok) { throw "the scope itself refused: $($r.body.code). The deny ACE is on the scope root; move it under the scope" }
         "$($r.body.entries.Count) entries visible in the scope"
     }
@@ -244,7 +206,7 @@ try {
         # `canonicalize` failing on a denied handle, and a refactor that made
         # path resolution cheaper would drop it silently.
         $leaf = ($DeniedPath -split '/')[-1]
-        $r = Api '/api/list?path=fixture/restricted'
+        $r = Query list 'fixture/restricted'
         if (-not $r.ok) { throw "no listing: $($r.body.code)" }
         if ($r.body.entries.name -contains $leaf) {
             throw "'$leaf' is in the listing. On Windows a denied child should not be. On POSIX it would be, which is why this runs here"
@@ -254,7 +216,7 @@ try {
 
     # ---- the one that needs a machine with permissions on it ----------------
     Check "$DeniedPath refuses with ACCESS_DENIED, because of an ACL" {
-        $r = Api "/api/list?path=$([uri]::EscapeDataString($DeniedPath))"
+        $r = Query list $DeniedPath
         if ($r.ok) {
             throw "it was served. The deny ACE is not set for the account this machine reaches the source as - Get-SmbSession shows which account that is over a share, and it is the cached credential rather than the logged-on user"
         }
@@ -265,7 +227,7 @@ try {
     }
 
     Check 'the guest is never told a host path it did not ask for' {
-        $r = Api '/api/list?path=fixture/in-scope'
+        $r = Query list 'fixture/in-scope'
         if (-not $r.ok) { throw 'no listing' }
         foreach ($e in $r.body.entries) {
             if ($e.name -match '^[A-Za-z]:\\' -or $e.name -match '^\\\\') { throw "a host path in an entry name: $($e.name)" }
@@ -276,10 +238,9 @@ try {
 finally {
     Write-Host ''
     if ($KeepRunning) {
-        Write-Host "left running: $console  (stop with: Stop-Process -Id $($consoleProc.Id); $sluse stop --workspace $WorkDir)"
+        Write-Host "left running (stop with: $sluse stop --workspace $WorkDir)"
     } else {
         Write-Host '--- stopping ---'
-        if ($consoleProc -and -not $consoleProc.HasExited) { Stop-Process -Id $consoleProc.Id -Force }
         & $sluse stop --workspace $WorkDir
     }
 }

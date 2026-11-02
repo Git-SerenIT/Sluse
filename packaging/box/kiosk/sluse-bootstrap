@@ -66,7 +66,7 @@ ZONEINFO = "/usr/share/zoneinfo"
 def set_timezone(tz):
     """The host's timezone, when it names a zone this box has (L1,
     2026-10-05: the box ran on UTC, two hours behind). Programs started
-    before it, such as the kiosk's browser at the very first boot, keep the
+    before it, such as the console at the very first boot, keep the
     old zone until they restart; the zone stays on disk for the next boot."""
     if not tz or len(tz) > 64 or not re.fullmatch(rf"{TZ_PART}(/{TZ_PART}){{0,2}}", tz):
         return

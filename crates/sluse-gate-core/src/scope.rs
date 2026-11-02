@@ -1085,7 +1085,7 @@ mod retry_tests {
             "boxId": "box-local-test", "environment": "local",
             "gate": { "listen": "127.0.0.1:7580", "url": "https://127.0.0.1:7580", "certPath": "c.pem", "keyPath": "c.key",
                       "clientCaPath": "ca.pem", "certPin": "0".repeat(64) },
-            "endpoint": { "clientCertPath": "e.pem", "clientKeyPath": "e.key", "consoleListen": "127.0.0.1:7582" },
+            "endpoint": { "clientCertPath": "e.pem", "clientKeyPath": "e.key" },
             "artifacts": dir.join("artifacts"), "workspace": workspace, "journalDir": dir.join("journal"),
             "audit": { "sink": "jsonl", "path": "audit.jsonl" }
         });

@@ -13,20 +13,13 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$repo"
 out=${1:-dist}
 
-cargo build --release --locked -p sluse-endpoint
-# Spike 9 (D-079): the console without a web stack, beside the Firefox one
-# until the spike passes.
-cargo build --release --locked --manifest-path ui/console-native/Cargo.toml
-npm --prefix ui/console ci
-npm --prefix ui/console run build
+# The endpoint, and the console drawn without a web stack (D-079).
+cargo build --release --locked -p sluse-endpoint -p sluse-console
 
 stage=$(mktemp -d)
-mkdir -p "$stage/sluse/bin" "$stage/sluse/ui/console"
+mkdir -p "$stage/sluse/bin"
 cp target/release/sluse-endpoint "$stage/sluse/bin/"
-cp ui/console-native/target/release/s9-console "$stage/sluse/bin/"
-cp ui/console/index.html ui/console/style.css "$stage/sluse/ui/console/"
-cp -r ui/console/look "$stage/sluse/ui/console/look"
-cp -r ui/console/dist "$stage/sluse/ui/console/dist"
+cp target/release/sluse-console "$stage/sluse/bin/"
 cp -r packaging/box/kiosk "$stage/sluse/kiosk"
 # Which tree it came from, as the Windows package's VERSION.txt says it.
 echo "$(git rev-parse --short HEAD)$(git diff --quiet || echo -dirty)" > "$stage/sluse/COMMIT"

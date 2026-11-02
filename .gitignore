@@ -3,10 +3,6 @@ target/
 
 # Node
 node_modules/
-# The console's compiled JavaScript. Built with `npm --prefix ui/console run
-# build`; served from disk, not committed — `include_dir` and a packaged build
-# are M7's problem, not a reason to commit generated files now.
-ui/console/dist/
 
 # The release package and anything unpacked from it. Built by CI on Windows
 # (D-012 point 2) and uploaded as an artifact; a build output has no business

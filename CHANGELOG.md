@@ -5,6 +5,42 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.3.0
+
+v0.3: the box's console is Sluse's own program, not a page in a browser.
+
+**For the person**
+- **The console in the box is drawn by Sluse itself.** The same pages, in
+  the same words: Work, Your artifacts, Copies in the box, Sources, Record,
+  About this box. A browser update can no longer leave the box with a blank
+  screen, as one did on a test device with 0.2.0. It follows the Sluse
+  window's theme within 10 seconds.
+- **Firefox stays in the box** for signing in to the AI apps and for links
+  they open.
+- New words in Record: "Called a tool" and "Listed the tools", which were
+  shown as `call` and `tools`.
+
+**For the administrator**
+- **The console has no port.** Until now it was a web page on a port in the
+  box, 7582, with no sign-in, which any program in the box could use. It is
+  gone, and the console makes its calls in its own program. What the port
+  allowed is still possible by other routes, because an AI agent runs as
+  the box's user: it can delete the copies in the box, start an app, use
+  the console's window, and, with the box's certificate, sign the person
+  out. None of it widens what can be read. Written in SECURITY.md.
+- **`endpoint.consoleListen` leaves the configuration.** Sluse rewrites
+  each device's part of the configuration at every open, so nothing is
+  needed. Port 7582 is no longer used.
+- The package no longer carries `ui\console`, and LOCAL has no console.
+- Signing and the connections a Sluse Platform will need move to 0.4.
+
+**Not proven:** the console in the box past one page (it drew in the box
+in 0.2.2's test); the line that tells the Sluse window the box is ready,
+said by the console now; the sign-in window's flag, which the box's
+browser reads; the console joining again after an enrolment. The console
+has almost no screen-reader support (GUIDE, Known edges). A new box system
+is built for this version.
+
 ## 0.2.2
 
 **For the person**
