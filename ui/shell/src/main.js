@@ -488,8 +488,11 @@ function connect() {
       setTimeout(() => { if (viewer === rfb) connect(); }, 1000);
     } else {
       stopViewer();
+      // 'open', not the attempt's kind: after a Reset the box runs as that
+      // attempt's continuation, and a drop was said as "not reset" (L1,
+      // 2026-11-03, D-078 row 5).
       failed({ code: 'box', message: e.detail.clean ? 'the box closed the connection' : "no answer from the box's screen",
-        headline: e.detail.clean ? 'The box closed the connection' : 'Your box is not answering' });
+        headline: e.detail.clean ? 'The box closed the connection' : 'Your box is not answering' }, 'open');
     }
   });
   // Clipboard text, both ways, and nothing else (D-025 point 3). Out of the
@@ -865,7 +868,8 @@ async function open(carryOn = false) {
     keepSignedIn(true);
     sendTheme();
   } catch (e) {
-    failed(e);
+    // An open, also when it carries on a Reset that finished.
+    failed(e, 'open');
   }
 }
 

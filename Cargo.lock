@@ -3805,7 +3805,7 @@ dependencies = [
 
 [[package]]
 name = "sluse-admin"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -3823,7 +3823,7 @@ dependencies = [
 
 [[package]]
 name = "sluse-console"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "chrono",
  "clap",
@@ -3839,7 +3839,7 @@ dependencies = [
 
 [[package]]
 name = "sluse-endpoint"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -3872,7 +3872,7 @@ dependencies = [
 
 [[package]]
 name = "sluse-gate-core"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -3905,7 +3905,7 @@ dependencies = [
 
 [[package]]
 name = "sluse-gate-front"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -3924,7 +3924,7 @@ dependencies = [
 
 [[package]]
 name = "sluse-lifecycle"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -3952,7 +3952,7 @@ dependencies = [
 
 [[package]]
 name = "sluse-proto"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "chrono",
  "getrandom 0.3.4",

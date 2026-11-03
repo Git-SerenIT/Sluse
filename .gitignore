@@ -41,3 +41,7 @@ Test output/
 # in it. The committed background is spikes/test-environment.md.
 test environment.md
 docs/design/brainstorm.md
+
+# "How it works" under docs/design: kept out of git (jok, 2026-11-03).
+docs/design/how-it-works/
+docs/design/how-it-works.zip

@@ -5,6 +5,15 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.3.2
+
+**For the person**
+- **A lost box screen is said as what it is.** After a Reset from the
+  Sluse window, a box whose screen later stopped answering was reported as
+  "Your box's system was not reset", although the reset had finished. It
+  now says the box closed the connection or is not answering, with Try
+  again. The same holds when the open after a Reset fails.
+
 ## 0.3.1
 
 **For the person**
