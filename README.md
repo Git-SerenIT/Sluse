@@ -1,4 +1,4 @@
-![Sluse. Approved sources in. Traceable results out. Your organisation lists the folders AI agents may work on. Sluse lets files from them through one at a time, as the user. Every file is recorded, and everything the agent publishes carries the sources it declared.](docs/images/header.png)
+![Sluse. Give agents data, not access. Approved sources in. Traceable results out.](docs/images/header.png)
 
 ## The short version
 
