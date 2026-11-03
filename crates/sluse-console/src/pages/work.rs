@@ -12,6 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use iced::widget::canvas::{self, Frame, Path, Stroke};
+use iced::widget::text::Wrapping;
 use iced::widget::{Space, button, canvas as canvas_widget, column, container, row, stack, text};
 use iced::{Alignment, Border, Element, Length, Point, Rectangle, Renderer, mouse};
 use sluse_endpoint::console::api::GateState;
@@ -22,8 +23,11 @@ use crate::look::{self, Theme, color};
 use crate::widgets::{self, Btn, Kind, icon};
 use crate::words::{ago, folder_of, hhmm, kind_icon, kind_words, list, plural, source_of, window, within};
 
-/// The lock's width, and where its gate sits (style.css's `--gate-y`).
-const LOCK_W: f32 = 380.0;
+/// The lock's width, and where its gate sits (style.css's `--gate-y`). 300,
+/// not the web console's 380, so the sources keep their width in the box's
+/// 1024-wide window (L1, 2026-11-03). Fixed: the row takes its height from
+/// the lock, and without a fixed column iced drew the sources' column empty.
+const LOCK_W: f32 = 300.0;
 const GATE_Y: f32 = 76.0;
 /// A source's row in the chamber, fixed so the streams know where it is.
 const SRC_H: f32 = 58.0;
@@ -283,12 +287,16 @@ fn chamber<'a>(c: &'a Console, t: Theme, d: &'a Data, ins: &[&AuditRecord], f: C
         let n = from_here.get(s.name.as_str()).map_or(0, BTreeSet::len);
         let on = n > 0;
         active.push(on);
-        let mut words = column![text(s.name.as_str().to_owned()).size(look::PATH).font(look::MONO), text(kind_words(s)).size(look::SMALL).color(color(t.ink_muted))];
+        // One line each, clipped inside the card, whose height the streams
+        // need: wrapped, they ran out of it in the box's window (L1,
+        // 2026-11-03). Sources has each in full.
+        let line = |s: String| text(s).wrapping(Wrapping::None);
+        let mut words = column![line(s.name.as_str().to_owned()).size(look::PATH).font(look::MONO), line(kind_words(s)).size(look::SMALL).color(color(t.ink_muted))];
         if on {
             words = words.push(text(format!("{n} let in")).size(look::SMALL).font(look::BOLD));
         }
         sources = sources.push(
-            container(row![icon(kind_icon(&s.kind), look::ICON, if on { t.ink } else { t.ink_muted }), words].spacing(look::S2).align_y(Alignment::Center))
+            container(row![icon(kind_icon(&s.kind), look::ICON, if on { t.ink } else { t.ink_muted }), container(words).width(Length::Fill).clip(true)].spacing(look::S2).align_y(Alignment::Center))
                 .padding([look::S2, look::S4])
                 .width(Length::Fill)
                 .height(if on { SRC_ACTIVE_H } else { SRC_H })

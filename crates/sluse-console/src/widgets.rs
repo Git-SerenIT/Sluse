@@ -300,17 +300,18 @@ pub fn vrule<'a, M: 'a>(t: Theme) -> Element<'a, M> {
 }
 
 /// A page's head, `.pagehead`: its title, a line under it, and its actions
-/// on the right.
+/// under them, wrapping: beside the text they left it a word's width in the
+/// box's 1024-wide window (L1, 2026-11-03).
 pub fn pagehead<'a, M: 'a>(t: Theme, title: &'a str, lede: String, actions: Vec<Element<'a, M>>) -> Element<'a, M> {
     let text_col = column![text(title).size(look::H2).font(look::BOLD), text(lede).size(look::SMALL).color(color(t.ink_muted))]
         .spacing(look::S2)
         .width(Length::Fill)
         .max_width(820);
-    let mut acts = row![].spacing(look::S2);
+    let mut acts = row![].spacing(look::S2).align_y(Alignment::Center);
     for a in actions {
         acts = acts.push(a);
     }
-    row![container(text_col).width(Length::Fill), acts].spacing(look::S6).align_y(Alignment::End).into()
+    column![text_col, acts.wrap().vertical_spacing(look::S2)].spacing(look::S4).into()
 }
 
 /// A quiet line with its icon, `.note`: info is muted; a warning has an ink

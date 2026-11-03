@@ -283,7 +283,7 @@ pub fn view<'a>(c: &'a Console, t: Theme, d: &'a Data) -> Element<'a, Message> {
                 row![text(source).size(look::H3).font(look::BOLD), text(sub).size(look::SMALL).color(color(t.ink_muted))].spacing(look::S3).align_y(Alignment::End),
                 widgets::table(
                     t,
-                    &[("State", Length::Fixed(150.0)), ("File", Length::Fill), ("Let in", Length::Fixed(130.0)), ("Size", Length::Fixed(90.0)), ("Hash", Length::Fixed(170.0))],
+                    &[("State", Length::Fixed(130.0)), ("File", Length::Fill), ("Let in", Length::Fixed(120.0)), ("Size", Length::Fixed(80.0)), ("Hash", Length::Fixed(150.0))],
                     table_rows,
                     false
                 ),

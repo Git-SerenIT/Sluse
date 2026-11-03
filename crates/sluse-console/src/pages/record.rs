@@ -77,7 +77,7 @@ fn table<'a>(c: &Console, t: Theme, rs: &[&AuditRecord]) -> Element<'a, Message>
             }
             if let Some(code) = code {
                 note_col = note_col.push(
-                    row![text("Recorded as").size(look::SMALL).color(color(t.ink_muted)), text(code).size(look::PATH).font(look::MONO)].spacing(look::S1),
+                    row![text("Recorded as").size(look::SMALL).color(color(t.ink_muted)), text(code).size(look::PATH).font(look::MONO)].spacing(look::S1).wrap(),
                 );
             }
             let hash: Element<'_, Message> = match &r.hash {
@@ -93,9 +93,10 @@ fn table<'a>(c: &Console, t: Theme, rs: &[&AuditRecord]) -> Element<'a, Message>
                 vec![
                     text(when(r.ts)).size(look::SMALL).into(),
                     text(op_words(r.op)).size(look::SMALL).into(),
-                    text(path_words(r)).size(look::PATH).font(look::MONO).into(),
+                    // The note under the file: its own column left the path a
+                    // word's width in the box's window (L1, 2026-11-03).
+                    column![text(path_words(r)).size(look::PATH).font(look::MONO), note_col].spacing(look::S1).into(),
                     widgets::pill(t, status, word),
-                    note_col.into(),
                     hash,
                 ],
             )
@@ -106,10 +107,9 @@ fn table<'a>(c: &Console, t: Theme, rs: &[&AuditRecord]) -> Element<'a, Message>
         &[
             ("Time", Length::Fixed(90.0)),
             ("What", Length::Fixed(140.0)),
-            ("File", Length::FillPortion(4)),
+            ("File", Length::Fill),
             ("Outcome", Length::Fixed(120.0)),
-            ("Note", Length::FillPortion(3)),
-            ("Hash", Length::Fixed(160.0)),
+            ("Hash", Length::Fixed(150.0)),
         ],
         rows,
         true,

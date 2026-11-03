@@ -1,18 +1,31 @@
 ![Sluse. Approved sources in. Traceable results out. Your organisation lists the folders AI agents may work on. Sluse lets files from them through one at a time, as the user. Every file is recorded, and everything the agent publishes carries the sources it declared.](docs/images/header.png)
 
-## Why
+## The short version
 
-An AI agent with a person's access can reach everything that person can, and
-nobody can say afterwards what it was given. So security teams say no.
+Your company's IT environment is a sea, full of data fish. Some of them are
+protected species. AI agents are fishermen, and given the chance, they fish
+with a bottom trawl. Anything within reach can end up in the net. Bycatch
+included.
 
-Sluse moves the agent into a **box**, a Linux virtual machine on the
-person's own Windows PC, with no filesystem mounts and no credential for
-company data. **Sluse Gate** outside the box, acting as the signed-in person,
-releases files from the places IT allowed: SharePoint, an SMB share, the
-person's OneDrive `Sluse` folder or a local Sluse Inputs folder. What the
-agent produces leaves the box one way, into a directory on the host PC
-called **Sluse Artifacts** (`C:\Users\<person>\Sluse Artifacts`), naming the
-files the agent says it used.
+How do you keep agents away from the protected species? How do you know
+what they caught?
+
+Our answer is a sluice.
+
+- **You decide which waters the sluice draws from.** Outside them, there
+  are no fish as far as the agent can tell.
+- **Every fish is counted on the way through,** and the tally is kept on
+  shore, out of the agent's reach.
+- **The agent never touches the sea through the sluice.** Fish are brought to
+  the agent on demand, if they are allowed in.
+- **The catch comes ashore in one place:** Sluse Artifacts. The other ways
+  out are the ones you leave open: copying text out of the box, and hosts
+  on your list that take uploads.
+- **The agent labels its own crates,** and Sluse checks that it only lists
+  fish it was actually given.
+
+Sluse won't stop the agent from telling its AI provider about the catch.
+But it does limit what the catch can contain.
 
 > [!IMPORTANT]
 > **Sluse does not decide whether an AI model is trustworthy.** It limits
@@ -21,6 +34,15 @@ files the agent says it used.
 > **not** a data validator and **does not prevent exfiltration**: the agent
 > talks to its AI provider, and anything it was given can go into that
 > conversation. Every known channel is in [SECURITY.md](SECURITY.md).
+
+In practice, Sluse moves the agent into a **box**, a Linux virtual machine
+on the person's own Windows PC, with no filesystem mounts and no credential
+for company data. **Sluse Gate**, outside the box and acting as the
+signed-in person, releases files from the places IT allowed: SharePoint, an
+SMB share, the person's OneDrive `Sluse` folder, a local Sluse Inputs folder
+or a tool server (MCP). What the agent publishes lands in a folder on the PC
+called **Sluse Artifacts** (`C:\Users\<person>\Sluse Artifacts`), naming
+the files the agent says it used.
 
 ## What it addresses
 

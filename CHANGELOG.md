@@ -5,6 +5,17 @@ version's section as its notes and refuses a version without one. Each
 section says what changed for an administrator and for the person using
 Sluse, and what is still not proven.
 
+## 0.3.1
+
+**For the person**
+- **The console fits a smaller Sluse window.** In a window about 1024
+  pixels wide, a page's title and text were squeezed to a word's width
+  beside its buttons, a file's path in Record and Copies broke at every
+  few letters, and the sources on Work ran out of their boxes. The buttons
+  now sit under the text, Record shows a note under its file instead of in
+  a column of its own, and the columns are narrower. A source on Work
+  shows its name and kind on one line each; Sources has them in full.
+
 ## 0.3.0
 
 v0.3: the box's console is Sluse's own program, not a page in a browser.

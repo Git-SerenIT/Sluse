@@ -63,7 +63,11 @@ pub fn run() -> Result<(), String> {
         .window(window::Settings {
             // sway tiles it to the box's screen; this is the size elsewhere,
             // a maximised laptop's (the web console's style.css).
-            size: iced::Size::new(1366.0, 768.0),
+            // SLUSE_CONSOLE_SIZE=WxH for a development shot at the box's size.
+            size: std::env::var("SLUSE_CONSOLE_SIZE")
+                .ok()
+                .and_then(|v| v.split_once('x').and_then(|(w, h)| Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))))
+                .unwrap_or(iced::Size::new(1366.0, 768.0)),
             // sway names the tab by the app id (sway.conf, Q5).
             platform_specific: window::settings::PlatformSpecific { application_id: "sluse-console".into(), ..Default::default() },
             ..Default::default()
@@ -227,7 +231,8 @@ pub enum Message {
 fn boot(config: PathBuf) -> (Console, Task<Message>) {
     let c = Console {
         dark: dark(),
-        page: Page::Work,
+        // SLUSE_CONSOLE_PAGE: the page a development shot opens on (shot()).
+        page: std::env::var("SLUSE_CONSOLE_PAGE").ok().and_then(|n| PAGES.iter().find(|p| p.2 == n)).map_or(Page::Work, |p| p.0),
         link: None,
         unjoined: None,
         joining: true,
@@ -517,7 +522,7 @@ fn view(c: &Console) -> Element<'_, Message> {
     }
     let Some(d) = &c.data else { unreachable!("gated without data") };
     let main = container(
-        scrollable(container(page(c, t, d)).padding(iced::Padding { top: 32.0, right: 48.0, bottom: 48.0, left: 48.0 }).max_width(1240))
+        scrollable(container(page(c, t, d)).padding(iced::Padding { top: 32.0, right: 32.0, bottom: 48.0, left: 32.0 }).max_width(1240))
             .width(Length::Fill)
             .height(Length::Fill)
             .style(move |_, s| scroll_style(t, s)),
